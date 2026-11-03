@@ -15,11 +15,17 @@ O `doctor` verifica tudo:
 node scripts/rooster.mjs doctor --json
 ```
 
+## Local ou global?
+
+A instalação **local é a recomendada**: a skill fica dentro do projeto, em `.opencode/skills/rooster-edit`, e acompanha aquele trabalho. A **global** fica em `~/.config/opencode/skills/rooster-edit` e vale para todos os projetos da máquina.
+
+O prompt de instalação pergunta qual você prefere antes de clonar. Use a global só se quiser a skill disponível em todos os projetos.
+
 ## Com um agente
 
-Se você quer que o agente instale e valide tudo, o prompt pronto está no [README](../README.md). As seções abaixo cobrem a instalação manual.
+Se você quer que o agente instale e valide tudo, o prompt pronto está no [README](../README.md). Ele pergunta primeiro se a instalação deve ser local (recomendada) ou global. As seções abaixo cobrem a instalação manual.
 
-## OpenCode — projeto local
+## OpenCode — projeto local (recomendado)
 
 Na raiz do projeto de vídeo:
 
