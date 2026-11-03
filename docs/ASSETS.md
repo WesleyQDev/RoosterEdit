@@ -14,7 +14,7 @@ A skill trabalha com seis estratégias de assets. A escolha fica no **canal** e 
 ## Onde ficam
 
 ```text
-rooster/projects/<slug>/assets/
+channels/<canal>/projects/<slug>/assets/
 ├── source/       seus arquivos
 ├── generated/    imagens, áudio e vídeo gerados
 ├── licensed/     stock, música, fontes e overlays com licença

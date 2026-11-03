@@ -6,35 +6,36 @@ This fast path borrows the **sequence** and the **approval discipline** from the
 
 | Reference video | RoosterEdit |
 |---|---|
-| `bruto/` | `projects/<slug>/assets/source/` |
-| `estilo/ESTILO.md` | `projects/<slug>/style.md` + resolved profile |
-| `trabalho/transcricao.json` | `projects/<slug>/edit/transcript.json` |
-| `trabalho/plano.json` | `projects/<slug>/edit/plan.json` |
-| `final/` | `projects/<slug>/renders/` |
-| `estilo/` references | `projects/<slug>/style/` + `profiles/<id>/references/` |
+| `bruto/` | `channels/<canal>/projects/<slug>/assets/source/` |
+| `estilo/ESTILO.md` | `channels/<canal>/projects/<slug>/style.md` + resolved profile |
+| `trabalho/transcricao.json` | `channels/<canal>/projects/<slug>/edit/transcript.json` |
+| `trabalho/plano.json` | `channels/<canal>/projects/<slug>/edit/plan.json` |
+| `final/` | `channels/<canal>/projects/<slug>/renders/` |
+| `estilo/` references | `channels/<canal>/projects/<slug>/style/` + `profiles/<id>/references/` |
 
 The project structure stays:
 
 ```text
 rooster/
-├── projects/<slug>/
-│   ├── project.json
-│   ├── brief.md
-│   ├── style.md
-│   ├── style/
-│   ├── assets/source/
-│   ├── edit/
-│   │   ├── transcript.json
-│   │   ├── plan.json
-│   │   ├── edl.json
-│   │   ├── timeline.json
-│   │   └── captions/
-│   ├── engine/
-│   ├── preview/
-│   ├── renders/
-│   └── qa/
+├── channels/<canal>/
+│   ├── channel.json
+│   └── projects/<slug>/
+│       ├── project.json
+│       ├── brief.md
+│       ├── style.md
+│       ├── style/
+│       ├── assets/source/
+│       ├── edit/
+│       │   ├── transcript.json
+│       │   ├── plan.json
+│       │   ├── edl.json
+│       │   ├── timeline.json
+│       │   └── captions/
+│       ├── engine/
+│       ├── preview/
+│       ├── renders/
+│       └── qa/
 ├── profiles/
-├── categories/
 └── library/
 ```
 
@@ -62,21 +63,21 @@ If the user only wants planning, do not install anything. Explain what is missin
 
 ## Step 2 — Create or resolve the project
 
-Create a RoosterEdit project with a category and a profile:
+Create the channel first if it does not exist, then the project:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" new meu-video \
-  --category talking-head \
+  --channel meu-canal \
   --profile minimal \
   --source live \
   --voice user
 ```
 
-Put raw media in `projects/meu-video/assets/source/`. If the user already has a project, resolve its category/profile instead of creating a new one.
+Put raw media in `channels/meu-canal/projects/meu-video/assets/source/`. If the user already has a project, resolve its channel/profile instead of creating a new one.
 
 ## Step 3 — Write the style guide
 
-Write `projects/<slug>/style.md` and resolve the profile. The video uses a single `ESTILO.md`; RoosterEdit separates the human-readable guide (`style.md`) from the reusable identity (`profiles/<id>/profile.json`).
+Write `channels/<canal>/projects/<slug>/style.md` and resolve the profile. The video uses a single `ESTILO.md`; RoosterEdit separates the human-readable guide (`style.md`) from the reusable identity (`profiles/<id>/profile.json`).
 
 The style guide should include:
 
@@ -95,22 +96,22 @@ The style guide should include:
 Prefer HyperFrames transcribe. It uses Parakeet for English and whisper.cpp for other languages, and writes word-level timestamps:
 
 ```bash
-npx hyperframes transcribe projects/meu-video/assets/source/video.mp4 \
+npx hyperframes transcribe channels/meu-canal/projects/meu-video/assets/source/video.mp4 \
   --language pt \
   --model small \
   --json \
   --to srt \
-  -o projects/meu-video/edit/captions/transcript.srt
+  -o channels/meu-canal/projects/meu-video/edit/captions/transcript.srt
 ```
 
 Or use Whisper locally:
 
 ```bash
-whisper projects/meu-video/assets/source/video.mp4 \
+whisper channels/meu-canal/projects/meu-video/assets/source/video.mp4 \
   --model small \
   --language pt \
   --output_format json \
-  --output_dir projects/meu-video/edit
+  --output_dir channels/meu-canal/projects/meu-video/edit
 ```
 
 Save the result as `edit/transcript.json` (and optionally `.srt`). The transcript must include the start and end time of each sentence or segment.
@@ -198,11 +199,11 @@ Preview in Remotion Studio, then render to `renders/final.mp4`.
 
 ## What we adapt
 
-- Folder names: we use `projects/<slug>/` instead of `bruto/estilo/trabalho/final`.
+- Folder names: we use `channels/<canal>/projects/<slug>/` instead of `bruto/estilo/trabalho/final`.
 - The style guide is split into `style.md` and a reusable profile.
 - The plan is `edit/plan.json`, not `trabalho/plano.json`.
 - The plan feeds an engine-agnostic timeline (`edit/timeline.json`), not only one engine.
-- Categories and profiles make the workflow reusable across videos.
+- Channels and profiles make the workflow reusable across videos.
 - QA, licenses, captions, and delivery are first-class.
 
 ## Anti-patterns

@@ -71,20 +71,20 @@ Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir)
 ## Primeiro uso
 
 Depois de instalar, crie o primeiro **canal** com o agente:
-- nome, idioma, formato e perfil padrão;
+- nome, o que ele produz, idioma, formato e perfil padrão;
+- modo de origem (live, generated ou hybrid);
 - política de assets;
 - engine e autonomia;
 - voz/TTS.
 
-O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir.
+O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir. A pergunta inicial é “Vamos criar a pasta do seu primeiro canal?” — um padrão de produção local, não um canal no YouTube.
 
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs init
 node .opencode/skills/rooster-edit/scripts/rooster.mjs channel new meu-canal \
   --language pt-BR \
   --format 16:9 \
-  --profile minimal \
-  --category talking-head
+  --profile minimal
 node .opencode/skills/rooster-edit/scripts/rooster.mjs channel list
 ```
 

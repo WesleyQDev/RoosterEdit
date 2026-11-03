@@ -6,10 +6,10 @@ Projetos de exemplo planejados. Cada exemplo deve ser pequeno o suficiente para 
 
 | Exemplo | Cobre |
 |---|---|
-| `talking-head` | Footage real, transcript, EDL, b-roll, legendas |
-| `faceless-explainer` | TTS, HyperFrames, kinetic type, charts |
-| `3d-cartoon` | Three.js, Remotion, personagem, música |
-| `product-promo` | Screenshots, logo, callouts, música |
+| `entrevista-90s` | Footage real, transcript, EDL, b-roll, legendas |
+| `explainer-llm` | TTS, HyperFrames, kinetic type, charts |
+| `robo-3d` | Three.js, Remotion, personagem, música |
+| `lancamento-produto` | Screenshots, logo, callouts, música |
 | `link-ingest` | yt-dlp, metadata, transcript, corte |
 
 ## Regras

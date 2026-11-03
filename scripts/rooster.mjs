@@ -412,10 +412,12 @@ function buildChannel(id, args, workspaceDefaults = {}, config = {}) {
     schema: "rooster.channel/v1",
     id,
     name: typeof args.name === "string" ? args.name : id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    content: typeof args.content === "string" ? args.content : "",
     language: typeof args.language === "string" ? args.language : workspaceDefaults.language || "pt-BR",
     format: typeof args.format === "string" ? args.format : "16:9",
+    duration: args.duration ? Number(args.duration) || null : null,
     profile: typeof args.profile === "string" ? args.profile : workspaceDefaults.profile || "minimal",
-    category: typeof args.category === "string" ? args.category : "custom",
+    source: SOURCE_IDS.includes(args.source) ? args.source : "hybrid",
     voice: VOICE_IDS.includes(args.voice) ? args.voice : "none",
     engine: ENGINE_IDS.includes(args.engine) ? args.engine : workspaceDefaults.engine || "auto",
     autonomy: AUTONOMY_IDS.includes(args.autonomy) ? args.autonomy : workspaceDefaults.autonomy || "guided",
@@ -444,6 +446,9 @@ function buildChannel(id, args, workspaceDefaults = {}, config = {}) {
 
 function channelCommand(args) {
   if (!exists(WORKSPACE)) fail(`No workspace at ${WORKSPACE}. Run "init" first.`);
+  if (args.category !== undefined) {
+    fail('Category was removed. Use --content to describe what the channel produces, then create the project with its own brief and plan.');
+  }
   const action = args._[0] || "list";
 
   if (action === "list") {
@@ -456,7 +461,7 @@ function channelCommand(args) {
     for (const id of ids) {
       const channel = readChannel(id) || {};
       console.log(
-        `  ${id.padEnd(24)} ${String(channel.language || "?").padEnd(7)} ${String(channel.format || "?").padEnd(5)} ${String(channel.profile || "?").padEnd(14)} ${String(channel.category || "?").padEnd(20)} ${channel.engine || "auto"}`
+        `  ${id.padEnd(24)} ${String(channel.language || "?").padEnd(7)} ${String(channel.format || "?").padEnd(5)} ${String(channel.profile || "?").padEnd(14)} ${channel.engine || "auto"}`
       );
     }
     return;
@@ -482,13 +487,12 @@ function channelCommand(args) {
     const channel = buildChannel(id, args, workspaceMeta.defaults || {}, config);
     ensureDir(path.join(channelsDir(), id, "projects"));
     ensureDir(path.join(channelsDir(), id, "profiles"));
-    ensureDir(path.join(channelsDir(), id, "categories"));
     ensureDir(path.join(channelsDir(), id, "assets"));
     ensureDir(path.join(channelsDir(), id, "library"));
     writeJson(channelPath, channel);
     heading("Channel created");
     console.log(`  ${path.join(channelsDir(), id)}`);
-    console.log(`  language ${channel.language} · ${channel.format} · ${channel.profile} · ${channel.category}`);
+    console.log(`  language ${channel.language} · ${channel.format} · ${channel.profile} · ${channel.engine}`);
     return;
   }
 
@@ -498,6 +502,9 @@ function channelCommand(args) {
     const rawValue = args._[3];
     if (!id || !key || rawValue === undefined) {
       fail("Usage: channel set <id> <key> <value>");
+    }
+    if (key === "category" || key.startsWith("category.")) {
+      fail("Category was removed. Use \"content\" to describe what the channel produces.");
     }
     const channelPath = path.join(channelsDir(), id, "channel.json");
     const channel = readJson(channelPath, null);
@@ -535,7 +542,6 @@ function initWorkspace(args) {
   const dirs = [
     "channels",
     "profiles",
-    "categories",
     "library/music",
     "library/sfx",
     "library/fonts",
@@ -554,7 +560,6 @@ function initWorkspace(args) {
     defaultChannel: "default",
     defaults: {
       profile: process.env.ROOSTER_PROFILE || "minimal",
-      category: "custom",
       engine: process.env.ROOSTER_ENGINE || "auto",
       aspect: "16:9",
       fps: 30,
@@ -598,7 +603,7 @@ function initWorkspace(args) {
     config
   );
   writeJson(path.join(target, "channels", "default", "channel.json"), defaultChannel);
-  for (const dir of ["projects", "profiles", "categories", "assets", "library"]) {
+  for (const dir of ["projects", "profiles", "assets", "library"]) {
     ensureDir(path.join(target, "channels", "default", dir));
   }
 
@@ -612,7 +617,6 @@ Este é o workspace local do RoosterEdit.
 
 - \`channels/\` — canais com idioma, formato, perfil, assets e projetos.
 - \`profiles/\` — identidades visuais/sonoras compartilhadas.
-- \`categories/\` — receitas de conteúdo compartilhadas.
 - \`library/\` — música, SFX, fontes, overlays, LUTs, b-roll e imagens.
 - \`cache/\` — transcrições, proxies e artefatos temporários.
 
@@ -620,29 +624,20 @@ Este é o workspace local do RoosterEdit.
 
 \`\`\`bash
 node <skill>/scripts/rooster.mjs channel new meu-canal --language pt-BR --format 16:9 --profile minimal
-node <skill>/scripts/rooster.mjs new meu-video --channel meu-canal --category faceless-explainer
+node <skill>/scripts/rooster.mjs new meu-video --channel meu-canal
 \`\`\`
 
 A skill fica na raiz do repositório RoosterEdit. Este workspace pertence ao projeto de vídeo, não à skill.
 `
   );
 
-  // Copy built-in profiles/categories if the skill ships them.
+  // Copy built-in profiles if the skill ships them.
   const builtinProfiles = path.join(SKILL_ROOT, "templates", "profiles");
-  const builtinCategories = path.join(SKILL_ROOT, "templates", "categories");
   if (exists(builtinProfiles)) {
     for (const entry of fs.readdirSync(builtinProfiles, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const src = path.join(builtinProfiles, entry.name);
       const dest = path.join(target, "profiles", entry.name);
-      if (!exists(dest)) copyDir(src, dest);
-    }
-  }
-  if (exists(builtinCategories)) {
-    for (const entry of fs.readdirSync(builtinCategories, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const src = path.join(builtinCategories, entry.name);
-      const dest = path.join(target, "categories", entry.name);
       if (!exists(dest)) copyDir(src, dest);
     }
   }
@@ -652,7 +647,7 @@ A skill fica na raiz do repositório RoosterEdit. Este workspace pertence ao pro
   console.log("\nNext:");
   const cli = path.join(SKILL_ROOT, "scripts", "rooster.mjs");
   console.log(`  node "${cli}" channel new meu-canal --language pt-BR --format 16:9 --profile minimal`);
-  console.log(`  node "${cli}" new meu-video --channel meu-canal --category faceless-explainer`);
+  console.log(`  node "${cli}" new meu-video --channel meu-canal`);
 }
 
 function copyDir(src, dest) {
@@ -680,20 +675,10 @@ function resolveFormat(aspect, width, height) {
   };
 }
 
-function loadCategoryDefaults(id) {
-  const candidates = [
-    path.join(WORKSPACE, "categories", id, "category.json"),
-    path.join(ROOSTER_HOME, "categories", id, "category.json"),
-    path.join(SKILL_ROOT, "templates", "categories", id, "category.json"),
-  ];
-  for (const candidate of candidates) {
-    const data = readJson(candidate, null);
-    if (data && data.defaults) return data;
-  }
-  return null;
-}
-
 function newProject(args) {
+  if (args.category !== undefined) {
+    fail('Category was removed. Use --channel and the project overrides; describe the content in brief.md and script.md.');
+  }
   const slug = slugify(args._[0] || (typeof args.name === "string" ? args.name : "meu-video"));
   if (!exists(WORKSPACE)) {
     fail(`No workspace at ${WORKSPACE}. Run "node scripts/rooster.mjs init" first.`);
@@ -717,25 +702,17 @@ function newProject(args) {
     fail(`Project already exists at ${projectDir}. Use --force to overwrite.`);
   }
 
-  const category =
-    typeof args.category === "string" ? args.category : channel.category || workspaceDefaults.category || "custom";
-  const categoryData = loadCategoryDefaults(category);
-  const defaults = categoryData?.defaults || {};
-
   const aspect =
     typeof args.format === "string"
       ? args.format
       : channel.format && channel.format !== "auto"
         ? channel.format
-        : defaults.aspect || workspaceDefaults.aspect || "16:9";
+        : workspaceDefaults.aspect || "16:9";
   const format = resolveFormat(aspect);
   if (args.duration) {
     format.duration = Number(args.duration) || format.duration;
   } else if (channel.duration) {
     format.duration = Number(channel.duration) || format.duration;
-  } else if (Array.isArray(defaults.duration) && defaults.duration.length === 2) {
-    const [min, max] = defaults.duration.map(Number);
-    format.duration = Math.round((min + max) / 2);
   }
 
   const profile =
@@ -744,9 +721,9 @@ function newProject(args) {
       : channel.profile || workspaceDefaults.profile || process.env.ROOSTER_PROFILE || "minimal";
   const engine = ENGINE_IDS.includes(args.engine)
     ? args.engine
-    : channel.engine || defaults.engine || workspaceDefaults.engine || process.env.ROOSTER_ENGINE || "auto";
-  const source = SOURCE_IDS.includes(args.source) ? args.source : channel.source || defaults.source || "hybrid";
-  const voice = VOICE_IDS.includes(args.voice) ? args.voice : channel.voice || defaults.voice || "none";
+    : channel.engine || workspaceDefaults.engine || process.env.ROOSTER_ENGINE || "auto";
+  const source = SOURCE_IDS.includes(args.source) ? args.source : channel.source || "hybrid";
+  const voice = VOICE_IDS.includes(args.voice) ? args.voice : channel.voice || "none";
   const style = STYLE_IDS.includes(args.style)
     ? args.style
     : typeof args.profile === "string" || channel.profile
@@ -760,10 +737,8 @@ function newProject(args) {
   const music =
     channel.audio?.music !== undefined
       ? Boolean(channel.audio.music)
-      : defaults.music !== undefined
-        ? Boolean(defaults.music)
-        : true;
-  const captionsMode = channel.captions?.mode || defaults.captions || "burned";
+      : true;
+  const captionsMode = channel.captions?.mode || "burned";
   const assetsStrategy =
     typeof args.assets === "string"
       ? args.assets
@@ -783,7 +758,7 @@ function newProject(args) {
   const licensePolicy =
     channel.assets?.licensePolicy || workspaceConfig.assets?.licensePolicy || "strict";
 
-  const overrides = ["category", "profile", "format", "duration", "source", "voice", "style", "autonomy", "engine", "assets", "language"].filter(
+  const overrides = ["profile", "format", "duration", "source", "voice", "style", "autonomy", "engine", "assets", "language"].filter(
     (key) => args[key] !== undefined
   );
 
@@ -806,7 +781,6 @@ function newProject(args) {
     slug,
     name: typeof args.name === "string" ? args.name : slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
     channel: channelId,
-    category,
     profile,
     engine,
     mode: { source, voice, style, autonomy },
@@ -880,7 +854,6 @@ ${format.aspect} — ${format.width}x${format.height} — ${format.fps} fps — 
 
 Channel: \`${channelId}\`
 Profile: \`${profile}\`
-Category: \`${category}\`
 
 ## Palette
 
@@ -998,7 +971,6 @@ function listWorkspace(args) {
         channel: channelId,
         slug: entry.name,
         name: config.name || entry.name,
-        category: config.category || "?",
         profile: config.profile || "?",
         engine: config.engine || "?",
         status: config.status || "?",
@@ -1016,7 +988,6 @@ function listWorkspace(args) {
         channel: "standalone",
         slug: entry.name,
         name: config.name || entry.name,
-        category: config.category || "?",
         profile: config.profile || "?",
         engine: config.engine || "?",
         status: config.status || "?",
@@ -1042,17 +1013,15 @@ function listWorkspace(args) {
   } else {
     for (const project of projects) {
       console.log(
-        `  ${`${project.channel}/${project.slug}`.padEnd(36)} ${String(project.status).padEnd(10)} ${String(project.category).padEnd(20)} ${String(project.profile).padEnd(16)} ${project.engine}`
+        `  ${`${project.channel}/${project.slug}`.padEnd(36)} ${String(project.status).padEnd(10)} ${String(project.profile).padEnd(16)} ${project.engine}`
       );
     }
   }
 
   const channels = listChannelIds();
   const profiles = listDirNames(path.join(WORKSPACE, "profiles"));
-  const categories = listDirNames(path.join(WORKSPACE, "categories"));
   console.log(`\n  Channels:   ${channels.length ? channels.join(", ") : "(none)"}`);
   console.log(`  Profiles:   ${profiles.length ? profiles.join(", ") : "(none)"}`);
-  console.log(`  Categories: ${categories.length ? categories.join(", ") : "(none)"}`);
 }
 
 function listDirNames(dir) {
@@ -1199,41 +1168,35 @@ function digestCommand(args) {
 }
 
 // ---------------------------------------------------------------------------
-// profiles and categories
+// profiles
 // ---------------------------------------------------------------------------
 
-function catalogKind(kind) {
-  if (kind === "profile") return { dirName: "profiles", fileName: "profile.json" };
-  if (kind === "category") return { dirName: "categories", fileName: "category.json" };
-  fail(`Unknown catalog kind: ${kind}`);
-}
+const PROFILE_FILE = "profile.json";
 
-function resolveCatalogEntry(kind, id) {
-  const { dirName, fileName } = catalogKind(kind);
+function resolveProfileEntry(id) {
   const candidates = [
-    { scope: "workspace", dir: path.join(WORKSPACE, dirName, id) },
-    { scope: "global", dir: path.join(ROOSTER_HOME, dirName, id) },
-    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", dirName, id) },
+    { scope: "workspace", dir: path.join(WORKSPACE, "profiles", id) },
+    { scope: "global", dir: path.join(ROOSTER_HOME, "profiles", id) },
+    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", "profiles", id) },
   ];
   for (const candidate of candidates) {
-    if (exists(path.join(candidate.dir, fileName))) return candidate;
+    if (exists(path.join(candidate.dir, PROFILE_FILE))) return candidate;
   }
   return null;
 }
 
-function listCatalog(kind) {
-  const { dirName, fileName } = catalogKind(kind);
+function listProfiles() {
   const sources = [
-    { scope: "workspace", dir: path.join(WORKSPACE, dirName) },
-    { scope: "global", dir: path.join(ROOSTER_HOME, dirName) },
-    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", dirName) },
+    { scope: "workspace", dir: path.join(WORKSPACE, "profiles") },
+    { scope: "global", dir: path.join(ROOSTER_HOME, "profiles") },
+    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", "profiles") },
   ];
   const seen = new Map();
   for (const source of sources) {
     if (!exists(source.dir)) continue;
     for (const entry of fs.readdirSync(source.dir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const configPath = path.join(source.dir, entry.name, fileName);
+      const configPath = path.join(source.dir, entry.name, PROFILE_FILE);
       if (!exists(configPath)) continue;
       if (seen.has(entry.name)) continue;
       const data = readJson(configPath, {});
@@ -1248,13 +1211,12 @@ function listCatalog(kind) {
   return Array.from(seen.values()).sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function catalogCommand(kind, args) {
-  const { dirName, fileName } = catalogKind(kind);
+function profileCommand(args) {
   const action = args._[0] || "list";
 
   if (action === "list") {
-    const entries = listCatalog(kind);
-    heading(`${kind === "profile" ? "Profiles" : "Categories"}`);
+    const entries = listProfiles();
+    heading("Profiles");
     if (!entries.length) {
       console.log("  (none)");
       return;
@@ -1267,11 +1229,11 @@ function catalogCommand(kind, args) {
 
   if (action === "show") {
     const id = args._[1];
-    if (!id) fail(`Usage: ${kind} show <id>`);
-    const entry = resolveCatalogEntry(kind, id);
-    if (!entry) fail(`${kind} not found: ${id}`);
-    const configPath = path.join(entry.dir, fileName);
-    console.log(`# ${kind}: ${id} (${entry.scope})`);
+    if (!id) fail("Usage: profile show <id>");
+    const entry = resolveProfileEntry(id);
+    if (!entry) fail(`profile not found: ${id}`);
+    const configPath = path.join(entry.dir, PROFILE_FILE);
+    console.log(`# profile: ${id} (${entry.scope})`);
     console.log(configPath);
     console.log(JSON.stringify(readJson(configPath, {}), null, 2));
     return;
@@ -1280,31 +1242,31 @@ function catalogCommand(kind, args) {
   if (action === "fork") {
     const id = args._[1];
     const target = typeof args.as === "string" ? slugify(args.as) : null;
-    if (!id || !target) fail(`Usage: ${kind} fork <id> --as <new-id>`);
-    const entry = resolveCatalogEntry(kind, id);
-    if (!entry) fail(`${kind} not found: ${id}`);
+    if (!id || !target) fail("Usage: profile fork <id> --as <new-id>");
+    const entry = resolveProfileEntry(id);
+    if (!entry) fail(`profile not found: ${id}`);
 
-    const destination = path.join(WORKSPACE, dirName, target);
+    const destination = path.join(WORKSPACE, "profiles", target);
     if (exists(destination) && !args.force) {
-      fail(`${kind} already exists at ${destination}. Use --force to overwrite.`);
+      fail(`profile already exists at ${destination}. Use --force to overwrite.`);
     }
     if (exists(destination)) removeDirRobust(destination);
     copyDir(entry.dir, destination);
 
-    const configPath = path.join(destination, fileName);
+    const configPath = path.join(destination, PROFILE_FILE);
     const data = readJson(configPath, {});
     data.id = target;
     data.name = typeof args.name === "string" ? args.name : `${data.name || target} (fork)`;
     data.scope = "workspace";
     writeJson(configPath, data);
 
-    heading(`${kind} forked`);
+    heading("Profile forked");
     console.log(`  ${destination}`);
     console.log(`  edit ${configPath} to customize it.`);
     return;
   }
 
-  fail(`Usage: ${kind} list | ${kind} show <id> | ${kind} fork <id> --as <new-id>`);
+  fail("Usage: profile list | profile show <id> | profile fork <id> --as <new-id>");
 }
 
 // ---------------------------------------------------------------------------
@@ -1323,7 +1285,10 @@ function checkProject(args) {
   if (config) {
     if (!config.schema) errors.push("project.json: missing schema");
     if (!config.slug) errors.push("project.json: missing slug");
-    if (!config.category) errors.push("project.json: missing category");
+    if (!config.channel) warnings.push("project.json: missing channel (legacy project)");
+    else if (!exists(path.join(channelsDir(), config.channel, "channel.json"))) {
+      errors.push(`project.json: channel not found "${config.channel}"`);
+    }
     if (!config.profile) errors.push("project.json: missing profile");
     if (!config.format || !(config.format.duration > 0)) errors.push("project.json: invalid format.duration");
     if (config.engine && !ENGINE_IDS.includes(config.engine)) errors.push(`project.json: unknown engine "${config.engine}"`);
@@ -1409,7 +1374,6 @@ function resolveProject(slug) {
       schema: "rooster.project/v1",
       slug: "root",
       name: "Active video",
-      category: "custom",
       profile: "default",
       engine: "auto",
       mode: { source: "hybrid", voice: "none", style: "ai", autonomy: "guided" },
@@ -1425,7 +1389,6 @@ function resolveProject(slug) {
     schema: "rooster.project/v1",
     slug: projectSlug,
     name: projectSlug,
-    category: "custom",
     profile: "default",
     engine: "auto",
     mode: { source: "hybrid", voice: "none", style: "ai", autonomy: "guided" },
@@ -2667,9 +2630,8 @@ function buildCommand(args) {
 
   let engine = typeof args.engine === "string" ? args.engine : project.config.engine || "auto";
   if (engine === "auto") {
-    const category = project.config.category || "";
     const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
-    engine = category === "3d-cartoon" || has3d ? "remotion" : "hyperframes";
+    engine = has3d ? "remotion" : "hyperframes";
   }
   if (!["hyperframes", "remotion"].includes(engine)) {
     fail(`Engine "${engine}" is not a creative build target. Use hyperframes or remotion (FFmpeg is a media utility).`);
@@ -2957,13 +2919,12 @@ Commands:
   doctor [--json]                 Detect tools, engines, TTS, and workspace
   init [--dir <path>] [--force]   Create a workspace
   new <slug> [options]            Create a project inside a channel
-  list [--json]                   List channels, projects, profiles, categories
+  list [--json]                   List channels, projects, and profiles
   channel list|show|new|set|use   Manage channels and their defaults
   check <slug> [--json]           Validate project and timeline
   check [--json]                  Validate the root project (no slug)
   config [show|path|get|set]      Workspace defaults and asset/TTS policy
-  profile list|show|fork         Reusable visual identities
-  category list|show|fork        Reusable content recipes
+  profile list|show|fork          Reusable visual identities
   digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check|--show]    Validate and show edit/plan.json
@@ -3000,11 +2961,10 @@ Build options:
 New project options:
   --channel <id>                  Channel (default: workspace default)
   --name <name>                   Display name
-  --category <id>                 Category (default: channel/category)
   --profile <id>                  Profile (default: channel profile)
   --engine <id>                   auto | hyperframes | remotion | ffmpeg
   --format <aspect>               16:9 | 9:16 | 1:1 | 4:5 (default: channel)
-  --duration <seconds>            Target duration
+  --duration <seconds>            Target duration (default: channel)
   --language <code>               Language (default: channel language)
   --source <id>                   live | generated | hybrid
   --voice <id>                    user | tts | none
@@ -3014,10 +2974,13 @@ New project options:
   --force                         Overwrite an existing project
 
 Channel options:
+  --name <name>                   Display name
+  --content <text>                What this channel produces
   --language <code>               Default language
   --format <aspect>               Default format (or auto)
+  --duration <seconds>            Default target duration
   --profile <id>                  Default profile
-  --category <id>                 Default category
+  --source <id>                   live | generated | hybrid
   --voice <id>                    user | tts | none
   --engine <id>                   auto | hyperframes | remotion
   --autonomy <id>                 auto | guided | manual
@@ -3036,19 +2999,16 @@ Environment:
 
 Examples:
   node scripts/rooster.mjs init
-  node scripts/rooster.mjs init
-  node scripts/rooster.mjs channel new en-tech --language en --format 16:9 --profile tech-neon --category faceless-explainer
+  node scripts/rooster.mjs channel new en-tech --language en --format 16:9 --profile tech-neon --voice tts
   node scripts/rooster.mjs new video-x --channel en-tech --duration 60
   node scripts/rooster.mjs config set assets.strategy user
   node scripts/rooster.mjs profile fork minimal --as my-brand
-  node scripts/rooster.mjs category fork faceless-explainer --as my-explainer
   node scripts/rooster.mjs digest en-tech/video-x --from 0 --to 60
   node scripts/rooster.mjs check en-tech/video-x
-  node scripts/rooster.mjs ingest meu-video --url "https://youtu.be/..." --confirm-rights
-  node scripts/rooster.mjs transcribe meu-video --model small --language pt
-  node scripts/rooster.mjs plan meu-video --show
-  node scripts/rooster.mjs build meu-video --engine hyperframes
-  node scripts/rooster.mjs check meu-video
+  node scripts/rooster.mjs ingest en-tech/video-x --url "https://youtu.be/..." --confirm-rights
+  node scripts/rooster.mjs transcribe en-tech/video-x --model small --language en
+  node scripts/rooster.mjs plan en-tech/video-x --show
+  node scripts/rooster.mjs build en-tech/video-x --engine hyperframes
 `);
 }
 
@@ -3093,10 +3053,7 @@ function main() {
       configCommand(args);
       return;
     case "profile":
-      catalogCommand("profile", args);
-      return;
-    case "category":
-      catalogCommand("category", args);
+      profileCommand(args);
       return;
     case "digest":
       digestCommand(args);

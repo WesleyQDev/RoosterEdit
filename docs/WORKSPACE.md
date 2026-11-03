@@ -28,11 +28,9 @@ rooster/
 │       │       ├── qa/
 │       │       └── review.md
 │       ├── profiles/
-│       ├── categories/
 │       ├── assets/
 │       └── library/
 ├── profiles/       # compartilhados
-├── categories/     # compartilhadas
 ├── library/{music,sfx,fonts,overlays,luts,broll,images}/
 └── cache/
 ```
@@ -47,12 +45,13 @@ node scripts/rooster.mjs init
 
 ## Canais
 
-Um canal é o grupo estável de marca/audiência/operação. Ele guarda:
+Um canal é o padrão de produção estável de uma marca/audiência/operação. Ele guarda:
 
+- o que produz (`content`);
 - idioma;
 - formato default (`16:9`, `9:16`, `1:1` ou `auto`);
+- duração default;
 - perfil visual;
-- categoria default;
 - política de assets;
 - engine;
 - autonomia;
@@ -62,10 +61,12 @@ Um canal é o grupo estável de marca/audiência/operação. Ele guarda:
 
 ```bash
 node scripts/rooster.mjs channel new en-tech \
+  --name "EN Tech" \
+  --content "English tech explainers" \
   --language en \
   --format 16:9 \
+  --duration 60 \
   --profile tech-neon \
-  --category faceless-explainer \
   --voice tts \
   --assets mixed
 ```
@@ -95,9 +96,9 @@ node scripts/rooster.mjs new video-special --channel en-tech \
 `project.json` registra:
 
 - `channel`;
-- `category`;
 - `profile`;
 - `format`;
+- `language`;
 - `mode` (source, voice, style, autonomy);
 - `assets` (estratégia, permissões, licença);
 - `overrides` (o que veio do projeto, não do canal).
@@ -105,10 +106,10 @@ node scripts/rooster.mjs new video-special --channel en-tech \
 ## Precedência
 
 ```text
-projeto > canal > categoria (sugestão) > workspace/global > built-in
+projeto > canal > workspace/global > built-in
 ```
 
-O canal ganha da categoria. O projeto ganha de todos.
+O projeto pode sobrescrever qualquer default do canal. Não existe camada de categoria.
 
 ## Perfis
 
@@ -132,22 +133,6 @@ Perfis podem ser:
 node scripts/rooster.mjs profile list
 node scripts/rooster.mjs profile show minimal
 node scripts/rooster.mjs profile fork minimal --as minha-marca
-```
-
-## Categorias
-
-```text
-categories/<id>/
-├── category.json
-├── PLAYBOOK.md
-├── beats.json
-├── components/
-└── examples/
-```
-
-```bash
-node scripts/rooster.mjs category list
-node scripts/rooster.mjs category fork faceless-explainer --as meu-explainer
 ```
 
 ## Biblioteca

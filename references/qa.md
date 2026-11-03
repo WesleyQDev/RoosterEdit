@@ -79,7 +79,7 @@ QA has two jobs: catch technical defects before the user sees them, and catch ed
 - [ ] The tone matches the audience.
 - [ ] The video works without sound (captions/text) if the platform requires it.
 - [ ] The video works with sound only (voice/music) if the platform requires it.
-- [ ] The pacing matches the category.
+- [ ] The pacing matches the channel and the plan.
 - [ ] The ending is not abrupt.
 
 ## Accessibility

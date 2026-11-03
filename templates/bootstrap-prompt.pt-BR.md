@@ -12,29 +12,30 @@ Quero editar meus vídeos com IA usando o RoosterEdit. Prepare este computador e
    ```
    npx skills add heygen-com/hyperframes
    ```
-4. Crie um workspace do RoosterEdit com:
+4. Crie um workspace do RoosterEdit e o primeiro canal:
    ```
    node "<skill>/scripts/rooster.mjs" init
-   node "<skill>/scripts/rooster.mjs" new meu-video --category talking-head --profile minimal
+   node "<skill>/scripts/rooster.mjs" channel new meu-canal --language pt-BR --format 16:9 --profile minimal
+   node "<skill>/scripts/rooster.mjs" new meu-video --channel meu-canal
    ```
-   Coloque meu vídeo bruto em `rooster/projects/meu-video/assets/source/`.
-5. Leia meu guia de estilo em `rooster/projects/meu-video/style.md` (se eu não tiver um, crie a partir das minhas referências).
+   Coloque meu vídeo bruto em `rooster/channels/meu-canal/projects/meu-video/assets/source/`.
+5. Leia meu guia de estilo em `rooster/channels/meu-canal/projects/meu-video/style.md` (se eu não tiver um, crie a partir das minhas referências).
 6. Transcreva o vídeo com Whisper:
    ```
-   node "<skill>/scripts/rooster.mjs" transcribe meu-video --model small --language pt
+   node "<skill>/scripts/rooster.mjs" transcribe meu-canal/meu-video --model small --language pt
    ```
-7. Leia `rooster/projects/meu-video/edit/transcript.json` e o `style.md`, entenda o assunto e crie `rooster/projects/meu-video/edit/plan.json` com:
+7. Leia `rooster/channels/meu-canal/projects/meu-video/edit/transcript.json` e o `style.md`, entenda o assunto e crie `rooster/channels/meu-canal/projects/meu-video/edit/plan.json` com:
    - cortes para pausas longas, repetições, falsos começos e retomadas;
    - o melhor take a manter;
    - letreiros, gráficos, listas, zooms e b-roll, com início, fim e descrição.
 8. **Sempre me mostre o plano antes de criar qualquer coisa.** Só crie a timeline, os visuais ou o render depois do meu OK.
 9. Depois do OK, gere o projeto e monte a timeline:
    ```bash
-   node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
+   node "<skill>/scripts/rooster.mjs" build meu-canal/meu-video --engine hyperframes
    ```
    Se eu escolher React, dados ou 3D, use Remotion:
    ```bash
-   node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
+   node "<skill>/scripts/rooster.mjs" build meu-canal/meu-video --engine remotion
    ```
 10. No fim, me explique em linguagem simples o que foi instalado e como eu uso cada parte.
 

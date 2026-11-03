@@ -1,6 +1,6 @@
 # Style guide
 
-> Template para `projects/<slug>/style.md`. O guia de estilo é a fonte de verdade visual e sonora do vídeo. Se houver um profile, ele complementa este arquivo.
+> Template para `channels/<canal>/projects/<slug>/style.md`. O guia de estilo é a fonte de verdade visual e sonora do vídeo. Se houver um profile, ele complementa este arquivo.
 
 ## Objetivo e tom
 

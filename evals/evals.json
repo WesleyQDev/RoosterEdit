@@ -4,19 +4,19 @@
     {
       "id": 1,
       "prompt": "Tenho 40 minutos de entrevista em `footage/entrevista.mp4` e alguns b-rolls em `footage/broll/`. Quero um vídeo de 90 segundos para o YouTube, com cortes secos, legendas em português e uma trilha discreta. Não quero gravar narração.",
-      "expected_output": "O agente deve identificar a categoria talking-head, source live, voice user, criar o workspace/projeto, transcrever a entrevista, propor um corte de 90s com EDL/timeline, selecionar b-roll, gerar legendas, escolher FFmpeg ou Remotion, mostrar preview/timeline e só renderizar após aprovação.",
+      "expected_output": "O agente deve criar ou reutilizar um canal com source live e voice user (ou registrar overrides no projeto), criar o workspace/projeto dentro do canal, transcrever a entrevista, propor um corte de 90s com EDL/timeline, selecionar b-roll, gerar legendas, escolher FFmpeg ou Remotion, mostrar preview/timeline e só renderizar após aprovação.",
       "files": []
     },
     {
       "id": 2,
       "prompt": "Crie um explainer de 45 segundos sobre 'como funciona um LLM' para TikTok, 9:16, sem gravar nada. Use narração TTS em pt-BR e um visual tech neon. Quero ver a timeline no browser antes de renderizar.",
-      "expected_output": "O agente deve identificar faceless-explainer, source generated, voice tts, formato 9:16, criar script/storyboard, resolver ou criar um perfil tech-neon, gerar TTS e legendas, montar timeline no HyperFrames, abrir o preview no browser e aguardar aprovação antes do render final.",
+      "expected_output": "O agente deve criar ou reutilizar um canal para explainers (source generated, voice tts), aplicar o override de formato 9:16, criar script/storyboard, resolver ou criar um perfil tech-neon, gerar TTS e legendas, montar timeline no HyperFrames, abrir o preview no browser e aguardar aprovação antes do render final.",
       "files": []
     },
     {
       "id": 3,
       "prompt": "Quero um short 3D de 20 segundos com um robô fofo explicando o que é computação quântica, estilo cartoon low-poly, usando Three.js. Sem fala, só música e legendas.",
-      "expected_output": "O agente deve identificar 3d-cartoon, source generated, voice none, 9:16 ou 16:9 conforme confirmação, escolher Remotion + @remotion/three ou HyperFrames + Three.js, criar storyboard com personagem/câmera, implementar a cena 3D determinística, adicionar música e legendas e validar frames antes do render.",
+      "expected_output": "O agente deve criar ou reutilizar um canal para vídeos 3D (source generated, voice none), aplicar o override de formato, escolher Remotion + @remotion/three ou HyperFrames + Three.js, criar storyboard com personagem/câmera, implementar a cena 3D determinística, adicionar música e legendas e validar frames antes do render.",
       "files": []
     },
     {
@@ -40,13 +40,13 @@
     {
       "id": 7,
       "prompt": "Make a 30-second product launch video from these screenshots and a logo. No voiceover, upbeat music, captions, 16:9. Use my brand colors.",
-      "expected_output": "O agente deve identificar product-promo, source generated/hybrid, voice none, usar os screenshots e o logo como assets, criar um perfil a partir das cores da marca, montar storyboard com callouts, adicionar música e legendas, escolher HyperFrames ou Remotion e entregar preview antes do render.",
+      "expected_output": "O agente deve criar ou reutilizar um canal de product launch (source generated/hybrid, voice none), usar os screenshots e o logo como assets, criar um perfil a partir das cores da marca, montar storyboard com callouts, adicionar música e legendas, escolher HyperFrames ou Remotion e entregar preview antes do render.",
       "files": []
     },
     {
       "id": 8,
       "prompt": "I have a bunch of clips and I want a cool video for Instagram.",
-      "expected_output": "O agente não deve renderizar imediatamente. Deve fazer intake curto (objetivo, duração, formato 9:16, voz/música, estilo, nível de autonomia), propor uma categoria social-short e um plano, e confirmar os pontos caros de mudar antes de criar o projeto.",
+      "expected_output": "O agente não deve renderizar imediatamente. Deve fazer intake curto (objetivo, duração, formato 9:16, voz/música, estilo, nível de autonomia), propor um padrão de produção para o canal com overrides 9:16 e um plano, e confirmar os pontos caros de mudar antes de criar o projeto.",
       "files": []
     },
     {

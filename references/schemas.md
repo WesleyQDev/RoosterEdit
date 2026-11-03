@@ -10,7 +10,6 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
   "slug": "meu-video",
   "name": "Meu Vídeo",
   "channel": "en-tech",
-  "category": "faceless-explainer",
   "profile": "tech-neon",
   "engine": "auto",
   "language": "en",
@@ -50,7 +49,7 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
 }
 ```
 
-Required: `schema`, `slug`, `name`, `category`, `profile`, `format`, `status`.
+Required: `schema`, `slug`, `name`, `channel`, `profile`, `format`, `status`.
 
 Enums:
 
@@ -114,39 +113,6 @@ Enums:
 Required: `schema`, `id`, `name`, `tokens.colors`, `tokens.typography`, `captions`, `audio`, `engines.preferred`.
 
 `scope`: `project`, `workspace`, `global`.
-
-## category.json
-
-```json
-{
-  "schema": "rooster.category/v1",
-  "id": "faceless-explainer",
-  "name": "Faceless Explainer",
-  "description": "Narração TTS + visuais gerados + kinetic type",
-  "extends": null,
-  "defaults": {
-    "duration": [45, 90],
-    "aspect": "16:9",
-    "engine": "hyperframes",
-    "voice": "tts",
-    "captions": "burned",
-    "music": true,
-    "source": "generated"
-  },
-  "structure": [
-    { "beat": "hook", "duration": [0, 4], "goal": "Prender a atenção" },
-    { "beat": "context", "duration": [4, 15], "goal": "Explicar o problema" },
-    { "beat": "explain", "duration": [15, 55], "goal": "Desenvolver a ideia" },
-    { "beat": "proof", "duration": [55, 75], "goal": "Exemplo ou dado" },
-    { "beat": "cta", "duration": [75, 90], "goal": "Ação clara" }
-  ],
-  "required": ["script", "voiceover"],
-  "optional": ["broll", "images", "music"],
-  "qa": ["hook nos primeiros 3 segundos", "legenda sincronizada", "loudness -14 LUFS"]
-}
-```
-
-Required: `schema`, `id`, `name`, `defaults`, `structure`.
 
 ## transcript.json
 
@@ -295,10 +261,12 @@ For URL assets, add:
   "schema": "rooster.channel/v1",
   "id": "en-tech",
   "name": "EN Tech",
+  "content": "English tech explainers",
   "language": "en",
   "format": "16:9",
+  "duration": 60,
   "profile": "tech-neon",
-  "category": "faceless-explainer",
+  "source": "generated",
   "voice": "tts",
   "engine": "auto",
   "autonomy": "guided",
@@ -315,9 +283,9 @@ For URL assets, add:
 }
 ```
 
-Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `category`, `voice`, `engine`, `autonomy`, `assets`.
+Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `voice`, `engine`, `autonomy`, `assets`.
 
-`format` can be `16:9`, `9:16`, `1:1`, `4:5`, or `auto`.
+`format` can be `16:9`, `9:16`, `1:1`, `4:5`, or `auto`. `duration` is the default target in seconds. `content` is a short description of what the channel produces.
 
 ## workspace.json
 
@@ -329,7 +297,6 @@ Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `category`, `
   "defaultChannel": "default",
   "defaults": {
     "profile": "minimal",
-    "category": "custom",
     "engine": "auto",
     "aspect": "16:9",
     "fps": 30,

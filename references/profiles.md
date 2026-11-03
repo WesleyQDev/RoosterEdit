@@ -1,17 +1,16 @@
-# Profiles and categories
+# Profiles
 
-A project is a combination of a **category** (what the video is) and a **profile** (how it looks and sounds). They are orthogonal: any category can use any profile, and a project can override either.
+A project belongs to a **channel** and uses a **profile** (how it looks and sounds). The channel holds the production defaults; the profile holds the visual identity. Any channel can use any profile, and a project can override either.
 
 ## Resolution order
 
 1. Project overrides in `project.json`.
-2. Channel defaults in `channels/<id>/channel.json` and channel-scoped profiles/categories.
-3. Category suggestions in `categories/<id>/category.json`.
-4. Workspace `rooster/profiles` and `rooster/categories`.
-5. Global `~/.rooster/profiles` and `~/.rooster/categories`.
-6. Built-ins in the skill's `templates/profiles` and `templates/categories`.
+2. Channel defaults in `channels/<id>/channel.json` and channel-scoped profiles in `channels/<id>/profiles`.
+3. Workspace `rooster/profiles`.
+4. Global `~/.rooster/profiles`.
+5. Built-ins in the skill's `templates/profiles`.
 
-The channel wins over the category when both define a value. The category still supplies structure, duration, required assets, and suggestions. If two profiles share an id, the higher-precedence one wins. Record the resolved source in `project.json` or a `resolved.json` artifact so the decision is traceable.
+If two profiles share an id, the higher-precedence one wins. Record the resolved source in `project.json` or a `resolved.json` artifact so the decision is traceable.
 
 ## Profile schema
 
@@ -104,62 +103,11 @@ profiles/<id>/
 
 `STYLE.md` is the human-readable art direction: what the profile feels like, what to avoid, and how to apply it to a new scene. The JSON is the machine-readable contract.
 
-## Category schema
-
-```json
-{
-  "schema": "rooster.category/v1",
-  "id": "faceless-explainer",
-  "name": "Faceless Explainer",
-  "description": "Narração TTS + visuais gerados + kinetic type",
-  "extends": null,
-  "defaults": {
-    "duration": [45, 90],
-    "aspect": "16:9",
-    "engine": "hyperframes",
-    "voice": "tts",
-    "captions": "burned",
-    "music": true,
-    "source": "generated"
-  },
-  "structure": [
-    { "beat": "hook", "duration": [0, 4], "goal": "Prender a atenção" },
-    { "beat": "context", "duration": [4, 15], "goal": "Explicar o problema" },
-    { "beat": "explain", "duration": [15, 55], "goal": "Desenvolver a ideia" },
-    { "beat": "proof", "duration": [55, 75], "goal": "Exemplo ou dado" },
-    { "beat": "cta", "duration": [75, 90], "goal": "Ação clara" }
-  ],
-  "required": ["script", "voiceover"],
-  "optional": ["broll", "images", "music"],
-  "qa": [
-    "hook nos primeiros 3 segundos",
-    "legenda sincronizada",
-    "loudness -14 LUFS",
-    "CTA claro"
-  ]
-}
-```
-
-### Category folder
-
-```text
-categories/<id>/
-├── category.json
-├── PLAYBOOK.md
-├── beats.json
-├── components/
-│   ├── remotion/
-│   └── hyperframes/
-└── examples/
-```
-
-`PLAYBOOK.md` explains how to write, shoot, edit, and QA that category. `beats.json` is the machine-readable structure.
-
 ## Inheritance
 
 `extends` can point to:
 
-- another profile/category in the same scope;
+- another profile in the same scope;
 - a global id;
 - a built-in id.
 
@@ -197,21 +145,10 @@ Keep inheritance shallow. A profile that extends three levels is hard to reason 
 3. Remove project-specific copy and assets that do not belong in a reusable profile.
 4. Name it after the visual identity, not the project.
 
-## Creating a category
-
-1. Start from an existing category or a blank template.
-2. Define the narrative beats and target durations.
-3. Set defaults: aspect, engine, voice, captions, music, source.
-4. Define required and optional assets.
-5. Write the QA checklist.
-6. Add a playbook with examples.
-7. Test with one short project before reusing it broadly.
-
 ## Forking
 
 ```bash
 node "<skill>/scripts/rooster.mjs" profile fork tech-neon --as my-brand
-node "<skill>/scripts/rooster.mjs" category fork faceless-explainer --as my-explainer
 ```
 
 Forking copies the source into the current scope and rewrites the id. It does not modify the original.
@@ -236,16 +173,3 @@ Forking copies the source into the current scope and rewrites the id. It does no
 - `brutalist` — bold type, black/white/red, hard cuts.
 - `3d-cartoon` — rounded shapes, saturated colors, squash/stretch.
 - `corporate-clean` — blue, sans, lower thirds, safe.
-
-## Built-in categories to ship
-
-- `talking-head`
-- `faceless-explainer`
-- `product-promo`
-- `tutorial-screencast`
-- `social-short`
-- `3d-cartoon`
-- `documentary`
-- `music-video`
-
-Start with three complete built-ins (`talking-head`, `faceless-explainer`, `3d-cartoon`) and add the rest as the skill matures. A small number of excellent recipes is better than a large number of shallow ones.

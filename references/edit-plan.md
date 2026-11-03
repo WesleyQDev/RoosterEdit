@@ -1,6 +1,6 @@
 # Edit plan
 
-The edit plan is the bridge between the transcript and the build. It is the artifact the user approves before any engine project is created. It lives at `projects/<slug>/edit/plan.json`.
+The edit plan is the bridge between the transcript and the build. It is the artifact the user approves before any engine project is created. It lives at `channels/<channel>/projects/<slug>/edit/plan.json`.
 
 ## Schema
 

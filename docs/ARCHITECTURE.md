@@ -43,11 +43,11 @@ O que **não** copiamos: os nomes das pastas e a estrutura rígida do vídeo. O 
 
 | Vídeo de referência | RoosterEdit |
 |---|---|
-| `bruto/` | `projects/<slug>/assets/source/` |
-| `estilo/ESTILO.md` | `projects/<slug>/style.md` + profile resolvido |
-| `trabalho/transcricao.json` | `projects/<slug>/edit/transcript.json` |
-| `trabalho/plano.json` | `projects/<slug>/edit/plan.json` |
-| `final/` | `projects/<slug>/renders/` |
+| `bruto/` | `channels/<canal>/projects/<slug>/assets/source/` |
+| `estilo/ESTILO.md` | `channels/<canal>/projects/<slug>/style.md` + profile resolvido |
+| `trabalho/transcricao.json` | `channels/<canal>/projects/<slug>/edit/transcript.json` |
+| `trabalho/plano.json` | `channels/<canal>/projects/<slug>/edit/plan.json` |
+| `final/` | `channels/<canal>/projects/<slug>/renders/` |
 
 A sequência é parecida; a organização é nossa. O plano em `edit/plan.json` é o gate mais importante: nada de timeline, engine ou render antes da aprovação.
 
@@ -62,22 +62,16 @@ RoosterEdit/
 │   ├── workflow.md
 │   ├── intake.md
 │   ├── engines.md
-│   ├── profiles-and-categories.md
+│   ├── profiles.md
 │   ├── timeline.md
 │   ├── qa.md
 │   ├── harness.md
-│   ├── schemas.md
-│   └── categories/
-│       ├── talking-head.md
-│       ├── faceless-explainer.md
-│       └── 3d-cartoon.md
+│   └── schemas.md
 ├── scripts/
 │   ├── rooster.mjs
 │   └── sync-skill.mjs
 ├── templates/
-│   ├── workspace/
 │   ├── profiles/
-│   ├── categories/
 │   └── engines/
 ├── agents/
 │   ├── producer.md
@@ -99,17 +93,19 @@ O repositório inteiro é o pacote da skill. Isso simplifica a instalação e a 
 
 ## 3.1 Modelo de canais
 
-O workspace é dividido em **canais**. Um canal é o grupo estável de marca/audiência/operação e guarda os defaults criativos:
+O workspace é dividido em **canais**. Um canal é o padrão de produção estável de marca/audiência/operação e guarda os defaults criativos:
 
 ```json
 {
   "schema": "rooster.channel/v1",
   "id": "en-tech",
   "name": "EN Tech",
+  "content": "English tech explainers",
   "language": "en",
   "format": "16:9",
+  "duration": 60,
   "profile": "tech-neon",
-  "category": "faceless-explainer",
+  "source": "generated",
   "voice": "tts",
   "engine": "auto",
   "autonomy": "guided",
@@ -122,53 +118,58 @@ O workspace é dividido em **canais**. Um canal é o grupo estável de marca/aud
 }
 ```
 
-Precedência: **projeto > canal > categoria (sugestão) > workspace/global > built-in**.
+Precedência: **projeto > canal > workspace/global > built-in**.
 
-- **Canal**: idioma, formato default, perfil, categoria, assets, engine, autonomia, voz.
-- **Categoria**: receita de conteúdo; sugere formato/engine/voz, mas não passa por cima do canal.
-- **Projeto**: herda o canal e registra only os overrides.
+- **Canal**: conteúdo, idioma, formato default, duração, perfil, assets, engine, autonomia, voz.
+- **Projeto**: herda o canal e registra apenas os overrides.
+
+Não existe camada de categoria. O que o canal produz fica em `content`; a estrutura de cada vídeo fica no brief, no script e em `edit/plan.json`.
 
 Todo projeto novo fica em `channels/<canal>/projects/<slug>/`. O `projects/` na raiz é legado.
 
 ## 4. Workspace do usuário
 
-O workspace é criado no projeto onde o vídeo será produzido, não no repositório da skill. O desenho abaixo mostra a forma de **um projeto**; ele fica dentro de `channels/<canal>/projects/<slug>/`.
+O workspace é criado no projeto onde o vídeo será produzido, não no repositório da skill. O desenho abaixo mostra a forma do workspace e de um projeto dentro de um canal.
 
 ```text
 rooster/
 ├── workspace.json
 ├── config.json
 ├── README.md
-├── projects/
-│   └── <slug>/
-│       ├── project.json
-│       ├── brief.md
-│       ├── script.md
-│       ├── style.md
-│       ├── storyboard/
-│       │   ├── storyboard.json
-│       │   └── frames/
+├── channels/
+│   └── <canal>/
+│       ├── channel.json
+│       ├── projects/
+│       │   └── <slug>/
+│       │       ├── project.json
+│       │       ├── brief.md
+│       │       ├── script.md
+│       │       ├── style.md
+│       │       ├── storyboard/
+│       │       │   ├── storyboard.json
+│       │       │   └── frames/
+│       │       ├── assets/
+│       │       │   ├── source/
+│       │       │   ├── generated/
+│       │       │   ├── licensed/
+│       │       │   └── manifest.json
+│       │       ├── edit/
+│       │       │   ├── timeline.json
+│       │       │   ├── edl.json
+│       │       │   ├── captions/
+│       │       │   └── audio/
+│       │       ├── engine/
+│       │       │   ├── hyperframes/
+│       │       │   ├── remotion/
+│       │       │   └── ffmpeg/
+│       │       ├── preview/
+│       │       ├── renders/
+│       │       ├── qa/
+│       │       └── review.md
+│       ├── profiles/
 │       ├── assets/
-│       │   ├── source/
-│       │   ├── generated/
-│       │   ├── licensed/
-│       │   └── manifest.json
-│       ├── edit/
-│       │   ├── timeline.json
-│       │   ├── edl.json
-│       │   ├── captions/
-│       │   └── audio/
-│       ├── engine/
-│       │   ├── hyperframes/
-│       │   ├── remotion/
-│       │   └── ffmpeg/
-│       ├── preview/
-│       ├── renders/
-│       ├── qa/
-│       └── review.md
+│       └── library/
 ├── profiles/
-│   └── <id>/
-├── categories/
 │   └── <id>/
 ├── library/
 │   ├── music/
@@ -187,16 +188,15 @@ rooster/
 ~/.rooster/
 ├── config.json
 ├── profiles/
-├── categories/
 └── library/
 ```
 
-A biblioteca global é opcional. Ela existe para o usuário reutilizar perfis, categorias, fontes, músicas e overlays entre projetos. A resolução é:
+A biblioteca global é opcional. Ela existe para o usuário reutilizar perfis, fontes, músicas e overlays entre projetos. A resolução é:
 
 1. Overrides do projeto (`project.json`)
-2. Perfis/categorias do workspace (`rooster/profiles`, `rooster/categories`)
-3. Perfis/categorias globais (`~/.rooster/profiles`, `~/.rooster/categories`)
-4. Built-ins da skill (`templates/profiles`, `templates/categories`)
+2. Perfis do workspace (`rooster/profiles`)
+3. Perfis globais (`~/.rooster/profiles`)
+4. Built-ins da skill (`templates/profiles`)
 
 ### Variáveis de ambiente
 
@@ -293,73 +293,9 @@ Regras:
 - `rooster profile fork <id> --as <novo>` cria uma cópia editável.
 - Perfis nunca devem conter assets sem licença documentada.
 
-## 6. Categories
+## 6. Project
 
-Uma category é a receita de conteúdo. Ela define a estrutura narrativa, o ritmo e os defaults técnicos.
-
-```text
-categories/<id>/
-├── category.json
-├── PLAYBOOK.md
-├── beats.json
-├── components/
-│   ├── remotion/
-│   └── hyperframes/
-└── examples/
-```
-
-Exemplo de `category.json`:
-
-```json
-{
-  "schema": "rooster.category/v1",
-  "id": "faceless-explainer",
-  "name": "Faceless Explainer",
-  "description": "Narração TTS + visuais gerados + kinetic type",
-  "extends": null,
-  "defaults": {
-    "duration": [45, 90],
-    "aspect": "16:9",
-    "engine": "hyperframes",
-    "voice": "tts",
-    "captions": "burned",
-    "music": true,
-    "source": "generated"
-  },
-  "structure": [
-    { "beat": "hook", "duration": [0, 4], "goal": "Prender a atenção com uma pergunta ou fato" },
-    { "beat": "context", "duration": [4, 15], "goal": "Explicar o problema" },
-    { "beat": "explain", "duration": [15, 55], "goal": "Desenvolver a ideia em 3 blocos" },
-    { "beat": "proof", "duration": [55, 75], "goal": "Exemplo ou dado concreto" },
-    { "beat": "cta", "duration": [75, 90], "goal": "Fechar com ação clara" }
-  ],
-  "required": ["script", "voiceover"],
-  "optional": ["broll", "images", "music"],
-  "qa": [
-    "hook nos primeiros 3 segundos",
-    "legenda sincronizada",
-    "loudness -14 LUFS",
-    "CTA claro"
-  ]
-}
-```
-
-Categorias iniciais planejadas:
-
-| Categoria | Uso |
-|---|---|
-| `talking-head` | Entrevista, apresentador, aula |
-| `faceless-explainer` | Explicação com TTS e visuais |
-| `product-promo` | Lançamento, feature, demo |
-| `tutorial-screencast` | Tutorial de tela |
-| `social-short` | Reels, Shorts, TikTok |
-| `3d-cartoon` | Animação 3D com Three.js |
-| `documentary` | Entrevistas + b-roll + arquivo |
-| `music-video` | Beat sync e visuais abstratos |
-
-## 7. Project
-
-O projeto é a instância concreta. Ele combina category + profile + overrides.
+O projeto é a instância concreta. Ele combina channel + profile + overrides.
 
 ```json
 {
@@ -367,7 +303,6 @@ O projeto é a instância concreta. Ele combina category + profile + overrides.
   "slug": "meu-video",
   "name": "Meu Vídeo",
   "channel": "en-tech",
-  "category": "faceless-explainer",
   "profile": "tech-neon",
   "engine": "auto",
   "language": "en",
@@ -400,9 +335,9 @@ O projeto é a instância concreta. Ele combina category + profile + overrides.
 
 Status possíveis: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, `rendering`, `done`, `blocked`.
 
-## 8. Fluxo de trabalho
+## 7. Fluxo de trabalho
 
-### 8.1 Doctor
+### 7.1 Doctor
 
 `node scripts/rooster.mjs doctor --json` detecta:
 
@@ -415,7 +350,7 @@ Status possíveis: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, 
 
 O resultado é um objeto JSON estável, usado pela skill para escolher o caminho.
 
-### 8.2 Intake
+### 7.2 Intake
 
 Perguntas que mudam o output:
 
@@ -432,13 +367,13 @@ Perguntas que mudam o output:
 
 Não perguntar tudo de uma vez. Perguntar só o que falta e o que muda a decisão.
 
-### 8.3 Brief + script + beats
+### 7.3 Brief + script + beats
 
 - `brief.md`: objetivo, público, plataforma, duração, tom, CTA, referências.
 - `script.md` / `script.json`: falas, texto na tela, marcações de cena.
 - `beats.json`: estrutura narrativa com timings.
 
-### 8.4 Resolução de estilo
+### 7.4 Resolução de estilo
 
 - `style: user` → usar guia/arquivos do usuário.
 - `style: profile` → resolver perfil do workspace/global/built-in.
@@ -447,7 +382,7 @@ Não perguntar tudo de uma vez. Perguntar só o que falta e o que muda a decisã
 
 Gerar `style.md` com paleta, tipografia, motion, referências e prompts.
 
-### 8.5 Assets
+### 7.5 Assets
 
 - Ingerir em `assets/source`, `assets/generated` ou `assets/licensed`.
 - Gerar `assets/manifest.json` com hash, tipo, dimensões, duração, codec, licença e proveniência.
@@ -490,13 +425,13 @@ Para cortes específicos, usar `--download-sections "*00:01:20-00:02:10"` com mo
 
 **Direitos e limites:** baixar apenas conteúdo próprio, com permissão, licença aberta ou domínio público. Não contornar DRM, paywall, login ou controle de acesso. Respeitar os termos da plataforma e as leis de copyright. O RoosterEdit não deve ser usado para reupload de conteúdo de terceiros.
 
-### 8.6 Storyboard + timeline
+### 7.6 Storyboard + timeline
 
 - `storyboard/storyboard.json`: cenas, frames, duração, transições, overlays.
 - `edit/timeline.json`: tracks, clips, scenes, captions, áudio e markers.
 - O storyboard é aprovado antes do build.
 
-### 8.7 Build
+### 7.7 Build
 
 - Escolher engine.
 - Scaffold do projeto.
@@ -504,13 +439,13 @@ Para cortes específicos, usar `--download-sections "*00:01:20-00:02:10"` com mo
 - Para 3D: Three.js determinístico.
 - Para footage: EDL + FFmpeg/Remotion.
 
-### 8.8 Preview
+### 7.8 Preview
 
 - `node scripts/rooster.mjs preview <slug>` sobe o review unificado.
 - Estúdios nativos: Remotion Studio ou HyperFrames preview.
 - Browser agents podem abrir, tirar screenshot e inspecionar console.
 
-### 8.9 QA
+### 7.9 QA
 
 Checklist técnico e editorial em `references/qa.md`:
 
@@ -522,20 +457,20 @@ Checklist técnico e editorial em `references/qa.md`:
 - licenças e assets faltando;
 - hook, ritmo, clareza, CTA, consistência de marca.
 
-### 8.10 Render + entrega
+### 7.10 Render + entrega
 
 - Draft rápido para revisão.
 - Final em alta qualidade.
 - Validar com FFprobe.
 - Entregar MP4, SRT/VTT, thumbnail, metadata e arquivo do projeto.
 
-### 8.11 Learn
+### 7.11 Learn
 
-- Salvar perfil/categoria/componente reutilizável.
+- Salvar perfil/componente reutilizável.
 - Registrar decisões e feedback no `review.md`.
 - Promover perfil local para global se o usuário quiser.
 
-## 9. Engines
+## 8. Engines
 
 Os dois motores criativos são **HyperFrames** e **Remotion**. O FFmpeg é utilitário de mídia: probe, corte, legendas, mix e assembly.
 
@@ -554,7 +489,7 @@ Os dois motores criativos são **HyperFrames** e **Remotion**. O FFmpeg é utili
 5. Se o ambiente não tem Node/FFmpeg, produza o plano e explique que o render precisa de Node/FFmpeg.
 6. Se houver dúvida, prefira `hyperframes` para motion e `ffmpeg` para corte.
 
-## 10. Timeline
+## 9. Timeline
 
 O `timeline.json` é engine-agnostic e serve para revisão, QA e geração de código.
 
@@ -608,7 +543,7 @@ O `timeline.json` é engine-agnostic e serve para revisão, QA e geração de c�
 - Histórico de undo/redo.
 - Colaboração.
 
-## 11. Harness
+## 10. Harness
 
 A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de harness definem o caminho.
 
@@ -622,7 +557,7 @@ A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de 
 | TTS | Gerar narração | Voz do usuário, legendas ou silêncio |
 | GPU | 3D/render mais rápido | Render em CPU, reduzir qualidade |
 
-## 12. Segurança e licenças
+## 11. Segurança e licenças
 
 - Não executar comandos destrutivos sem confirmação.
 - Não apagar assets originais.
@@ -635,12 +570,12 @@ A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de 
 - Não baixar conteúdo protegido sem autorização.
 - Respeitar limites de API e custos.
 
-## 13. Fases
+## 12. Fases
 
 ### Fase 1 — Fundação
 
 - `SKILL.md` draft.
-- Workspace, profiles, categories.
+- Workspace, canais e profiles.
 - CLI `doctor`, `init`, `new`, `list`, `check`.
 - Schemas e docs.
 - Sync local para OpenCode.
@@ -666,12 +601,12 @@ A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de 
 ### Fase 4 — 3D e qualidade
 
 - Starter 3D (Three.js).
-- Categorias completas.
+- Perfis completos.
 - Exemplos.
 - Evals e iteração com skill-creator.
 - Empacotamento.
 
-## 14. Fora de escopo no v1
+## 13. Fora de escopo no v1
 
 - NLE completo no browser.
 - Geração de vídeo por modelos (Veo/Kling/Runway) como core.

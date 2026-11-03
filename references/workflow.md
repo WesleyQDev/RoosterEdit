@@ -162,7 +162,7 @@ Exit criteria: the timeline adds up to the target duration, has no overlaps or g
 ## Phase 9 — Build
 
 1. Choose the engine (`references/engines.md`).
-2. Scaffold inside `projects/<slug>/engine/<engine>/`.
+2. Scaffold inside `channels/<channel>/projects/<slug>/engine/<engine>/`.
 3. Implement scenes, components, captions, audio, and 3D.
 4. Keep assets referenced from the project's `assets` directory.
 5. Keep the code readable and editable.
@@ -214,10 +214,10 @@ Exit criteria: a verified final file and a complete package.
 
 ## Phase 13 — Learn
 
-- Save the profile, category, or component if it is reusable.
+- Save the profile or component if it is reusable.
 - Record decisions and feedback in `review.md`.
 - Promote a local profile to global if the user wants it.
-- Update the category playbook if you discovered a better pattern.
+- Update the channel defaults if a pattern should apply to future videos.
 
 Exit criteria: the next project starts faster.
 

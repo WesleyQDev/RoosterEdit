@@ -111,11 +111,12 @@ Lição: para footage real com slide estático, não cobrir a tela com um painel
 
 ## Reproduzir
 
-1. Crie um workspace:
+1. Crie um workspace e um canal:
    ```bash
    node "<skill>/scripts/rooster.mjs" init
-   node "<skill>/scripts/rooster.mjs" new demo --category talking-head --profile minimal
+   node "<skill>/scripts/rooster.mjs" channel new demo --language pt-BR --format 16:9 --profile minimal
+   node "<skill>/scripts/rooster.mjs" new meu-video --channel demo
    ```
-2. Coloque um áudio/vídeo em `rooster/projects/demo/assets/source/`.
+2. Coloque um áudio/vídeo em `rooster/channels/demo/projects/meu-video/assets/source/`.
 3. Rode `transcribe`, crie `edit/plan.json` e rode `plan --show`.
 4. Use `npx hyperframes` ou `npx remotion` para montar e renderizar.

@@ -39,12 +39,12 @@ Do not create a `scripts/` directory in the user's project just to satisfy the c
 If the workspace does not exist yet, do a short onboarding before creating any project:
 
 1. Use `./rooster` by default. Do not ask "where does the workspace live" unless the user wants a custom path.
-2. Ask whether to create the first **channel**.
-3. If yes, use the harness's question/form tool when available; otherwise ask in chat. Collect the channel name, language, default format (or `auto`), profile, default category, assets strategy, engine, autonomy, voice, and optional brand assets.
+2. Ask: "Shall we create the folder for your first channel?" Explain that a channel here is a reusable production standard (language, format, style, assets, voice), not a YouTube channel.
+3. If yes, use the harness's question/form tool when available; otherwise ask in chat. Collect the channel name, what it produces, language, default format (or `auto`), default duration, source mode, profile, assets strategy, engine, autonomy, voice, and optional brand assets.
 4. Run `init`, then `channel new <id> ...` with the answers.
 5. Show a plain-language summary and stop.
 
-A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, profile, category, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults.
+A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, duration, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults.
 
 Do not start a video in the same turn unless the user explicitly asks. Read `references/onboarding.md` for the exact questions, defaults, and commands. Read `references/assets.md` before downloading or generating any asset.
 
@@ -79,7 +79,7 @@ Look for a `rooster/` directory in the current project first, then use `ROOSTER_
 node "<skill>/scripts/rooster.mjs" init
 ```
 
-The workspace is where **channels**, projects, profiles, categories, and the asset library live. Keep it out of the skill directory; the skill is reusable, the workspace belongs to the user's video project.
+The workspace is where **channels**, projects, profiles, and the asset library live. Keep it out of the skill directory; the skill is reusable, the workspace belongs to the user's video project.
 
 If the workspace exists but has no channel, create one before creating a project. Every project belongs to a channel; a `default` channel covers one-off videos.
 
@@ -120,27 +120,25 @@ Ask only the questions that change the output. Read `references/intake.md` for t
 
 Do not interrogate the user with all of them at once. Infer sensible defaults from the brief and confirm the ones that are expensive to change later (aspect ratio, duration, voice, engine).
 
-## Step 3 - Resolve the recipe
+## Step 3 - Resolve the channel and profile
 
-A project belongs to a **channel** and combines a **category** (what the video is) and a **profile** (how it looks and sounds).
+A project belongs to a **channel** and uses a **profile** (how it looks and sounds).
 
 ```text
-channel  = stable group: brand, audience, language, format, profile, assets, engine, voice
-category = content recipe: beats, pacing, duration, required assets, suggested defaults
+channel  = production standard: content, language, format, duration, profile, assets, engine, voice
 profile  = visual identity: colors, type, motion, captions, audio, components
-project  = channel + category + profile + overrides + assets + timeline + engine
+project  = channel + profile + overrides + assets + timeline + engine
 ```
 
-Read `references/profiles-and-categories.md` for the schemas and resolution order. The short version:
+Read `references/profiles.md` for the schemas and resolution order. The short version:
 
 1. Project overrides in `project.json`.
-2. Channel defaults in `channels/<id>/channel.json`.
-3. Category suggestions in `categories/<id>/category.json`.
-4. Workspace profiles/categories in `rooster/profiles` and `rooster/categories`.
-5. Global profiles/categories in `~/.rooster`.
-6. Built-ins shipped with the skill in `templates/`.
+2. Channel defaults in `channels/<id>/channel.json` and channel-scoped profiles.
+3. Workspace profiles in `rooster/profiles`.
+4. Global profiles in `~/.rooster/profiles`.
+5. Built-ins shipped with the skill in `templates/profiles`.
 
-The channel wins over the category when both define a value, because the channel is the stable brand/audience context. The category still supplies structure, duration, required assets, and suggestions. The project can override anything.
+The project can override anything it inherits from the channel. There is no separate category concept: the channel's `content` field describes what it produces, and the project's brief and plan define the structure of each video.
 
 If the user has no channel, create one first. If they have no profile, offer three paths: use a built-in, create one from their brand assets, or derive one from a reference. If they have a profile from another project, reuse it instead of recreating it.
 
@@ -197,7 +195,7 @@ Read `references/engines.md` for the full decision matrix. The default is `auto`
 
 Respect an explicit engine request. If the requested engine cannot do something the user needs, explain the tradeoff and propose an alternative instead of silently switching.
 
-Scaffold only the engine you are going to use. Keep the engine project inside `projects/<slug>/engine/<engine>/`. Keep the source of truth for editorial decisions in `edit/timeline.json` (or `edit/plan.json` in the fast path); let the engine adapter translate it.
+Scaffold only the engine you are going to use. Keep the engine project inside `channels/<channel>/projects/<slug>/engine/<engine>/`. Keep the source of truth for editorial decisions in `edit/timeline.json` (or `edit/plan.json` in the fast path); let the engine adapter translate it.
 
 Once the plan is approved, build the engine project:
 
@@ -241,7 +239,7 @@ Read `references/qa.md` for the full checklist. At minimum, verify:
 - key text and logos are inside the title-safe area;
 - every asset exists and has a recorded license;
 - the hook lands in the first three seconds;
-- the pacing matches the category;
+- the pacing matches the channel and the plan;
 - the brand profile is applied consistently.
 
 Fix the cheap issues before rendering. A technical QA pass on a draft is faster than re-rendering a final.
@@ -267,11 +265,11 @@ renders/
 
 ## Step 10 — Learn
 
-If the user liked a look, a component, or a category, offer to save it:
+If the user liked a look or a component, offer to save it:
 
 - `rooster profile fork` to create a reusable profile;
-- `rooster category fork` to create a reusable recipe;
 - move a component into `profiles/<id>/components`;
+- update the channel defaults if the change should apply to future videos;
 - record decisions and feedback in `review.md`.
 
 Reuse is the point of the workspace. A project that cannot inform the next one is a missed opportunity.
@@ -310,11 +308,9 @@ rooster/
 │   │   ├── qa/
 │   │   └── review.md
 │   ├── profiles/<id>/
-│   ├── categories/<id>/
 │   ├── assets/
 │   └── library/
 ├── profiles/<id>/
-├── categories/<id>/
 ├── library/{music,sfx,fonts,overlays,luts,broll,images}/
 └── cache/
 ```
@@ -347,13 +343,12 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/edit-plan.md` | `edit/plan.json` schema, cuts, elements, approval gate |
 | `references/intake.md` | Questions, defaults, and mode detection |
 | `references/engines.md` | Engine decision matrix and adapter contracts |
-| `references/profiles-and-categories.md` | Profile/category schemas and resolution |
+| `references/profiles.md` | Profile schemas and resolution |
 | `references/timeline.md` | Timeline JSON, review page, and browser QA |
 | `references/qa.md` | Technical and editorial checklists |
 | `references/harness.md` | Capability detection and degradation |
 | `references/link-ingest.md` | Downloading video links with yt-dlp, metadata, subtitles, and licensing |
-| `references/schemas.md` | JSON schemas for project, profile, category, timeline, manifest |
-| `references/categories/<id>.md` | Category-specific playbooks |
+| `references/schemas.md` | JSON schemas for project, channel, profile, timeline, manifest |
 
 ## Quick commands
 
@@ -364,7 +359,7 @@ node "<skill>/scripts/rooster.mjs" doctor --json
 node "<skill>/scripts/rooster.mjs" config show
 
 # Channel
-node "<skill>/scripts/rooster.mjs" channel new en-tech --language en --format 16:9 --profile tech-neon --category faceless-explainer
+node "<skill>/scripts/rooster.mjs" channel new en-tech --language en --format 16:9 --profile tech-neon --voice tts
 node "<skill>/scripts/rooster.mjs" channel list
 
 # Project
@@ -394,4 +389,4 @@ A good RoosterEdit session feels like working with a director who also knows the
 - the style is consistent because it comes from a profile, not from vibes;
 - the preview is visible in the browser before the expensive render;
 - the final package includes the video, captions, thumbnail, and metadata;
-- the next video starts faster because the profile, category, or component was saved.
+- the next video starts faster because the profile or component was saved and the channel already holds the defaults.

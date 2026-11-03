@@ -79,20 +79,17 @@ Then propose a default plan and ask for correction.
 | "Make it look like this" + reference | `style: reference` |
 | "I don't have Node/FFmpeg" | Degrade to plan only; no motion render |
 
-## Defaults by category
+## Defaults come from the channel
 
-| Category | Aspect | Duration | Voice | Engine |
-|---|---|---|---|---|
-| `talking-head` | 16:9 | 60–180s | user | ffmpeg/remotion |
-| `faceless-explainer` | 16:9 or 9:16 | 45–90s | tts | hyperframes |
-| `product-promo` | 16:9 or 9:16 | 15–45s | none/tts | hyperframes/remotion |
-| `tutorial-screencast` | 16:9 | 2–10 min | user/tts | remotion/ffmpeg |
-| `social-short` | 9:16 | 15–60s | tts/none | hyperframes |
-| `3d-cartoon` | 9:16 or 16:9 | 15–60s | none/tts | remotion/hyperframes |
-| `documentary` | 16:9 | 5–30 min | user | ffmpeg/remotion |
-| `music-video` | 16:9 or 9:16 | song length | none | hyperframes/remotion |
+Do not infer format, voice, or engine from a content label. Read the project's channel and use its defaults:
 
-These are starting points, not rules. Let the user override.
+- format and duration;
+- profile;
+- source and voice;
+- engine and autonomy;
+- assets strategy.
+
+Ask only when the channel leaves a value as `auto`, or when the project needs an override. There is no category or preset layer.
 
 ## What not to ask
 

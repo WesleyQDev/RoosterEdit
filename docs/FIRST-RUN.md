@@ -9,27 +9,36 @@ Workspace → Canal → Projeto
 ```
 
 - **Workspace** = a pasta `rooster/`. Infraestrutura e biblioteca compartilhada.
-- **Canal** = grupo estável de marca/audiência/operação. Guarda idioma, formato, perfil, categoria, assets, engine, autonomia e voz.
-- **Categoria** = receita de conteúdo (talking-head, faceless, 3D...).
+- **Canal** = padrão de produção estável para uma marca, audiência ou operação. Guarda conteúdo, idioma, formato, duração, perfil, assets, engine, autonomia e voz.
 - **Perfil** = identidade visual.
 - **Projeto** = um vídeo dentro de um canal. Herda os padrões e pode sobrescrever qualquer coisa.
 
-Exemplo: canal **EN Tech** (inglês, 16:9, tech-neon, faceless, TTS) e canal **PT Criador** (pt-BR, 1:1, minimal, talking-head, voz do usuário).
+Exemplo: canal **EN Tech** (inglês, 16:9, tech-neon, TTS) e canal **PT Criador** (pt-BR, 1:1, minimal, voz do usuário).
+
+Não existe categoria separada. O campo `content` do canal registra o que ele produz, e cada projeto define a própria estrutura em `brief.md`, `script.md` e `edit/plan.json`.
 
 ## O que o agente pergunta
 
 Se o harness tiver uma tool de formulário, use ela. Se não, pergunte no chat. Nada de wizard rígido no CLI.
 
+A primeira pergunta não deve soar como “criar um canal no YouTube”. Use a pasta como referência:
+
+> **“Vamos criar a pasta do seu primeiro canal? Ela guarda o idioma, formato, estilo, assets e voz padrão dos vídeos deste projeto.”**
+
+Depois, em um bloco:
+
 1. Nome do canal.
-2. Idioma.
-3. Formato padrão (16:9, 9:16, 1:1 ou `auto`).
-4. Perfil visual.
-5. Categoria padrão.
-6. Política de assets.
-7. Engine.
-8. Autonomia.
-9. Voz.
-10. Assets de marca (opcional).
+2. O que ele produz (uma frase).
+3. Idioma.
+4. Formato padrão (16:9, 9:16, 1:1 ou `auto`).
+5. Duração padrão.
+6. Modo de origem (live, generated ou hybrid).
+7. Perfil visual.
+8. Política de assets.
+9. Engine.
+10. Autonomia.
+11. Voz.
+12. Assets de marca (opcional).
 
 O agente grava com:
 
@@ -37,10 +46,12 @@ O agente grava com:
 node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" channel new en-tech \
   --name "EN Tech" \
+  --content "English tech explainers" \
   --language en \
   --format 16:9 \
+  --duration 60 \
   --profile tech-neon \
-  --category faceless-explainer \
+  --source generated \
   --voice tts \
   --engine auto \
   --autonomy guided \
@@ -70,16 +81,16 @@ O `project.json` registra `channel` e `overrides`, então dá para ver o que vei
 ## Precedência
 
 ```text
-projeto > canal > categoria (sugestão) > workspace/global > built-in
+projeto > canal > workspace/global > built-in
 ```
 
-O canal ganha da categoria porque é o contexto estável de marca/audiência. A categoria fornece estrutura, duração, assets necessários e sugestões. O projeto manda em tudo.
+O projeto manda em tudo. O canal é o contexto estável; não há camada de categoria.
 
 ## O que não perguntar
 
 - “Onde fica o rooster?” — o padrão é `./rooster`; só pergunte se o usuário quiser outro caminho.
-- Formato global — o formato é do canal/projeto.
-- Perfil/assets/engine/voz globais — isso é do canal e do projeto.
+- “Quer criar um canal?” — prefira “Vamos criar a pasta do seu primeiro canal?” e explique que é um padrão de produção.
+- Categoria, preset ou receita — esse conceito não existe.
 - As mesmas perguntas do canal em todo projeto — herde e confirme só o que mudou.
 
 ## Mudar depois

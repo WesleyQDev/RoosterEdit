@@ -70,7 +70,7 @@ Examples:
 
 - engine choice: `references/engines.md`
 - plan schema: `references/edit-plan.md`
-- social/vertical: `references/categories/social-short.md`
+- social/vertical: `references/intake.md`
 - asset policy: `references/assets.md`
 
 ## Rule 5 — Inspect a few frames, not every frame
@@ -97,7 +97,7 @@ Use a contact sheet for broad coverage. Read individual frames only when the con
 - Do not re-transcribe the same file.
 - Do not rebuild the engine project if only the plan text changed; update the plan and rebuild.
 - Cache TTS per line and reuse unchanged audio.
-- Reuse profiles, categories, components, and templates.
+- Reuse profiles, components, and templates.
 
 ## Rule 8 — Delegate the right work to subagents
 
