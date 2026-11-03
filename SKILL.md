@@ -427,12 +427,7 @@ node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.you
 node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
-node "<skill>/scripts/rooster.mjs" captions en-tech/video-x
-node "<skill>/scripts/rooster.mjs" deliver en-tech/video-x
-node "<skill>/scripts/rooster.mjs" reframe en-tech/video-x --format 9:16
-node "<skill>/scripts/rooster.mjs" broll en-tech/video-x
-node "<skill>/scripts/rooster.mjs" audio en-tech/video-x
-node "<skill>/scripts/rooster.mjs" color en-tech/video-x --update-plan
+# Advanced layers: see references/professional-elements.md
 node "<skill>/scripts/rooster.mjs" list
 node "<skill>/scripts/rooster.mjs" check en-tech/video-x
 

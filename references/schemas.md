@@ -165,6 +165,8 @@ Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
 
 `music` is optional; when present, `src` is required and is relative to the project. `gainDb` defaults to `-18`.
 
+Optional advanced fields: `sfx`, `color`, `multicam`, and `chart` on `grafico`/`lista` elements. See `references/professional-elements.md` for the feature references.
+
 Cut reasons: `long-pause`, `repetition`, `false-start`, `retake`, `filler`, `mistake`, `off-topic`, `manual`.
 
 Element types: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`.

@@ -120,6 +120,17 @@ A cut is a removal from the source. If the plan instead describes what to keep, 
 
 Each element needs `start`, `end`, and `description`. `text` is optional but encouraged for anything with words.
 
+## Advanced fields
+
+| Field | Use | Reference |
+|---|---|---|
+| `music` | Music bed, ducking, gain, license | `features/audio.md` |
+| `sfx` | Sound effects at timeline positions | `features/audio.md` |
+| `color` | LUT, EQ, temperature, denoise, stabilize | `features/color.md` |
+| `multicam` | Camera list and camera cuts | `features/multicam.md` |
+| `zoom` / `transition` | Scale moves and overlay transitions | `features/motion.md` |
+| `chart` on `grafico`/`lista` | Bar, line, or pie data visualization | `features/charts.md` |
+
 ## Creative minimum
 
 A cut-only plan is incomplete unless the user explicitly asked for a clean cut. Before showing the plan, check:

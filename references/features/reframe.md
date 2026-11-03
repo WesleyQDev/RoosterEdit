@@ -83,7 +83,7 @@ Run the CLI:
 node "<skill>/scripts/rooster.mjs" reframe <slug> --format 9:16 [--mode center|left|right|focus] [--focus-x 0.5] [--focus-y 0.42] [--update-plan]
 ```
 
-The output defaults to `assets/generated/reframed-<aspect>.mp4`. With `--update-plan`, `plan.source` points at the new file; preview the crop before rendering.
+The output defaults to `assets/generated/reframed-<aspect>.mp4`. With `--update-plan`, `plan.source` points at the new file and `project.json`/`timeline.json` formats are updated to the target aspect; preview the crop before rendering.
 
 Probe the source first:
 

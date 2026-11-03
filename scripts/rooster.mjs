@@ -15,10 +15,14 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { writeCaptions, burnArgs } from "./features/captions.mjs";
 import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
-import { reframeArgs } from "./features/reframe.mjs";
+import { reframeArgs, targetDimensions } from "./features/reframe.mjs";
 import { listMediaFiles, rankBroll, suggestBrollElements } from "./features/broll.mjs";
 import { mixAudioArgs } from "./features/audio.mjs";
 import { colorArgs } from "./features/color.mjs";
+import { hyperframesTransition, hyperframesZoom, remotionZoomValues, remotionTransitionValues } from "./features/motion.mjs";
+import { renderChartSvg, validateChart, chartSummary } from "./features/charts.mjs";
+import { splitScript, detectTtsProviders, buildTtsArgs, buildVoiceoverPlan } from "./features/tts.mjs";
+import { buildMulticamPlan } from "./features/multicam.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1524,6 +1528,32 @@ function validatePlan(plan, dir) {
     }
   }
 
+  if (plan.multicam) {
+    try {
+      const multicam = buildMulticamPlan(plan.multicam);
+      for (const warning of multicam.warnings || []) warnings.push(`plan: multicam: ${warning}`);
+    } catch (error) {
+      errors.push(`plan: multicam: ${error.message}`);
+    }
+  }
+
+  for (const element of plan.elements || []) {
+    if (element.speed !== undefined && (!Number.isFinite(Number(element.speed)) || Number(element.speed) <= 0)) {
+      errors.push(`plan: element "${element.id || "?"}" has invalid speed`);
+    }
+    if (element.speedRamp) {
+      const ramp = element.speedRamp;
+      if (!Number.isFinite(Number(ramp.from)) || !Number.isFinite(Number(ramp.to))) {
+        warnings.push(`plan: element "${element.id || "?"}" speedRamp needs numeric from/to`);
+      }
+    }
+    for (const key of ["audioOffset", "videoOffset"]) {
+      if (element[key] !== undefined && !Number.isFinite(Number(element[key]))) {
+        errors.push(`plan: element "${element.id || "?"}" ${key} must be numeric seconds`);
+      }
+    }
+  }
+
   const notesText = (plan.notes || []).join(" ").toLowerCase();
   const cleanCut = /clean cut|cut only|s[oó] corte|sem elementos|no elements/.test(notesText);
   const hasVisualLayer = (plan.elements || []).length > 0;
@@ -1569,6 +1599,11 @@ function validatePlan(plan, dir) {
     if (sourceDuration && typeof element.end === "number" && element.end > sourceDuration + 0.5) {
       warnings.push(`plan: element "${element.id || "?"}" ends after the source duration`);
     }
+    if (element.chart) {
+      const chart = validateChart(element);
+      for (const error of chart.errors || []) errors.push(`plan: element "${element.id || "?"}" ${error}`);
+      for (const warning of chart.warnings || []) warnings.push(`plan: element "${element.id || "?"}" ${warning}`);
+    }
   }
 
   let lastChapter = -1;
@@ -1599,9 +1634,18 @@ function printPlanSummary(plan) {
 
   const elements = plan.elements || [];
   const broll = elements.filter((element) => element.type === "broll").length;
+  const advancedLayers = [
+    plan.music?.src ? "music" : null,
+    (plan.sfx || []).length ? "sfx" : null,
+    plan.color ? "color" : null,
+    plan.multicam ? "multicam" : null,
+    elements.some((element) => element.type === "zoom" || element.type === "transition") ? "motion" : null,
+    elements.some((element) => element.chart) ? "charts" : null,
+  ].filter(Boolean);
   heading("Creative layer");
   console.log(`  Elements: ${elements.length}${broll ? ` (b-roll: ${broll})` : ""}`);
   console.log(`  Music:    ${plan.music?.src || "none"}`);
+  console.log(`  Layers:   ${advancedLayers.join(", ") || "base"}`);
 
   heading(`Cuts (${(plan.cuts || []).length})`);
   for (const cut of plan.cuts || []) {
@@ -1619,6 +1663,7 @@ function printPlanSummary(plan) {
   for (const element of plan.elements || []) {
     const text = element.text ? ` "${element.text}"` : "";
     console.log(`  ${formatClock(element.start)}–${formatClock(element.end)}  ${element.type || "?"}${text} — ${element.description || ""}`);
+    if (element.chart) console.log(`    ${chartSummary(element)}`);
   }
 
   if ((plan.chapters || []).length) {
@@ -2153,8 +2198,27 @@ function reframeCommand(args) {
   console.log(`  ${output}`);
   if (args["update-plan"]) {
     const relative = path.relative(project.dir, output).replace(/\\/g, "/");
-    writeJson(planPath, { ...plan, source: relative });
-    console.log(`  plan.source updated to ${relative}`);
+    const target = targetDimensions(format);
+    const fps = Number(project.config.format?.fps) || 30;
+    const duration = Number(plan.duration) || Number(project.config.format?.duration) || null;
+    writeJson(planPath, {
+      ...plan,
+      source: relative,
+      format: { ...(plan.format || {}), width: target.width, height: target.height, fps, duration },
+    });
+    writeJson(path.join(project.dir, "project.json"), {
+      ...project.config,
+      format: { ...(project.config.format || {}), aspect: String(format), width: target.width, height: target.height, fps, duration },
+    });
+    const timelinePath = path.join(project.dir, "edit", "timeline.json");
+    if (exists(timelinePath)) {
+      const timeline = readJson(timelinePath, {});
+      writeJson(timelinePath, {
+        ...timeline,
+        format: { ...(timeline.format || {}), width: target.width, height: target.height, fps, duration },
+      });
+    }
+    console.log(`  plan.source + project/timeline format updated to ${format} (${target.width}x${target.height})`);
   }
 }
 
@@ -2305,6 +2369,186 @@ function colorCommand(args) {
   console.log(`  ${output}`);
   if (args["update-plan"]) {
     const relative = path.relative(project.dir, output).replace(/\\/g, "/");
+    writeJson(planPath, { ...plan, source: relative });
+    console.log(`  plan.source updated to ${relative}`);
+  }
+}
+
+function ttsCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const scriptPath = args.script ? path.resolve(CWD, String(args.script)) : path.join(project.dir, "script.md");
+  if (!exists(scriptPath)) fail(`Script not found at ${scriptPath}. Write script.md or pass --script <path>.`);
+
+  const script = fs.readFileSync(scriptPath, "utf8");
+  const lines = splitScript(script);
+  if (!lines.length) fail(`No speakable lines found in ${scriptPath}.`);
+
+  const providers = detectTtsProviders();
+  const provider = args.provider || providers.defaultProvider || "edge-tts";
+  const language = String(args.language || project.config.language || "pt-BR");
+  const voice =
+    args.voice ||
+    process.env.ROOSTER_TTS_VOICE ||
+    (language.toLowerCase().startsWith("pt") ? "pt-BR-FranciscaNeural" : "en-US-AriaNeural");
+
+  const manifest = buildVoiceoverPlan({
+    lines,
+    outDir: path.join(project.dir, "assets", "generated", "voice"),
+    provider,
+    voice,
+    rate: args.rate,
+    language,
+  });
+  const manifestPath = path.join(project.dir, "edit", "voiceover.json");
+  writeJson(manifestPath, manifest);
+
+  heading("Voiceover plan");
+  console.log(`  lines: ${manifest.lines.length}`);
+  console.log(`  provider: ${provider}`);
+  console.log(`  available: ${providers.available.length ? providers.available.join(", ") : "none detected"}`);
+  console.log(`  manifest: ${manifestPath}`);
+
+  if (!args.generate) {
+    const first = manifest.lines.find((line) => line.text);
+    if (first) {
+      const preview = buildTtsArgs({
+        provider,
+        text: first.text,
+        voice,
+        out: path.resolve(project.dir, first.audio),
+        rate: args.rate,
+        language,
+      });
+      console.log("\n  First command:");
+      console.log(`  ${preview.display || "(provider has no shell command)"}`);
+    }
+    console.log("\n  Re-run with --generate after the user approves TTS/network use.");
+    return;
+  }
+
+  if (!providers.providers?.some((item) => item.id === provider && item.available)) {
+    fail(`TTS provider "${provider}" is not available. Run without --generate to inspect the plan.`);
+  }
+
+  let cursor = 0;
+  let generated = 0;
+  for (const line of manifest.lines) {
+    const output = path.resolve(project.dir, line.audio);
+    ensureDir(path.dirname(output));
+    const command = buildTtsArgs({
+      provider,
+      text: line.text,
+      voice,
+      out: output,
+      rate: args.rate,
+      language,
+    });
+    if (!command.command) {
+      console.warn(`  ! ${line.id}: provider has no shell command`);
+      continue;
+    }
+    const result = spawnSync(command.command, command.args, {
+      encoding: "utf8",
+      timeout: 5 * 60 * 1000,
+      windowsHide: true,
+    });
+    if (result.status !== 0) {
+      console.warn(`  ! ${line.id}: ${result.stderr || result.stdout || "TTS failed"}`);
+      continue;
+    }
+    const probe = probeMedia(output);
+    const duration = Number(probe?.duration) || 0;
+    line.duration = duration || null;
+    line.measured = duration > 0;
+    line.timing = duration > 0 ? "measured" : "unmeasured";
+    line.start = cursor;
+    cursor += duration;
+    line.end = cursor;
+    generated += 1;
+  }
+  manifest.duration = cursor;
+  manifest.generatedAt = now();
+  writeJson(manifestPath, manifest);
+
+  heading("Voiceover generated");
+  console.log(`  ${generated}/${manifest.lines.length} line(s)`);
+  console.log(`  ${manifestPath}`);
+}
+
+function multicamCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const source = args.file
+    ? readJson(path.resolve(CWD, String(args.file)), null)
+    : plan.multicam;
+  if (!source) fail("No plan.multicam. Add cameras/cuts to edit/plan.json or pass --file <json>.");
+
+  const result = buildMulticamPlan(source);
+  const output = path.join(project.dir, "edit", "multicam.json");
+  writeJson(output, result);
+
+  heading("Multicam plan");
+  console.log(`  cameras: ${(result.cameras || []).length}`);
+  console.log(`  segments: ${(result.segments || []).length}`);
+  for (const warning of result.warnings || []) console.log(`  ! ${warning}`);
+  console.log(`  ${output}`);
+
+  if (!args.render) return;
+
+  const tempDir = path.join(project.dir, "assets", "generated", "multicam-parts");
+  if (exists(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
+  ensureDir(tempDir);
+  const parts = [];
+
+  for (const [index, segment] of (result.segments || []).entries()) {
+    const cameraSource = path.resolve(project.dir, segment.src);
+    if (!exists(cameraSource)) fail(`Camera source not found: ${cameraSource}`);
+    const part = path.join(tempDir, `part-${String(index).padStart(3, "0")}.mp4`);
+    const ffArgs = [
+      "-y",
+      "-ss", String(segment.start),
+      "-t", String(segment.duration),
+      "-i", cameraSource,
+      "-vf", "fps=30",
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-crf", "20",
+      "-pix_fmt", "yuv420p",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      part,
+    ];
+    const partResult = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+    if (!partResult.ok) {
+      fail(`Multicam segment ${index + 1} failed:\n${partResult.stderr || partResult.stdout || "unknown error"}`);
+    }
+    parts.push(part);
+  }
+
+  const listPath = path.join(tempDir, "concat.txt");
+  writeText(listPath, `${parts.map((part) => `file '${part.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n")}\n`);
+  const rendered = path.join(project.dir, "assets", "generated", "multicam.mp4");
+  const concat = run(
+    "ffmpeg",
+    ["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", rendered],
+    { timeout: 60 * 60 * 1000 }
+  );
+  if (!concat.ok) fail(`Multicam concat failed:\n${concat.stderr || concat.stdout || "unknown error"}`);
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  } catch {}
+
+  heading("Multicam render");
+  console.log(`  ${rendered}`);
+  if (args["update-plan"]) {
+    const relative = path.relative(project.dir, rendered).replace(/\\/g, "/");
     writeJson(planPath, { ...plan, source: relative });
     console.log(`  plan.source updated to ${relative}`);
   }
@@ -2472,15 +2716,20 @@ function linkOrCopy(source, target) {
 function removeDirRobust(dir) {
   try {
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    return;
   } catch (error) {
     // On Windows a previous browser/check process can hold a handle briefly.
-    // Rename the directory out of the way and retry the delete.
+    // Rename the directory out of the way so the rebuild can continue.
     const trash = `${dir}.old-${Date.now()}`;
     try {
       fs.renameSync(dir, trash);
-      fs.rmSync(trash, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     } catch {
       throw error;
+    }
+    try {
+      fs.rmSync(trash, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch {
+      console.warn(`  ! Could not delete the old engine folder; left it at ${trash}`);
     }
   }
 }
@@ -2689,7 +2938,7 @@ function htmlEscape(value) {
     .replace(/"/g, "&quot;");
 }
 
-function renderHyperFramesElement(element, index) {
+function renderHyperFramesElement(element, index, theme = {}) {
   const start = Number(element.start) || 0;
   const end = Number(element.end) || start + 1;
   if (end <= start) return "";
@@ -2704,6 +2953,9 @@ function renderHyperFramesElement(element, index) {
       return `<div ${common("caption")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
     case "grafico":
     case "lista":
+      if (element.chart) {
+        return `<div ${common("chart")} data-layout-allow-overlap data-layout-ignore data-description="${htmlEscape(element.description || "")}">${renderChartSvg(element, theme)}</div>`;
+      }
       return `<div ${common("card")}><span class="card-kicker">${element.type === "lista" ? "Lista" : "Grafico"}</span><strong>${htmlEscape(text)}</strong><p>${htmlEscape(element.description || "")}</p></div>`;
     case "lower-third":
       return `<div ${common("lower-third")}><strong>${htmlEscape(text)}</strong><span>${htmlEscape(element.description || "")}</span></div>`;
@@ -2764,7 +3016,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   const panelHtml = panel ? '<div id="panel"></div>' : "";
 
   const elements = (plan.elements || [])
-    .map((element, index) => ({ element, index, html: renderHyperFramesElement(element, index) }))
+    .map((element, index) => ({ element, index, html: renderHyperFramesElement(element, index, theme) }))
     .filter((entry) => entry.html);
 
   const elementHtml = elements.map((entry) => entry.html).join("\n      ");
@@ -2778,6 +3030,20 @@ function renderHyperFramesHtml(project, plan, theme, base) {
     })
     .join("");
 
+  const transitions = (plan.elements || [])
+    .filter((element) => element.type === "transition")
+    .map((element, index) =>
+      hyperframesTransition(element, theme, { id: `transition-${index}`, trackIndex: 40 + index })
+    );
+  const zooms = base.kind === "audio"
+    ? []
+    : (plan.elements || [])
+        .filter((element) => element.type === "zoom")
+        .map((element) => hyperframesZoom(element, "#base"));
+  const motionHtml = transitions.map((transition) => transition.html).join("\n      ");
+  const motionCss = [...transitions.map((transition) => transition.css), ...zooms.map((zoom) => zoom.css)].join("\n");
+  const motionTween = [...zooms.map((zoom) => zoom.tween), ...transitions.map((transition) => transition.tween)].join("\n");
+
   let baseHtml = "";
   if (base.kind === "image") {
     baseHtml = `<img id="base" class="clip" data-start="0" data-duration="${duration.toFixed(3)}" src="${base.path}" alt="" />`;
@@ -2788,7 +3054,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   }
 
   const baseTween =
-    base.kind === "image" || base.kind === "video"
+    (base.kind === "image" || base.kind === "video") && !zooms.length
       ? `tl.to("#base", { scale: 1.035, duration: ${duration.toFixed(3)}, ease: "none" }, 0);`
       : "";
 
@@ -2903,6 +3169,9 @@ function renderHyperFramesHtml(project, plan, theme, base) {
         font-weight: 500;
       }
       .broll { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .chart { position: absolute; inset: 80px; z-index: 2; }
+      .chart svg { width: 100%; height: 100%; }
+      ${motionCss}
       ${panelCss}
     </style>
   </head>
@@ -2920,12 +3189,14 @@ function renderHyperFramesHtml(project, plan, theme, base) {
       ${baseHtml}
       ${panelHtml}
       ${elementHtml}
+      ${motionHtml}
     </div>
     <script>
       const tl = gsap.timeline({ paused: true });
       tl.seek(0);
       ${baseTween}
       ${timeline}
+      ${motionTween}
       window.__timelines["main"] = tl;
       tl.seek(0);
     </script>
@@ -3020,6 +3291,9 @@ const Element = ({ element, frame }: { element: any; frame: number }) => {
       return <div style={{ ...common, left: 96, bottom: 170, width: 1500, fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
     case "grafico":
     case "lista":
+      if (element.chartSvg) {
+        return <div style={{ ...common, left: 80, right: 80, top: 80, bottom: 80 }} dangerouslySetInnerHTML={{ __html: element.chartSvg }} />;
+      }
       return (
         <div style={{ ...common, left: 200, right: 200, top: 300, padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
           <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 18 }}>{element.type}</div>
@@ -3027,6 +3301,20 @@ const Element = ({ element, frame }: { element: any; frame: number }) => {
           <div style={{ marginTop: 18, color: theme.muted, fontSize: 28, lineHeight: 1.35 }}>{element.description ?? ""}</div>
         </div>
       );
+    case "zoom":
+      return null;
+    case "transition": {
+      if (!element.motion) return null;
+      const value = interpolate(frame, element.motion.inputRange, element.motion.outputRange, {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      });
+      if (element.motion.slide) {
+        const transform = element.motion.property === "xPercent" ? \`translateX(\${value}%)\` : \`translateY(\${value}%)\`;
+        return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, transform }} />;
+      }
+      return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, opacity: value }} />;
+    }
     case "lower-third":
       return (
         <div style={{ ...common, left: 96, bottom: 96, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
@@ -3059,12 +3347,27 @@ const Element = ({ element, frame }: { element: any; frame: number }) => {
 
 export const RoosterVideo = () => {
   const frame = useCurrentFrame();
+  const activeZoom = (plan.elements ?? []).find(
+    (element: any) =>
+      element.motion?.type === "zoom" &&
+      frame >= element.motion.inputRange[0] &&
+      frame <= element.motion.inputRange[element.motion.inputRange.length - 1]
+  );
+  const zoomScale = activeZoom
+    ? interpolate(frame, activeZoom.motion.inputRange, activeZoom.motion.outputRange, {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      })
+    : 1;
+  const zoomOrigin = activeZoom?.motion?.transformOrigin ?? "50% 50%";
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg, color: theme.fg, fontFamily: theme.body + ', "Segoe UI", sans-serif', overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, background: \`radial-gradient(circle at 70% 30%, \${theme.accent}22, transparent 45%), radial-gradient(circle at 20% 80%, \${theme.accent2}18, transparent 40%), \${theme.bg}\` }} />
-      {base.kind === "image" ? <Img src={staticFile(base.path)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-      {base.kind === "video" ? <OffthreadVideo src={staticFile(base.path)} muted={!base.hasAudio} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-      {base.kind === "audio" ? <Audio src={staticFile(base.path)} /> : null}
+      <div style={{ position: "absolute", inset: 0, transform: \`scale(\${zoomScale})\`, transformOrigin: zoomOrigin }}>
+        {base.kind === "image" ? <Img src={staticFile(base.path)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+        {base.kind === "video" ? <OffthreadVideo src={staticFile(base.path)} muted={!base.hasAudio} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+        {base.kind === "audio" ? <Audio src={staticFile(base.path)} /> : null}
+      </div>
       <div style={{ position: "absolute", left: 96, top: 72, color: theme.accent, fontSize: 28, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase" }}>{projectName}</div>
       {(plan.elements ?? []).map((element: any, index: number) => (
         <Element key={index} element={element} frame={frame} />
@@ -3089,12 +3392,48 @@ function buildRemotion(project, plan, args) {
   const finalPlan = { ...remapped.plan, duration: base.duration };
   copyElementAssets(project.dir, finalPlan, assetsDir, "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const fps = Number(finalPlan.format?.fps || project.config.format?.fps) || 30;
+  const enrichedPlan = {
+    ...finalPlan,
+    elements: (finalPlan.elements || []).map((element) => {
+      if (element.type === "grafico" && element.chart) {
+        return { ...element, chartSvg: renderChartSvg(element, theme) };
+      }
+      if (element.type === "zoom") {
+        const zoom = remotionZoomValues(element, fps);
+        return {
+          ...element,
+          motion: {
+            type: "zoom",
+            inputRange: zoom.inputRange,
+            outputRange: zoom.outputRange,
+            transformOrigin: zoom.transformOrigin,
+          },
+        };
+      }
+      if (element.type === "transition") {
+        const transition = remotionTransitionValues(element, fps, { theme });
+        return {
+          ...element,
+          motion: {
+            type: "transition",
+            inputRange: transition.inputRange,
+            outputRange: transition.outputRange,
+            property: transition.property,
+            color: transition.color,
+            slide: transition.slide,
+          },
+        };
+      }
+      return element;
+    }),
+  };
 
   writeText(
     path.join(engineDir, "src", "data", "plan.ts"),
-    `export const plan = ${JSON.stringify(finalPlan, null, 2)};\nexport const theme = ${JSON.stringify(theme, null, 2)};\nexport const base = ${JSON.stringify(base, null, 2)};\n`
+    `export const plan = ${JSON.stringify(enrichedPlan, null, 2)};\nexport const theme = ${JSON.stringify(theme, null, 2)};\nexport const base = ${JSON.stringify(base, null, 2)};\n`
   );
-  writeText(path.join(engineDir, "src", "Video.tsx"), renderRemotionTsx(project, finalPlan, theme, base));
+  writeText(path.join(engineDir, "src", "Video.tsx"), renderRemotionTsx(project, enrichedPlan, theme, base));
   writeText(
     path.join(engineDir, "src", "Root.tsx"),
     `import { Composition } from "remotion";
@@ -3511,6 +3850,8 @@ Commands:
   broll <slug> [options]          Rank local b-roll and suggest plan elements
   audio <slug> [options]          Preview plan.music + plan.sfx mix
   color <slug> [options]          Apply plan.color filters to the source
+  tts <slug> [options]            Build (and optionally generate) a voiceover
+  multicam <slug> [options]       Normalize cameras, J/L cuts, and speed ramps
   build <slug> [options]          Build a HyperFrames or Remotion project from the plan
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
@@ -3572,6 +3913,19 @@ Color options:
   --input <path>                  Source (default: plan.source)
   --out <path>                    Output (default: assets/generated/graded.mp4)
   --update-plan                   Point plan.source at the graded file
+
+TTS options:
+  --script <path>                 Script source (default: script.md)
+  --provider <id>                 edge-tts | hyperframes | custom
+  --voice <id>                    Provider voice
+  --rate <value>                  Rate, e.g. 1.1x or +10%
+  --language <code>               Language (default: project language)
+  --generate                      Execute TTS after explicit approval
+
+Multicam options:
+  --file <path>                   JSON with cameras/cuts (default: plan.multicam)
+  --render                        Cut and concat the camera segments
+  --update-plan                   Point plan.source at the multicam render
 
 Build options:
   --engine <id>                   hyperframes | remotion (default: auto)
@@ -3714,6 +4068,12 @@ function main() {
       return;
     case "color":
       colorCommand(args);
+      return;
+    case "tts":
+      ttsCommand(args);
+      return;
+    case "multicam":
+      multicamCommand(args);
       return;
     case "build":
       buildCommand(args);

@@ -90,6 +90,8 @@ As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, bu
 
 O plano precisa incluir a camada criativa: elementos visuais, b-roll e música, ou uma justificativa explícita para omitir. **Só corte não conta como vídeo final.** O `build` recusa um plano só de corte ou sem decisão de música; registre a exceção em `notes` ou use `--allow-cut-only` / `--allow-no-music` quando for intencional.
 
+As camadas avançadas — legendas, motion, áudio, reframe, entrega, cor, b-roll, gráficos, TTS e multicâmera — estão indexadas em [`references/professional-elements.md`](../references/professional-elements.md). O `SKILL.md` só aponta para esse índice.
+
 ## Precedência
 
 ```text

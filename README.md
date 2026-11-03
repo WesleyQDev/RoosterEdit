@@ -94,6 +94,10 @@ A skill pode trabalhar só com arquivos seus, com links autorizados, com uma bib
 
 Ela não busca stock automaticamente. Links só entram com confirmação de direitos. Veja [`docs/ASSETS.md`](docs/ASSETS.md).
 
+## Camadas profissionais
+
+Depois do corte, a skill cobre legendas, zoom/transições, ducking e SFX, reframe para 9:16, thumbnail/metadata, cor/LUT, b-roll local, gráficos, TTS e multicâmera. O índice fica em [`references/professional-elements.md`](references/professional-elements.md); cada camada tem seu próprio arquivo em `references/features/`.
+
 ## Para gastar menos tokens
 
 Trabalhar com vídeo gasta tokens, então a skill foi feita para ler o mínimo necessário: trechos da transcrição, o plano em formato legível e alguns frames do resultado. As dicas estão em [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md).

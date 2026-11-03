@@ -15,6 +15,20 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | TTS | `features/tts.md` | Script to voiceover |
 | Multicam | `features/multicam.md` | Camera selection, J/L cuts, speed ramps |
 
+## CLI commands
+
+```bash
+node "<skill>/scripts/rooster.mjs" captions <slug>
+node "<skill>/scripts/rooster.mjs" deliver <slug>
+node "<skill>/scripts/rooster.mjs" reframe <slug> --format 9:16 [--update-plan]
+node "<skill>/scripts/rooster.mjs" broll <slug> [--write]
+node "<skill>/scripts/rooster.mjs" audio <slug>
+node "<skill>/scripts/rooster.mjs" color <slug> [--update-plan]
+node "<skill>/scripts/rooster.mjs" tts <slug> [--generate]
+node "<skill>/scripts/rooster.mjs" multicam <slug> [--render] [--update-plan]
+```
+`zoom`, `transition` and chart elements are part of `edit/plan.json` and are consumed by `build`.
+
 ## Order of work
 
 1. Captions and motion: highest impact on retention and perceived quality.
