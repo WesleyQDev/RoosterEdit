@@ -78,6 +78,45 @@ Examples:
 
 Skip steps that do not apply and say why. Do not print the full checklist on every message; show the current step, what changed, and the next gate. Do not combine timeline and final render in one approval: preview and QA sit between them.
 
+## Subagent-first execution
+
+The main agent is the director, not the worker. It talks to the user, owns the brief and the decisions, runs the approval gates, and looks at the final frames. The noisy work goes to a stage subagent: transcript analysis, research, script drafts, plan drafts, style and storyboard, build and fixes, QA sweeps, render and packaging. Each subagent has its own context, which is discarded when the stage ends, so raw material never accumulates in the main thread.
+
+Delegate by default whenever the harness has a subagent tool. Keep the stage inline when it is one cheap command, when it is the conversation itself (intake, approvals), or when it is the final visual judgment.
+
+| Stage | Subagent | Main agent receives |
+|---|---|---|
+| Brief | `producer` | one-paragraph brief + open questions |
+| Research | `researcher` | 5 findings + sources + license flags |
+| Transcript | `transcript-analyst` | duration, topics, 10–20 beats, flags |
+| Script | `scriptwriter` | hook + beat summary |
+| Plan | `editor` | plan summary + risks |
+| Style/storyboard | `art-director` | tokens + scene count + asset needs |
+| Timeline | `editor` | duration math + markers |
+| Audio | `audio-director` | voice/music/mix decisions |
+| Build | `engineer` | status + artifact paths + blocker |
+| QA | `qa` | verdict + top issues + frame paths |
+| Render | `engineer` | final path + probe stats |
+
+Spawn with a short prompt: role file path, project path, one task sentence, input paths, constraints. Pass paths, never the brief, transcript, logs, or plan contents. If the input is the conversation itself, write the answers to `work/intake.md` first. Ask for the handoff described in `references/subagents.md` and nothing else. Use the harness's general-purpose or worker agent for stages that write files or run commands; a read-only or research type is fine for research. This is a capability, not a tool name: if the harness cannot start a fresh agent with file and command access, or a spawn fails twice, run the stage inline and keep the file boundaries.
+
+The handoff is the only thing that enters the main context:
+
+```text
+status: ok | needs-decision | blocked
+artifacts: paths that exist
+summary: <= 5 lines
+decisions: what the main agent must confirm
+blockers: what stops the stage
+next: next stage or exact question
+```
+
+The main agent may read the brief, script, style, `review.md`, and handoffs, and may view `plan.html` and 3–5 frames. It must not read the raw transcript, full plan JSON, generated code, build/render logs, or a contact sheet of dozens of frames. If a detail is missing, send a follow-up to the same subagent instead of opening the raw file.
+
+Nothing here is a dependency. The artifacts and gates are the same when a stage runs inline; you lose the context isolation, not the workflow.
+
+Approval gates never move to a subagent. The subagent proposes; the user and the main agent decide.
+
 ## First run after installation
 
 If the workspace does not exist yet, do a short onboarding before creating any project.
@@ -103,10 +142,10 @@ When the user wants the simplest route from raw footage to a finished video, fol
 
 1. **Prepare the machine** — FFmpeg, Node.js LTS, Python 3, HyperFrames, and Whisper (or HyperFrames' Parakeet/whisper.cpp). Ask before installing anything.
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
-3. **Write the style guide** — `style.md` plus the resolved profile.
-4. **Transcribe and plan** — HyperFrames transcribe (Parakeet/whisper.cpp) or Whisper writes `edit/transcript.json`; read it with `style.md` and write `edit/plan.json`. Show the plan and wait for approval.
-5. **Create the visual elements** — letreiros, graphics, lists, zooms, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
-6. **Assemble, review, export** — run `build` to generate the HyperFrames or Remotion project from the approved plan; preview, QA, render to `renders/`.
+3. **Write the style guide** — `art-director` writes `style.md` and resolves the profile.
+4. **Transcribe and plan** — `transcript-analyst` writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`; `editor` writes `edit/plan.json` from the analysis and `style.md`. Show the plan and wait for approval.
+5. **Create the visual elements** — `engineer` builds letreiros, graphics, lists, zooms, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
+6. **Assemble, review, export** — `engineer` runs `build` to generate the HyperFrames or Remotion project from the approved plan; `qa` inspects the preview and `engineer` renders to `renders/`.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.
 
@@ -118,6 +157,7 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Review with eyes.** Use the browser preview, screenshots, or rendered stills to judge composition, pacing, and captions. Code review alone is not enough.
 - **Respect provenance.** Record where every asset came from and its license. A beautiful video with an unlicensed track is a liability.
 - **Degrade gracefully.** The harness may not have subagents, a browser, Node, FFmpeg, or TTS. Offer the best path available and say what is missing.
+- **Delegate the heavy stages.** The main agent directs; stage subagents do the noisy work and return a short handoff. Transcripts, build logs, generated code, and QA sweeps should not pass through the main context. Read `references/subagents.md`.
 - **Report short.** End every task with the result, the paths, and one next question. Do not narrate the whole process or dump commands unless the user asks.
 - **Finish the creative layer.** Cuts alone are not a video. Plan overlays, b-roll, music, SFX, or captions unless the user explicitly asked for a clean cut.
 - **Ask when uncertain.** If a choice changes the cut, the look, the audio, or the cost, ask at the current `Etapa X/8`. Do not guess silently.
@@ -158,7 +198,7 @@ Read `references/harness.md` when something is missing. The short version:
 - No browser: render stills or frames and inspect them as images.
 - No TTS: use the user's voice, captions only, or a local TTS tool if present.
 - No `yt-dlp`: ask the user for the file, or install it only with permission.
-- No subagents: do the work inline, in sequence. Do not pretend work is running in parallel.
+- No subagents: do the work inline, in sequence, and keep raw output in files. Do not pretend work is running in parallel.
 
 ## Step 2 — Intake
 
@@ -208,7 +248,7 @@ Produce, in order:
 4. `storyboard/storyboard.json` — scenes, frames, durations, transitions, overlays, 3D cues.
 5. `edit/timeline.json` — the edit decision list in timeline form.
 
-Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
+Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. Delegate the draft to `editor`; review the HTML with the user instead of building the JSON by hand in the main thread. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
 
 If the user asked for `auto`, log the decisions and keep moving; if they asked for `guided`, stop at the gates that matter (brief, script, style/storyboard, rough cut, final).
 
@@ -236,7 +276,7 @@ Build `assets/manifest.json` with:
 
 Never delete or overwrite the user's originals. Prefer copying or linking into the workspace. If a file is missing, say so before building around it.
 
-For footage-driven projects, transcribe with HyperFrames (`npx hyperframes transcribe`, Parakeet or whisper.cpp) or the Whisper CLI, then write `edit/plan.json` and get approval before opening the engine. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
+For footage-driven projects, run transcription and analysis through `transcript-analyst` (HyperFrames/Parakeet, whisper.cpp, or the Whisper CLI). It writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`, and returns duration, topics, beats, and flags. Then have `editor` write `edit/plan.json` from the analysis, `style.md`, and the brief; get approval before opening the engine. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
 
 ## Step 6 — Choose and drive the engine
 
@@ -264,6 +304,8 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 
 `build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. A cut-only plan or a plan with no music decision is refused unless `notes` records the exception; pass `--allow-cut-only` or `--allow-no-music` only when the user explicitly asked for that. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
 
+Run the build through `engineer`. It owns the generated code, the logs in `work/logs/`, and the fixes, and returns status, artifact paths, and any blocker. The main agent does not run the command above directly; it passes the approved plan and the engine. If a fix changes the story, the engineer returns `needs-decision` instead of editing the plan.
+
 For the fast path, Option 1 is automatic assembly in HyperFrames for HTML/CSS/GSAP motion. Option 2 is Remotion for React, data-driven scenes, and 3D. FFmpeg remains a utility for cuts, proxies, captions, and audio. Both engines start from the same approved plan.
 
 ## Step 7 — Preview and review
@@ -275,7 +317,7 @@ Offer a preview before rendering:
 - FFmpeg: render a low-resolution draft and show it in the review page.
 - Unified review: `node "<skill>/scripts/rooster.mjs" preview <slug>`.
 
-Read `references/timeline.md` for the timeline contract and the review page. When a browser is available, use it: open the preview, take screenshots, check console errors, and inspect the timeline. When it is not, render stills at key beats and read them as images.
+Read `references/timeline.md` for the timeline contract and the review page. When a browser is available, use it: open the preview, take screenshots, check console errors, and inspect the timeline. When it is not, render stills at key beats and read them as images. `qa` can open the preview, capture the screenshots and console errors, and write the report; look at 3–5 of its frames yourself before deciding.
 
 The review page should make these obvious:
 
@@ -288,7 +330,7 @@ The review page should make these obvious:
 
 ## Step 8 — QA
 
-Read `references/qa.md` for the full checklist. Run `captions <slug>` first when the project needs caption sidecars. At minimum, verify:
+Read `references/qa.md` for the full checklist. Run `captions <slug>` first when the project needs caption sidecars. Spawn `qa` with the checklist, the render path, and the plan; it returns the verdict, blocking issues with evidence, and frame paths. At minimum, verify:
 
 - resolution, aspect ratio, fps, and duration match the plan;
 - no unintended black frames, freeze frames, or gaps;
@@ -300,11 +342,11 @@ Read `references/qa.md` for the full checklist. Run `captions <slug>` first when
 - the pacing matches the channel and the plan;
 - the brand profile is applied consistently.
 
-Fix the cheap issues before rendering. A technical QA pass on a draft is faster than re-rendering a final.
+Fix the cheap issues before rendering. A technical QA pass on a draft is faster than re-rendering a final. Send fixes back to `engineer`; do not rebuild by hand in the main thread.
 
 ## Step 9 — Render and deliver
 
-Render a draft, inspect it, then render the final. Validate the output with FFprobe: duration, resolution, fps, audio channels, and loudness. Run `deliver <slug>` after the final render to write `renders/thumbnail.jpg` and `renders/metadata.json`.
+Use `engineer` in render mode: render a draft, inspect 3–5 frames, then render the final. The engineer validates the output with FFprobe (duration, resolution, fps, audio channels, loudness) and runs `deliver <slug>` to write `renders/thumbnail.jpg` and `renders/metadata.json`. It returns the final path and the probe stats, not the log.
 
 Deliver a package:
 
@@ -359,8 +401,9 @@ rooster/
 │   │   ├── style.md
 │   │   ├── storyboard/
 │   │   ├── assets/{source,generated,licensed}/
-│   │   ├── edit/{plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/}
+│   │   ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/}
 │   │   ├── engine/{hyperframes|remotion|ffmpeg}/
+│   │   ├── work/{handoffs,logs,scratch,notes}/
 │   │   ├── preview/
 │   │   ├── renders/
 │   │   ├── qa/
@@ -394,6 +437,7 @@ If the user already has a different structure, adapt to it and record the mappin
 | Read this | When |
 |---|---|
 | `references/workflow.md` | Full pipeline, gates, and artifact list |
+| `references/subagents.md` | When and how to delegate, the handoff contract, and the stage playbook |
 | `references/onboarding.md` | First-run workspace setup and defaults |
 | `references/assets.md` | Asset strategies, sources, licensing, and adjustment |
 | `references/token-discipline.md` | Log suppression, transcript digest, and context budget |
@@ -407,7 +451,7 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/professional-elements.md` | Index of advanced layers and feature references |
 | `references/harness.md` | Capability detection and degradation |
 | `references/link-ingest.md` | Downloading video links with yt-dlp, metadata, subtitles, and licensing |
-| `references/schemas.md` | JSON schemas for project, channel, profile, timeline, manifest |
+| `references/schemas.md` | JSON schemas for project, channel, profile, transcript, analysis, timeline, manifest |
 
 ## Quick commands
 

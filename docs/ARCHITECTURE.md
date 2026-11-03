@@ -74,12 +74,15 @@ RoosterEdit/
 │   ├── profiles/
 │   └── engines/
 ├── agents/
+│   ├── _handoff.md
 │   ├── producer.md
 │   ├── researcher.md
+│   ├── transcript-analyst.md
 │   ├── scriptwriter.md
 │   ├── art-director.md
 │   ├── editor.md
 │   ├── audio-director.md
+│   ├── engineer.md
 │   └── qa.md
 ├── docs/
 ├── examples/
@@ -153,6 +156,9 @@ rooster/
 │       │       │   ├── licensed/
 │       │       │   └── manifest.json
 │       │       ├── edit/
+│       │       │   ├── transcript.json
+│       │       │   ├── digest.md
+│       │       │   ├── analysis.json
 │       │       │   ├── plan.json
 │       │       │   ├── plan.md
 │       │       │   ├── plan.html
@@ -164,6 +170,11 @@ rooster/
 │       │       │   ├── hyperframes/
 │       │       │   ├── remotion/
 │       │       │   └── ffmpeg/
+│       │       ├── work/
+│       │       │   ├── handoffs/
+│       │       │   ├── logs/
+│       │       │   ├── scratch/
+│       │       │   └── notes/
 │       │       ├── preview/
 │       │       ├── renders/
 │       │       ├── qa/
@@ -338,6 +349,28 @@ O projeto é a instância concreta. Ele combina channel + profile + overrides.
 Status possíveis: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, `rendering`, `done`, `blocked`.
 
 ## 7. Fluxo de trabalho
+
+### 7.0 Delegação por etapa
+
+O agente principal é o diretor: mantém a conversa, o brief, as decisões e os gates. As etapas pesadas rodam em subagents com contexto descartável, definidos em `agents/` e coordenados por `references/subagents.md`.
+
+| Etapa | Papel | O principal lê |
+|---|---|---|
+| Brief | `producer` | resumo + perguntas abertas |
+| Pesquisa | `researcher` | achados + fontes + licenças |
+| Transcrição/análise | `transcript-analyst` | handoff, nunca `transcript.json` |
+| Roteiro | `scriptwriter` | hook + beats |
+| Plano/timeline | `editor` | `plan.html` + riscos |
+| Estilo/storyboard | `art-director` | tokens + cenas + assets |
+| Áudio | `audio-director` | voz, música e mix |
+| Build/render | `engineer` | status + caminhos + probe |
+| QA | `qa` | veredito + evidências + frames |
+
+Cada subagent grava o detalhe em disco e devolve um handoff curto em `work/handoffs/`; logs e rascunhos ficam em `work/logs/` e `work/scratch/`. O principal lê o handoff, vê o `plan.html` e 3–5 frames. Não lê transcrição bruta, código gerado, logs completos nem JSON gigante. Aprovação, licença e julgamento visual final continuam no principal.
+
+O nome da ferramenta e do tipo de agente varia entre harnesses (OpenCode, Claude Code, Codex, etc.); o papel em `agents/` é o contrato. Sem agente com contexto novo, ou se o spawn falhar, a etapa roda inline com os mesmos arquivos.
+
+Sem subagents, a etapa roda inline, mas os arquivos e o handoff continuam existindo. O protocolo completo está em `references/subagents.md`.
 
 ### 7.1 Doctor
 
@@ -551,7 +584,7 @@ A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de 
 
 | Capacidade | Com | Sem |
 |---|---|---|
-| Subagents | Paralelizar research, script, art direction, QA | Fazer inline, em sequência |
+| Subagents | Isolar as etapas pesadas e devolver só handoffs | Rodar inline e manter o material bruto em arquivos |
 | Browser | Preview, screenshots, console | Renderizar frames e ler imagens |
 | Node | Remotion/HyperFrames | FFmpeg (cortes/áudio); sem render de motion |
 | FFmpeg | Probe, corte, mix, render | Plano apenas; instalar FFmpeg ou usar outro ambiente |

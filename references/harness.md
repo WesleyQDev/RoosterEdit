@@ -56,32 +56,30 @@ The CLI can detect binaries and environment variables. It cannot reliably detect
 | `yt-dlp` | Cannot download links | Ask for the file, or install with permission |
 | Whisper | No local transcription | Use `npx hyperframes transcribe`, an approved API, or ask for a transcript |
 | Browser | No visual preview/automation | Render stills and read images |
-| Subagents | No parallel research/QA | Do it inline, in sequence |
+| Subagents | No context isolation for heavy stages | Do it inline, keep raw output in files, and read only summaries |
 | TTS provider | No generated narration | User voice, captions only, or local TTS |
 | GPU | Slow 3D/render | Reduce quality, resolution, or effects |
 | Disk space | Render fails | Clean cache, lower resolution, delete drafts |
 
 ## Subagents
 
-Subagents are an optimization, not a requirement. Use them when the work is independent and parallelizable:
+Subagents are the default path for heavy stages, not a parallelization bonus. They keep raw material — transcripts, build logs, generated code, QA sweeps — out of the main context, which matters more than speed on long projects.
 
+- transcript analysis and the editorial map;
 - research and reference gathering;
-- three script variants;
-- art direction and storyboard options;
-- engine implementation for separate scenes;
-- technical QA and editorial QA.
+- script and plan drafts;
+- art direction and storyboard;
+- audio planning;
+- build, fixes, render, and packaging;
+- technical and editorial QA.
 
-If the harness has a subagent tool, spawn one task per independent chunk and give it the relevant reference file. If not, do the same work inline. Never claim that a subagent is running when it is not.
+The main agent keeps the conversation, the brief, the decisions, the approval gates, and the final visual judgment. It reads handoffs, plan summaries, and a few frames, not the raw files.
 
-A useful pattern:
+If the harness has a fresh-context agent tool, pass the role file path from `agents/`, the project path, one task sentence, input paths, and constraints. Ask for the handoff only. If not, do the stage inline, still write the handoff and raw output to `work/`, and keep the chat clean.
 
-1. Main agent writes the brief and constraints.
-2. Spawn researchers/scriptwriters in parallel with the same brief.
-3. Collect the best result.
-4. Main agent makes the final creative decision.
-5. Spawn QA after the preview, with the QA checklist and the output files.
+Read `references/subagents.md` for the cast, the handoff contract, the spawn template, and the fallback. Never claim that a subagent is running when it is not, and never delegate an approval gate.
 
-Do not spawn subagents for work that needs shared context and constant back-and-forth. The main agent should keep control of the narrative and the timeline.
+This is a capability, not a tool name. The harness can run stage subagents if it can start a fresh agent with its own context, give it a prompt and a working directory, let it read and write files and run commands, and return its final message. Tool names, agent types, and model choices change between harnesses and versions (OpenCode, Claude Code, Codex, and others); use whatever the harness offers and keep the role file as the contract. Do not hardcode a tool name, an agent type, or a model into the skill. If the capability is missing or a spawn fails twice, run the stage inline.
 
 ## Browser
 

@@ -21,8 +21,9 @@ rooster/
 │       │       ├── style.md
 │       │       ├── storyboard/
 │       │       ├── assets/{source,generated,licensed}/
-│       │       ├── edit/{transcript.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/}
+│       │       ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/}
 │       │       ├── engine/{hyperframes|remotion}/
+│       │       ├── work/{handoffs,logs,scratch,notes}/
 │       │       ├── preview/
 │       │       ├── renders/
 │       │       ├── qa/
@@ -112,6 +113,20 @@ projeto > canal > workspace/global > built-in
 
 O projeto pode sobrescrever qualquer default do canal. Não existe camada de categoria.
 
+## Subagents e handoffs
+
+O agente principal não precisa carregar o material bruto. Cada etapa pesada pode rodar em um subagent definido em `agents/`; ele grava o detalhe em disco e devolve um handoff curto.
+
+```text
+work/
+├── handoffs/   # um resumo por etapa, ex.: 03-transcript.md
+├── logs/       # saída bruta de build, render, FFmpeg, transcrição
+├── scratch/    # rascunhos e arquivos intermediários
+└── notes/      # detalhe produzido pelos subagents para o próximo estágio
+```
+
+O principal lê os handoffs, vê o `plan.html` e 3–5 frames. A transcrição completa, o código gerado e os logs ficam fora do contexto principal. O protocolo está em [`references/subagents.md`](../references/subagents.md) e o contrato de retorno em [`agents/_handoff.md`](../agents/_handoff.md).
+
 ## Perfis
 
 ```text
@@ -167,8 +182,8 @@ Leia `references/link-ingest.md` antes de baixar. O comando só funciona com `--
 2. `channel new` — cria o canal real.
 3. `new --channel` — cria o projeto.
 4. `ingest` — adiciona assets.
-5. `transcribe` — gera `edit/transcript.json`.
-6. `digest` — lê a transcrição em partes.
-7. `plan --show` — aprova o plano.
-8. `build --engine` — gera HyperFrames/Remotion.
-9. `preview`/`render` — revisão e entrega.
+5. `transcribe` — gera `edit/transcript.json` (via `transcript-analyst`).
+6. `digest` — lê a transcrição em partes; o principal recebe só o handoff.
+7. `plan --show` — aprova o plano (via `editor`).
+8. `build --engine` — gera HyperFrames/Remotion (via `engineer`).
+9. `preview`/`render` — revisão e entrega (via `qa` + `engineer`).

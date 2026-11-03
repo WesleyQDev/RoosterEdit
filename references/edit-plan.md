@@ -1,6 +1,6 @@
 # Edit plan
 
-The edit plan is the bridge between the transcript and the build. It is the artifact the user approves before any engine project is created. It lives at `channels/<channel>/projects/<slug>/edit/plan.json`.
+The edit plan is the bridge between the transcript analysis and the build. It is the artifact the user approves before any engine project is created. It lives at `channels/<channel>/projects/<slug>/edit/plan.json`.
 
 ## Schema
 
@@ -194,7 +194,7 @@ Captions are not generated automatically by `build` in this version. If the vide
 
 ### Chapters
 
-- Use the transcript to find natural topic changes.
+- Use the analysis to find natural topic changes.
 - A chapter should start on a sentence boundary and make sense on its own.
 - Keep chapters at least 20–30 seconds apart for long videos.
 

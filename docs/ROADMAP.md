@@ -19,6 +19,7 @@
 - [x] CLI `channel`, `profile`, `digest`.
 - [x] Estratégias de assets por canal/projeto.
 - [x] `digest` para transcrição compacta e disciplina de tokens.
+- [x] Papéis de subagents em `agents/` e protocolo de handoff por etapa.
 - [ ] Validar a skill com o skill-creator.
 
 ## Fase 2 — Pipeline de mídia

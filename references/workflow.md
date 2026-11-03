@@ -18,16 +18,24 @@ For a single video with real footage, the shortest route is:
 
 1. Prepare FFmpeg, Node, Python, Whisper, HyperFrames (with permission).
 2. Create/resolve the project and put raw media in `assets/source/`.
-3. Write `style.md` and resolve the profile.
-4. Transcribe with Whisper to `edit/transcript.json`; write `edit/plan.json`; show the plan and wait for approval.
-5. Build the visual elements from the plan.
-6. Assemble in HyperFrames or Remotion; preview, QA, render to `renders/`.
+3. `art-director` writes `style.md` and resolves the profile.
+4. `transcript-analyst` transcribes to `edit/transcript.json` and writes `edit/analysis.json`; `editor` writes `edit/plan.json`; show the plan and wait for approval.
+5. `engineer` builds the visual elements from the plan.
+6. `engineer` assembles in HyperFrames or Remotion; `qa` reviews, then `engineer` renders to `renders/`.
 
 Read `references/video-pipeline.md` for the full mapping. This is the default for single-video jobs; the rest of this document is the broader studio pipeline.
 
 ## Progress and gates
 
 Keep a compact 8-step tracker and show the current step in every update: environment, intake, assets/transcript, plan, timeline, build, preview/QA, render/delivery. At each gate, name the next action and ask before continuing, for example `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?` Do not print the whole checklist every time, and do not combine timeline and final render in one approval; preview and QA sit between them. If a creative, audio, or cost decision is unclear, ask at the current step instead of guessing.
+
+## Delegation
+
+Every phase ends with a handoff. Run the heavy phases through the matching role in `agents/`: `producer` (brief), `researcher`, `transcript-analyst`, `scriptwriter`, `editor` (plan and timeline), `art-director`, `audio-director`, `engineer` (build, render, delivery), `qa`. The main agent keeps intake, the approval gates, and the final visual judgment.
+
+Write summaries to `work/handoffs/` and raw command output to `work/logs/`. The main agent reads the handoff, a plan summary, and a few frames; it does not read the raw transcript, generated code, or full logs. Read `references/subagents.md` before the first spawn.
+
+Parallelize only independent work. Research, script variants, and art-direction options can run together after the brief; writes to the plan, timeline, or the same engine project stay serialized.
 
 ## Phase 1 — Intake
 

@@ -93,6 +93,17 @@ Vídeo de entrada: `Boa 2910 01.mp4` (8:57, 1920×1080, 60 fps, 416 MB).
 
 Lição: para footage real com slide estático, não cobrir a tela com um painel. Usar apenas lower-thirds/captions pequenos e deixar o vídeo contínuo. O `layout: speaker-left-panel` continua disponível para casos em que o usuário pedir explicitamente.
 
+## 7. Handoff de subagent (smoke test)
+
+Teste em workspace temporário, com o papel `agents/producer.md`:
+
+- o subagent leu o papel e escreveu `brief.md` e `work/handoffs/02-producer.md`;
+- devolveu um handoff de 17 linhas, sem transcrição, log ou JSON;
+- apontou uma inconsistência real: o intake pedia TTS pt-BR, mas `project.json` tinha `mode.voice: none`;
+- o agente principal recebeu só o handoff e o caminho do artefato.
+
+O teste confirma o contrato de retorno e o isolamento de contexto. Ainda falta testar a cadeia completa (transcript → plan → build → QA → render) com subagents em um projeto real.
+
 ## O que funcionou
 
 - `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).

@@ -131,6 +131,42 @@ Required: `schema`, `id`, `name`, `tokens.colors`, `tokens.typography`, `caption
 
 Required: `schema`, `source`, `segments`. Each segment needs `start`, `end`, `text`.
 
+## analysis.json
+
+The compact editorial map produced by `transcript-analyst`. It is the input for the script and the plan; the main agent reads the handoff, not this file.
+
+```json
+{
+  "schema": "rooster.analysis/v1",
+  "source": "assets/source/video.mp4",
+  "language": "pt-BR",
+  "durationSec": 612.4,
+  "topics": [
+    { "start": 0, "end": 42.5, "label": "Opening" }
+  ],
+  "beats": [
+    { "id": "b01", "in": 0, "out": 12.4, "label": "Hook", "why": "strongest claim" }
+  ],
+  "hooks": [
+    { "text": "exact quote", "in": 0, "out": 3.1 }
+  ],
+  "cuts": [
+    { "in": 12.4, "out": 18.2, "reason": "silence" }
+  ],
+  "broll": [
+    { "after": 18.2, "idea": "office wide shot" }
+  ],
+  "claims": [
+    { "text": "claim to verify", "status": "verify" }
+  ],
+  "speakers": [
+    { "id": "s1", "label": "Host" }
+  ]
+}
+```
+
+Required: `schema`, `durationSec`, `topics`, `beats`. Each beat needs `id`, `in`, `out`, `label`. `cuts`, `broll`, `claims`, and `speakers` are optional.
+
 ## plan.json
 
 ```json

@@ -27,17 +27,26 @@ rooster/
 │       ├── assets/source/
 │       ├── edit/
 │       │   ├── transcript.json
+│       │   ├── digest.md
+│       │   ├── analysis.json
 │       │   ├── plan.json
 │       │   ├── edl.json
 │       │   ├── timeline.json
 │       │   └── captions/
 │       ├── engine/
+│       ├── work/{handoffs,logs,scratch,notes}/
 │       ├── preview/
 │       ├── renders/
 │       └── qa/
 ├── profiles/
 └── library/
 ```
+
+## Delegation
+
+The steps map to the roles in `agents/`: `art-director` for Step 3, `transcript-analyst` for Step 4 transcription, `editor` for Step 4 plan, `engineer` for Steps 5–6 visual elements, build, and render, and `qa` for Step 6 review. The main agent keeps the plan approval gate and looks at the final frames.
+
+Pass paths, not contents. The subagent writes the detail to the project and returns a handoff in `work/handoffs/`; logs go to `work/logs/`. Read `references/subagents.md` for the full protocol.
 
 ## Step 1 — Prepare the machine
 
@@ -126,7 +135,7 @@ It prefers HyperFrames when available and falls back to the OpenAI Whisper CLI.
 
 ### Plan
 
-Read `edit/transcript.json` and `style.md`, understand the subject, and write `edit/plan.json`:
+Work from `edit/analysis.json` and `style.md`, not from the raw transcript. Understand the subject and write `edit/plan.json`:
 
 - cuts for long pauses, repetitions, false starts, and retakes;
 - the strongest take to keep;
@@ -183,6 +192,8 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 Preview in Remotion Studio, then render to `renders/final.mp4`.
 
 ### Review and export
+
+Run the QA sweep through `qa` and the fixes through `engineer`:
 
 - Watch the draft with the user.
 - Fix timing, captions, audio, and visual issues.

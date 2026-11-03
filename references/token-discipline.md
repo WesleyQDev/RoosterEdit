@@ -2,6 +2,14 @@
 
 Video work is naturally expensive: transcripts, frames, plans, render logs, and generated code. The goal is not to reduce quality; it is to keep noisy data out of the model context and reserve tokens for creative decisions.
 
+## Rule 0 — Delegate the raw material
+
+The cheapest token is one the main agent never reads. Send the stages that produce or consume raw material to a stage subagent: transcript analysis, research, script and plan drafts, style, build, QA, render. The subagent reads the file, writes the artifact, and returns a handoff of 15–25 lines. The main agent keeps the brief, the decisions, the gates, and the final visual judgment.
+
+This is not only about speed. A transcript read in stage 3 is still occupying context in stage 8, and every later turn pays for it again. The handoff is paid once. The full protocol and the role files are in `references/subagents.md` and `agents/`.
+
+If the harness has no fresh-context agent tool, or a spawn fails, keep the same file boundaries: write the raw output to `work/logs/` or `work/scratch/`, read only the summary, and do the stage inline.
+
 ## Rule 1 — Never paste long logs
 
 HyperFrames, Remotion, FFmpeg, and Whisper can print thousands of lines. Redirect them to a log file and read only the tail or the JSON summary.
@@ -36,6 +44,8 @@ ffmpeg -v error -i input.mp4 ...
 
 If a command fails, read the `Fix:` line, the JSON error, or the last 30 lines. Do not read the full log unless the summary is insufficient.
 
+Keep these files in `work/logs/` (or `../../work/logs/` from inside the engine directory) so they stay out of the main context and out of the project's editorial folders.
+
 ## Rule 2 — Use the transcript digest, not the raw JSON
 
 `transcript.json` contains segments and word-level timestamps. Word-level data is useful for captions but expensive to read. Use:
@@ -49,7 +59,7 @@ This prints only the segments in the range. Use `--json` when you need structure
 For a long transcript:
 
 1. Run `digest` with `--json`.
-2. Ask a subagent to propose 10–20 candidate beats, cuts, and elements.
+2. Use `transcript-analyst` (or a subagent with the same role file) to propose 10–20 candidate beats, cuts, and elements.
 3. Review the compact result in the main context.
 
 ## Rule 3 — Use `plan --show`, not the raw plan
@@ -99,16 +109,20 @@ Use a contact sheet for broad coverage. Read individual frames only when the con
 - Cache TTS per line and reuse unchanged audio.
 - Reuse profiles, components, and templates.
 
-## Rule 8 — Delegate the right work to subagents
+## Rule 8 — Delegate by artifact, not by reflex
 
-Subagents are useful when the work is independent and the raw input is large:
+Subagents are the default for heavy stages, and the main thread should receive only the handoff:
 
-- transcript analysis into compact beats;
-- research/reference gathering;
-- technical QA on rendered frames;
-- parallel scene implementation.
+- transcript analysis into `edit/analysis.json` and a compact beat list;
+- research and reference gathering into `work/research.md`;
+- script and plan drafts into the real project files;
+- art direction and storyboard into `style.md` and `storyboard.json`;
+- build, fixes, and QA into artifacts plus evidence paths;
+- render and packaging into a path and probe stats.
 
-Give the subagent file paths, not pasted content. Ask for a compact JSON/markdown result. Do not delegate the final creative decision or the timeline contract.
+Give the subagent file paths, not pasted content. Ask for the handoff template. Do not delegate the final creative decision, the approval gate, or the license call. Parallelize only independent work; serialize writes to the same plan, timeline, or engine project.
+
+The full cast and contract are in `references/subagents.md`. Do not spawn a subagent for a one-line question; the fixed cost of a fresh context only pays off when the stage has real raw material.
 
 ## Rule 9 — Keep the main context clean
 
@@ -119,16 +133,16 @@ Give the subagent file paths, not pasted content. Ask for a compact JSON/markdow
 
 ## Rule 10 — Budget by phase
 
-| Phase | Context budget |
-|---|---|
-| Onboarding | 1 short message, no file reads |
-| Intake | 1 message, no full assets |
-| Transcript | `digest` only; full JSON only if needed |
-| Plan | `plan --show` + `edit/plan.html`; JSON only for edits |
-| Build | CLI output only; no generated code unless debugging |
-| Preview | 3–5 frames or a screenshot |
-| QA | probe JSON + summary, not a full log |
-| Delivery | final path + stats |
+| Phase | Owner | Main thread reads |
+|---|---|---|
+| Onboarding | main | 1 short message, no file reads |
+| Intake | main + `producer` | the brief summary, no full assets |
+| Transcript | `transcript-analyst` | handoff only, never `transcript.json` |
+| Plan | `editor` | view `plan.html` + handoff; JSON only for a field edit |
+| Build | `engineer` | status + artifact paths; no code or logs |
+| Preview | `qa` + main | 3–5 frames + handoff |
+| QA | `qa` | verdict + evidence paths, not a full log |
+| Delivery | `engineer` | final path + probe stats |
 
 ## Rule 11 — Close with a short report
 

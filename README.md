@@ -104,7 +104,7 @@ Depois do corte, a skill cobre legendas, zoom/transições, ducking e SFX, refra
 
 ## Para gastar menos tokens
 
-Trabalhar com vídeo gasta tokens, então a skill foi feita para ler o mínimo necessário: trechos da transcrição, o plano em formato legível e alguns frames do resultado. As dicas estão em [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md).
+Trabalhar com vídeo gasta tokens, então a skill foi feita para ler o mínimo necessário: trechos da transcrição, o plano em formato legível e alguns frames do resultado. O maior ganho vem de rodar cada etapa pesada em um subagent e trazer para o agente principal só um handoff curto. As dicas estão em [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md).
 
 ## Documentação
 

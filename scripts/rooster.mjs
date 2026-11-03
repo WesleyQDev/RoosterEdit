@@ -787,6 +787,10 @@ function newProject(args) {
     "preview",
     "renders",
     "qa",
+    "work/handoffs",
+    "work/logs",
+    "work/scratch",
+    "work/notes",
   ];
   for (const dir of dirs) ensureDir(path.join(projectDir, dir));
 
