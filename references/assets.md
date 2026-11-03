@@ -112,6 +112,23 @@ library/
 
 A global library can live in `~/.rooster/library/`. Record the license and attribution for each reusable asset. Do not assume a file is licensed because it is in the library.
 
+## Music bed
+
+Music is part of the edit plan, not an afterthought. Add it to `edit/plan.json`:
+
+```json
+{
+  "music": {
+    "src": "assets/licensed/music/theme.mp3",
+    "gainDb": -18,
+    "license": "licensed",
+    "attribution": "Track name - Artist"
+  }
+}
+```
+
+Use `library/music/` or a user-provided track. The build trims/loops it to the video duration and mixes it under the voice. For a still-image base, add the track in the engine instead. If there is no music, state that in `notes` instead of leaving the plan silent.
+
 ## Generated media
 
 Generation is pluggable. The skill can call:

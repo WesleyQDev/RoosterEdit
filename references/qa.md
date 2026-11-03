@@ -71,6 +71,9 @@ QA has two jobs: catch technical defects before the user sees them, and catch ed
 
 ## Editorial checklist
 
+- [ ] The draft includes the planned visual elements, b-roll, and music; cuts alone are not a finished video.
+- [ ] Every element in the plan is visible in the draft, and every music track is audible under the voice.
+- [ ] If elements, b-roll, or music were omitted, the plan or review records why.
 - [ ] The hook lands in the first three seconds.
 - [ ] The promise is clear before the first 10% of the video.
 - [ ] Each scene earns its duration.

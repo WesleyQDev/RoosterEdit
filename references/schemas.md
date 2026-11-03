@@ -141,6 +141,12 @@ Required: `schema`, `source`, `segments`. Each segment needs `start`, `end`, `te
   "language": "pt-BR",
   "duration": 612.4,
   "summary": "What the video is about",
+  "music": {
+    "src": "assets/licensed/music/theme.mp3",
+    "gainDb": -18,
+    "license": "licensed",
+    "attribution": "Track name - Artist"
+  },
   "cuts": [
     { "id": "cut-001", "start": 12.4, "end": 18.2, "reason": "long-pause", "confidence": 0.9 }
   ],
@@ -156,6 +162,8 @@ Required: `schema`, `source`, `segments`. Each segment needs `start`, `end`, `te
 ```
 
 Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
+
+`music` is optional; when present, `src` is required and is relative to the project. `gainDb` defaults to `-18`.
 
 Cut reasons: `long-pause`, `repetition`, `false-start`, `retake`, `filler`, `mistake`, `off-topic`, `manual`.
 

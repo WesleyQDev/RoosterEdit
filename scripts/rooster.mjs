@@ -1493,6 +1493,22 @@ function validatePlan(plan, dir) {
   if (!plan.style) warnings.push("plan: missing style");
   else if (!exists(path.join(dir, plan.style))) warnings.push(`plan: style not found "${plan.style}"`);
 
+  if (plan.music) {
+    if (!plan.music.src) warnings.push("plan: music missing src");
+    else if (!exists(path.join(dir, plan.music.src))) warnings.push(`plan: music not found "${plan.music.src}"`);
+  }
+
+  const notesText = (plan.notes || []).join(" ").toLowerCase();
+  const cleanCut = /clean cut|cut only|s[oó] corte|sem elementos|no elements/.test(notesText);
+  const hasVisualLayer = (plan.elements || []).length > 0;
+  if (!hasVisualLayer && !cleanCut) {
+    warnings.push("plan: no visual elements; add letreiros, b-roll, graphics, or state a clean-cut request in notes");
+  }
+  const noMusic = !plan.music?.src && !/no music|without music|sem m[uú]sica/.test(notesText);
+  if (noMusic) {
+    warnings.push("plan: no music; add a music track or state 'no music requested' in notes");
+  }
+
   const ids = new Set();
   const checkId = (id, kind) => {
     if (!id) errors.push(`plan: ${kind} missing id`);
@@ -1555,6 +1571,12 @@ function printPlanSummary(plan) {
   if (plan.style) console.log(`  Style:    ${plan.style}`);
   if (plan.summary) console.log(`  Summary:  ${plan.summary}`);
 
+  const elements = plan.elements || [];
+  const broll = elements.filter((element) => element.type === "broll").length;
+  heading("Creative layer");
+  console.log(`  Elements: ${elements.length}${broll ? ` (b-roll: ${broll})` : ""}`);
+  console.log(`  Music:    ${plan.music?.src || "none"}`);
+
   heading(`Cuts (${(plan.cuts || []).length})`);
   for (const cut of plan.cuts || []) {
     console.log(`  ${formatClock(cut.start)}–${formatClock(cut.end)}  ${cut.reason || "?"}${cut.note ? ` — ${cut.note}` : ""}`);
@@ -1587,6 +1609,13 @@ function planMarkdown(plan) {
   if (plan.duration) lines.push(`- Duration: ${formatClock(plan.duration)}`);
   if (plan.style) lines.push(`- Style: ${plan.style}`);
   if (plan.summary) lines.push(`- Summary: ${plan.summary}`);
+  const elements = plan.elements || [];
+  const brollCount = elements.filter((element) => element.type === "broll").length;
+  lines.push("", "## Creative layer", "");
+  lines.push(`- Visual elements: ${elements.length}${brollCount ? ` (b-roll: ${brollCount})` : ""}`);
+  lines.push(`- Music: ${plan.music?.src || "none"}`);
+  if (!elements.length) lines.push("- WARNING: no visual elements; add letreiros, b-roll, or graphics, or record a clean-cut request in notes");
+  if (!plan.music?.src) lines.push("- WARNING: no music; add a track or record \"no music requested\" in notes");
   lines.push("");
 
   lines.push(`## Cuts (${(plan.cuts || []).length})`, "");
@@ -1601,8 +1630,8 @@ function planMarkdown(plan) {
     }
   }
 
-  lines.push("", `## Elements (${(plan.elements || []).length})`, "");
-  for (const element of plan.elements || []) {
+  lines.push("", `## Elements (${elements.length})`, "");
+  for (const element of elements) {
     const text = element.text ? ` "${element.text}"` : "";
     lines.push(`- ${formatClock(element.start)}-${formatClock(element.end)} - ${element.type || "?"}${text} - ${element.description || ""}`);
   }
@@ -1620,6 +1649,10 @@ function planMarkdown(plan) {
 
 function planHtml(plan, project) {
   const title = project?.config?.name || project?.slug || "Edit plan";
+  const elementsList = plan.elements || [];
+  const brollCount = elementsList.filter((element) => element.type === "broll").length;
+  const noVisualElements = !elementsList.length;
+  const noMusic = !plan.music?.src;
   const cuts = (plan.cuts || [])
     .map(
       (cut) =>
@@ -1629,7 +1662,7 @@ function planHtml(plan, project) {
   const keeps = (plan.keeps || [])
     .map((keep) => `<tr><td>${formatClock(keep.start)}-${formatClock(keep.end)}</td><td>${htmlEscape(keep.reason || "")}</td></tr>`)
     .join("");
-  const elements = (plan.elements || [])
+  const elements = elementsList
     .map(
       (element) =>
         `<tr><td>${formatClock(element.start)}-${formatClock(element.end)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "")}</td><td>${htmlEscape(element.description || "")}</td></tr>`
@@ -1668,6 +1701,7 @@ function planHtml(plan, project) {
     <h1>Plano de edição</h1>
     <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)}` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
     ${plan.summary ? `<div class="summary">${htmlEscape(plan.summary)}</div>` : ""}
+    <section><h2>Camada criativa</h2><p>Elementos visuais: ${elementsList.length}${brollCount ? ` (b-roll: ${brollCount})` : ""}<br />Música: ${plan.music?.src ? htmlEscape(plan.music.src) : "nenhuma"}</p>${noVisualElements ? `<p class="empty">Sem elementos visuais. Adicione letreiros, b-roll ou gráficos, ou registre um corte limpo em <code>notes</code>.</p>` : ""}${noMusic ? `<p class="empty">Sem música. Adicione uma faixa ou registre "no music requested" em <code>notes</code>.</p>` : ""}</section>
     <section><h2>Cortes (${(plan.cuts || []).length})</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="empty">Nenhum corte.</p>`}</section>
     ${keeps ? `<section><h2>Trechos mantidos (${(plan.keeps || []).length})</h2><table><thead><tr><th>Tempo</th><th>Motivo</th></tr></thead><tbody>${keeps}</tbody></table></section>` : ""}
     <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto</th><th>Descrição</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
@@ -2153,7 +2187,7 @@ function copyElementAssets(projectDir, plan, assetsDir, prefix) {
   }
 }
 
-function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "assets") {
+function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir = "assets") {
   const source = path.resolve(project.dir, plan.source);
   if (!exists(source)) fail(`Plan source not found: ${source}`);
 
@@ -2253,6 +2287,73 @@ function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "a
     hasVideo,
     hasAudio,
     kind: hasVideo ? "video" : "audio",
+  };
+}
+
+function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "assets") {
+  const base = buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir);
+  return applyMusic(project, plan, base, engineDir, assetsSubdir);
+}
+
+function applyMusic(project, plan, base, engineDir, assetsSubdir = "assets") {
+  const music = plan.music;
+  if (!music || !music.src) return base;
+
+  const musicSource = path.resolve(project.dir, music.src);
+  if (!exists(musicSource)) {
+    console.warn(`  ! Music not found: ${musicSource}`);
+    return base;
+  }
+  if (base.kind === "image") {
+    console.warn("  ! Music mixing for still-image projects is not automated; add the track in the engine.");
+    return base;
+  }
+  if (!versionOf("ffmpeg", ["-version"])) {
+    console.warn("  ! FFmpeg not found; music was not mixed.");
+    return base;
+  }
+
+  const duration = Math.max(0.1, Number(base.duration) || Number(plan.duration) || 0);
+  const start = Math.max(0, Number(music.start) || 0);
+  const requestedEnd = Number(music.end) || start + duration;
+  const end = Math.min(start + duration, Math.max(start + 0.1, requestedEnd));
+  const musicDuration = Math.max(0.1, end - start);
+  const gainDb = Number.isFinite(Number(music.gainDb)) ? Number(music.gainDb) : -18;
+  const volume = Math.pow(10, gainDb / 20);
+  const fadeOutStart = Math.max(0, musicDuration - 1.5);
+  const basePath = path.join(engineDir, assetsSubdir, path.basename(base.path));
+  const ext = path.extname(base.path) || ".mp4";
+  const mixedName = `base-music${ext}`;
+  const mixedPath = path.join(engineDir, assetsSubdir, mixedName);
+
+  const musicFilter = `[1:a]atrim=start=${start}:end=${start + musicDuration},asetpts=PTS-STARTPTS,volume=${volume.toFixed(4)},afade=t=in:st=0:d=1.2,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=1.5,apad=whole_dur=${duration}[m]`;
+  const filter = base.hasAudio
+    ? `${musicFilter};[0:a][m]amix=inputs=2:duration=first:dropout_transition=2[aout]`
+    : `${musicFilter};[m]anull[aout]`;
+
+  const ffArgs = [
+    "-y",
+    "-i", basePath,
+    "-stream_loop", "-1",
+    "-i", musicSource,
+    "-filter_complex", filter,
+  ];
+  if (base.kind === "video") ffArgs.push("-map", "0:v:0", "-c:v", "copy");
+  ffArgs.push("-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-shortest", mixedPath);
+
+  const result = run("ffmpeg", ffArgs, { timeout: 30 * 60 * 1000 });
+  if (!result.ok) {
+    console.warn(`  ! Could not mix music: ${result.stderr || result.stdout || "unknown error"}`);
+    return base;
+  }
+  try {
+    fs.rmSync(basePath, { force: true });
+  } catch {}
+
+  return {
+    ...base,
+    path: `assets/${mixedName}`,
+    hasAudio: true,
   };
 }
 
@@ -2756,9 +2857,27 @@ function buildCommand(args) {
   }
 
   const plan = readJson(planPath, null);
-  const { errors } = validatePlan(plan, project.dir);
+  const { errors, warnings } = validatePlan(plan, project.dir);
   if (errors.length) {
     fail(`The plan has ${errors.length} error(s):\n${errors.map((error) => `- ${error}`).join("\n")}`);
+  }
+  const noVisualElements = warnings.find((warning) => warning.startsWith("plan: no visual elements"));
+  if (noVisualElements && !args["allow-cut-only"]) {
+    fail(
+      "This plan has no visual elements. Add letreiros, b-roll, or graphics, or record a clean-cut request in notes.\n" +
+        "To build a deliberate clean cut, pass --allow-cut-only."
+    );
+  }
+  const noMusic = warnings.find((warning) => warning.startsWith("plan: no music"));
+  if (noMusic && !args["allow-no-music"]) {
+    fail(
+      "This plan has no music. Add a track to edit/plan.json or record \"no music requested\" in notes.\n" +
+        "To build intentionally without music, pass --allow-no-music."
+    );
+  }
+  const missingMusic = warnings.find((warning) => warning.startsWith("plan: music not found"));
+  if (missingMusic) {
+    fail(`Music file not found. ${missingMusic}\nFix music.src in edit/plan.json before building.`);
   }
 
   let engine = typeof args.engine === "string" ? args.engine : project.config.engine || "auto";
@@ -3091,6 +3210,8 @@ Build options:
   --engine <id>                   hyperframes | remotion (default: auto)
   --force                         Rebuild an existing engine project
   --no-cuts                       Ignore plan cuts and use the original source
+  --allow-cut-only                Allow a plan with no visual elements
+  --allow-no-music                Allow a plan with no music decision
 
 New project options:
   --channel <id>                  Channel (default: workspace default)

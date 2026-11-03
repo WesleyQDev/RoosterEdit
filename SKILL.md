@@ -105,7 +105,7 @@ When the user wants the simplest route from raw footage to a finished video, fol
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
 3. **Write the style guide** — `style.md` plus the resolved profile.
 4. **Transcribe and plan** — HyperFrames transcribe (Parakeet/whisper.cpp) or Whisper writes `edit/transcript.json`; read it with `style.md` and write `edit/plan.json`. Show the plan and wait for approval.
-5. **Create the visual elements** — letreiros, graphics, lists, zooms, b-roll, lower thirds.
+5. **Create the visual elements** — letreiros, graphics, lists, zooms, b-roll, lower thirds, and music. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
 6. **Assemble, review, export** — run `build` to generate the HyperFrames or Remotion project from the approved plan; preview, QA, render to `renders/`.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.
@@ -119,6 +119,7 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Respect provenance.** Record where every asset came from and its license. A beautiful video with an unlicensed track is a liability.
 - **Degrade gracefully.** The harness may not have subagents, a browser, Node, FFmpeg, or TTS. Offer the best path available and say what is missing.
 - **Report short.** End every task with the result, the paths, and one next question. Do not narrate the whole process or dump commands unless the user asks.
+- **Finish the creative layer.** Cuts alone are not a video. Plan overlays, b-roll, music, or captions unless the user explicitly asked for a clean cut.
 - **Protect the context.** Video work is token-heavy. Redirect engine logs to files, read only the tail, use `digest` instead of the full transcript, and inspect a few key frames instead of every frame. Read `references/token-discipline.md`.
 
 ## Step 0 - Find the workspace
@@ -260,7 +261,7 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
 node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 ```
 
-`build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
+`build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. A cut-only plan or a plan with no music decision is refused unless `notes` records the exception; pass `--allow-cut-only` or `--allow-no-music` only when the user explicitly asked for that. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
 
 For the fast path, Option 1 is automatic assembly in HyperFrames for HTML/CSS/GSAP motion. Option 2 is Remotion for React, data-driven scenes, and 3D. FFmpeg remains a utility for cuts, proxies, captions, and audio. Both engines start from the same approved plan.
 

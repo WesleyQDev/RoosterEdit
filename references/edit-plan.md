@@ -12,6 +12,12 @@ The edit plan is the bridge between the transcript and the build. It is the arti
   "language": "pt-BR",
   "duration": 612.4,
   "summary": "Interview about starting a business after losing a job.",
+  "music": {
+    "src": "assets/licensed/music/theme.mp3",
+    "gainDb": -18,
+    "license": "licensed",
+    "attribution": "Track name - Artist"
+  },
   "cuts": [
     {
       "id": "cut-001",
@@ -61,6 +67,14 @@ The edit plan is the bridge between the transcript and the build. It is the arti
       "start": 52.0,
       "end": 55.0,
       "description": "Slow punch-in on the speaker's face at the key insight"
+    },
+    {
+      "id": "el-004",
+      "type": "broll",
+      "start": 58.0,
+      "end": 64.0,
+      "src": "assets/source/broll-office.mp4",
+      "description": "Office b-roll over the line about the first client"
     }
   ],
   "chapters": [
@@ -106,6 +120,36 @@ A cut is a removal from the source. If the plan instead describes what to keep, 
 
 Each element needs `start`, `end`, and `description`. `text` is optional but encouraged for anything with words.
 
+## Creative minimum
+
+A cut-only plan is incomplete unless the user explicitly asked for a clean cut. Before showing the plan, check:
+
+- at least one visual element (letreiro, lower-third, graphic, list, zoom, b-roll, or end card);
+- b-roll or a graphic for each long stretch of talking head where the visual does not change;
+- music, or a `notes` entry explaining why there is none;
+- captions or on-screen text for key lines, or a `notes` entry explaining why there are none.
+
+If one of these is missing, add it or ask the user. Do not present "no overlays, no music, no captions" as a finished creative draft.
+
+Captions are not generated automatically by `build` in this version. If the video needs full captions, add a caption pass or `caption-emphasis` elements; do not claim captions in the delivery unless they are present in the draft.
+
+`music` is optional but explicit:
+
+```json
+{
+  "music": {
+    "src": "assets/licensed/music/theme.mp3",
+    "start": 0,
+    "end": 60,
+    "gainDb": -18,
+    "license": "licensed",
+    "attribution": "Track name - Artist"
+  }
+}
+```
+
+`src` is relative to the project. `gainDb` defaults to `-18`. The build mixes the track under the voice and fades it in/out.
+
 ## Heuristics
 
 ### Cuts
@@ -127,6 +171,14 @@ Each element needs `start`, `end`, and `description`. `text` is optional but enc
 - Do not add an element to every sentence; the video becomes noise.
 - Do not use a full-screen panel or card to hide a mismatched slide unless the user explicitly asks. Prefer small lower-thirds, corner labels, captions, and overlays. The video must remain visible.
 - Match the element style to `style.md` and the resolved profile.
+
+### Music
+
+- Prefer `library/music/` or a track the user provided with a known license.
+- Use `gainDb` around `-18` under voice; `-6` to `-12` for music-only.
+- Use `start`/`end` to trim the track. The build loops and pads it to the video duration.
+- If there is no track, add `notes: ["no music requested"]` and do not claim music in the delivery.
+- Never use unlicensed music.
 
 ### Chapters
 
@@ -177,6 +229,9 @@ Wait for an explicit approval. If the user changes the plan, update `edit/plan.j
 - every cut has `start < end` and a `reason`;
 - every element has `start < end`, `type`, and `description`;
 - no element extends past the source duration;
+- if `music` exists, `music.src` exists;
+- the plan has at least one visual element unless `notes` records a clean-cut request;
+- the plan has a music decision, or `notes` records that no music was requested;
 - no duplicate ids;
 - chapters are sorted by start time.
 
@@ -196,5 +251,7 @@ Run `build` only after the plan is approved:
 node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
 node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 ```
+
+`build` refuses a cut-only plan or a plan with no music decision unless `notes` records the exception or you pass `--allow-cut-only` / `--allow-no-music` after the user explicitly asks for it.
 
 Do not skip the plan. A bad plan costs minutes to fix; a bad render costs hours.

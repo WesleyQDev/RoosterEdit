@@ -88,6 +88,8 @@ Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug> -
 
 As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta.
 
+O plano precisa incluir a camada criativa: elementos visuais, b-roll e música, ou uma justificativa explícita para omitir. **Só corte não conta como vídeo final.** O `build` recusa um plano só de corte ou sem decisão de música; registre a exceção em `notes` ou use `--allow-cut-only` / `--allow-no-music` quando for intencional.
+
 ## Precedência
 
 ```text

@@ -5,6 +5,12 @@
   "language": "pt-BR",
   "duration": 612.4,
   "summary": "Entrevista sobre começar um negócio depois de perder o emprego.",
+  "music": {
+    "src": "assets/licensed/music/theme.mp3",
+    "gainDb": -18,
+    "license": "licensed",
+    "attribution": "Track name - Artist"
+  },
   "cuts": [
     {
       "id": "cut-001",
@@ -54,6 +60,14 @@
       "start": 52.0,
       "end": 55.0,
       "description": "Punch-in lento no rosto do entrevistado no insight principal"
+    },
+    {
+      "id": "el-004",
+      "type": "broll",
+      "start": 58.0,
+      "end": 64.0,
+      "src": "assets/source/broll-office.mp4",
+      "description": "B-roll de escritório na fala sobre o primeiro cliente"
     }
   ],
   "chapters": [

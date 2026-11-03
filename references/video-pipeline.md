@@ -131,8 +131,11 @@ Read `edit/transcript.json` and `style.md`, understand the subject, and write `e
 - cuts for long pauses, repetitions, false starts, and retakes;
 - the strongest take to keep;
 - overlays: letreiros, graphics, lists, zooms, b-roll;
+- music: `src`, `gainDb`, and license, or a note explaining why there is none;
 - start, end, and description for every cut and element;
 - a short summary and chapter markers.
+
+A cut-only plan is incomplete unless the user explicitly asked for a clean cut. Include at least one visual element and a music decision before showing the plan.
 
 Read `references/edit-plan.md` for the schema and heuristics.
 

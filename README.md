@@ -32,8 +32,8 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 
 - Organizar materiais por canais, com idioma, formato, estilo, voz e política de assets.
 - Transcrever com HyperFrames/Parakeet ou Whisper.
-- Montar um plano com cortes, capítulos e elementos visuais.
-- Gerar o projeto em HyperFrames ou Remotion já com os cortes aplicados.
+- Montar um plano com cortes, capítulos, elementos visuais, b-roll e música.
+- Gerar o projeto em HyperFrames ou Remotion já com os cortes e a música aplicados.
 - Baixar links autorizados com `yt-dlp`.
 - Usar perfis prontos ou criar os seus.
 - Revisar no preview e renderizar o arquivo final.
@@ -42,7 +42,7 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 
 1. Você configura um canal. Ele guarda o que não muda de vídeo para vídeo: idioma, formato, estilo, voz e de onde vêm os assets.
 2. Coloca o material bruto no projeto.
-3. O agente transcreve, entende o conteúdo e escreve o plano de edição.
+3. O agente transcreve, entende o conteúdo e escreve o plano de edição com cortes, elementos visuais, b-roll e música.
 4. Você lê o plano, ajusta o que quiser e aprova.
 5. Só então o projeto é gerado, pré-visualizado e renderizado.
 
