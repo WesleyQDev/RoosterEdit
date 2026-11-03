@@ -43,6 +43,8 @@ After the user says yes, ask one question:
 
 Use the answer and the conversation to infer the rest. A channel here is a production standard, not a YouTube channel.
 
+Audio identity includes both music and SFX. If the style is tech, ads, motion graphics, or high-energy, plan SFX for transitions, UI, impacts, and emphasis. If it is documentary or minimal, use them sparingly. If you cannot tell, ask before planning the audio layer.
+
 | Field | Inference |
 |---|---|
 | name | kebab-case from the content |

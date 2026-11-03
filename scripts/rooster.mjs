@@ -18,11 +18,11 @@ import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
 import { reframeArgs, targetDimensions } from "./features/reframe.mjs";
 import { listMediaFiles, rankBroll, suggestBrollElements } from "./features/broll.mjs";
 import { mixAudioArgs } from "./features/audio.mjs";
-import { colorArgs } from "./features/color.mjs";
+import { colorArgs, buildStabilizePasses } from "./features/color.mjs";
 import { hyperframesTransition, hyperframesZoom, remotionZoomValues, remotionTransitionValues } from "./features/motion.mjs";
 import { renderChartSvg, validateChart, chartSummary } from "./features/charts.mjs";
 import { splitScript, detectTtsProviders, buildTtsArgs, buildVoiceoverPlan } from "./features/tts.mjs";
-import { buildMulticamPlan } from "./features/multicam.mjs";
+import { buildMulticamPlan, speedFilter, jlCutOffsets } from "./features/multicam.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2098,8 +2098,16 @@ function captionsCommand(args) {
       ? path.resolve(CWD, String(args["out-video"]))
       : path.join(project.dir, "renders", "captioned.mp4");
     const burn = burnArgs({ video, srt: result.files.srt, out });
-    console.log("\nBurn with:");
-    console.log(`  ${burn.command}`);
+    if (args["dry-run"]) {
+      console.log("\nBurn command:");
+      console.log(`  ${burn.command}`);
+      return;
+    }
+    ensureDir(path.dirname(out));
+    const burned = run("ffmpeg", burn.args, { timeout: 60 * 60 * 1000 });
+    if (!burned.ok) fail(`Caption burn failed:\n${burned.stderr || burned.stdout || "unknown error"}`);
+    heading("Captioned video");
+    console.log(`  ${out}`);
   }
 }
 
@@ -2352,8 +2360,22 @@ function colorCommand(args) {
 
   const color = plan.color && typeof plan.color === "object" ? plan.color : {};
   if (!Object.keys(color).length) fail("No plan.color settings to apply.");
-  if (color.stabilize) {
-    console.warn("  ! plan.color.stabilize needs the separate two-pass vidstab flow; color filters will run without stabilization.");
+
+  let colorInput = input;
+  if (color.stabilize && !args["skip-stabilize"]) {
+    const workDir = path.join(project.dir, "assets", "generated", "stabilize");
+    ensureDir(workDir);
+    const passes = buildStabilizePasses({ input, workDir });
+    heading("Stabilization pass 1/2");
+    const detect = run("ffmpeg", passes.detectArgs || passes.detect, { timeout: 60 * 60 * 1000 });
+    if (!detect.ok) fail(`Stabilization detect failed:\n${detect.stderr || detect.stdout || "unknown error"}`);
+    heading("Stabilization pass 2/2");
+    const transform = run("ffmpeg", passes.transformArgs || passes.transform, { timeout: 60 * 60 * 1000 });
+    if (!transform.ok) fail(`Stabilization transform failed:\n${transform.stderr || transform.stdout || "unknown error"}`);
+    colorInput = passes.output;
+    console.log(`  ${colorInput}`);
+  } else if (color.stabilize) {
+    console.warn("  ! Stabilization skipped by --skip-stabilize.");
   }
 
   const output = args.out
@@ -2361,7 +2383,7 @@ function colorCommand(args) {
     : path.join(project.dir, "assets", "generated", "graded.mp4");
   ensureDir(path.dirname(output));
 
-  const ffArgs = colorArgs({ input, output, color });
+  const ffArgs = colorArgs({ input: colorInput, output, color });
   const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
   if (!result.ok) fail(`Color pass failed:\n${result.stderr || result.stdout || "unknown error"}`);
 
@@ -2505,26 +2527,53 @@ function multicamCommand(args) {
   const tempDir = path.join(project.dir, "assets", "generated", "multicam-parts");
   if (exists(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true });
   ensureDir(tempDir);
+  const settingsById = new Map();
+  (source.cuts || []).forEach((cut, index) => {
+    settingsById.set(cut.id || `cut-${String(index + 1).padStart(3, "0")}`, cut);
+  });
   const parts = [];
 
   for (const [index, segment] of (result.segments || []).entries()) {
     const cameraSource = path.resolve(project.dir, segment.src);
     if (!exists(cameraSource)) fail(`Camera source not found: ${cameraSource}`);
     const part = path.join(tempDir, `part-${String(index).padStart(3, "0")}.mp4`);
-    const ffArgs = [
-      "-y",
-      "-ss", String(segment.start),
-      "-t", String(segment.duration),
-      "-i", cameraSource,
-      "-vf", "fps=30",
+    const settings = settingsById.get(segment.cutId) || {};
+    const offsets = jlCutOffsets({
+      clip: {
+        start: segment.start,
+        end: segment.end,
+        audioOffset: settings.audioOffset,
+        videoOffset: settings.videoOffset,
+      },
+    });
+    const hasOffsets = offsets.audioOffset !== 0 || offsets.videoOffset !== 0;
+    const speed = Number(settings.speed) || 1;
+    const speedValues = speed !== 1 ? speedFilter({ speed, fps: 30 }) : null;
+    const segmentDuration = offsets.duration || segment.duration;
+    const ffArgs = ["-y"];
+
+    if (hasOffsets && offsets.videoStart !== null && offsets.audioStart !== null) {
+      ffArgs.push("-ss", String(offsets.videoStart), "-t", String(segmentDuration), "-i", cameraSource);
+      ffArgs.push("-ss", String(offsets.audioStart), "-t", String(segmentDuration), "-i", cameraSource);
+      ffArgs.push("-map", "0:v:0", "-map", "1:a:0?");
+    } else {
+      ffArgs.push("-ss", String(segment.start), "-t", String(segment.duration), "-i", cameraSource);
+    }
+
+    if (speedValues) {
+      ffArgs.push("-vf", speedValues.videoFilter, "-af", speedValues.audioFilter);
+    } else {
+      ffArgs.push("-vf", "fps=30");
+    }
+    ffArgs.push(
       "-c:v", "libx264",
       "-preset", "veryfast",
       "-crf", "20",
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "192k",
-      part,
-    ];
+      part
+    );
     const partResult = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
     if (!partResult.ok) {
       fail(`Multicam segment ${index + 1} failed:\n${partResult.stderr || partResult.stdout || "unknown error"}`);
@@ -2852,7 +2901,76 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
 
 function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "assets") {
   const base = buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir);
-  return applyMusic(project, plan, base, engineDir, assetsSubdir);
+  const voiced = applyVoiceover(project, plan, base, engineDir, assetsSubdir);
+  return applyMusic(project, plan, voiced, engineDir, assetsSubdir);
+}
+
+function applyVoiceover(project, plan, base, engineDir, assetsSubdir = "assets") {
+  const manifestPath = path.join(project.dir, "edit", "voiceover.json");
+  if (!exists(manifestPath)) return base;
+  const manifest = readJson(manifestPath, null);
+  const lines = (manifest?.lines || []).filter(
+    (line) => line.audio && Number.isFinite(Number(line.start)) && Number(line.duration) > 0
+  );
+  const usable = lines
+    .map((line) => ({ line, source: path.resolve(project.dir, line.audio) }))
+    .filter((entry) => exists(entry.source));
+  if (!usable.length) return base;
+  if (base.kind === "image") {
+    console.warn("  ! TTS voiceover for still-image projects is not automated; add the voice track in the engine.");
+    return base;
+  }
+  if (!versionOf("ffmpeg", ["-version"])) {
+    console.warn("  ! FFmpeg not found; TTS voiceover was not mixed.");
+    return base;
+  }
+
+  const duration = Math.max(0.1, Number(base.duration) || Number(plan.duration) || 0);
+  const basePath = path.join(engineDir, assetsSubdir, path.basename(base.path));
+  const ext = path.extname(base.path) || ".mp4";
+  const mixedName = `base-voice${ext}`;
+  const mixedPath = path.join(engineDir, assetsSubdir, mixedName);
+
+  const ffArgs = ["-y", "-i", basePath];
+  const chains = [];
+  const voiceLabels = [];
+  usable.forEach((entry, index) => {
+    ffArgs.push("-i", entry.source);
+    const delayMs = Math.max(0, Math.round(Number(entry.line.start) * 1000));
+    const voiceDuration = Math.max(0.05, Number(entry.line.duration));
+    chains.push(
+      `[${index + 1}:a]atrim=start=0:end=${voiceDuration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${delayMs}:all=1[v${index}]`
+    );
+    voiceLabels.push(`[v${index}]`);
+  });
+
+  if (base.hasAudio) {
+    chains.push("[0:a]volume=0.35[basea]");
+    chains.push(
+      `[basea]${voiceLabels.join("")}amix=inputs=${voiceLabels.length + 1}:duration=first:dropout_transition=2:normalize=0[aout]`
+    );
+  } else {
+    chains.push(`${voiceLabels.join("")}amix=inputs=${voiceLabels.length}:duration=longest:dropout_transition=2:normalize=0,apad=whole_dur=${duration.toFixed(3)}[aout]`);
+  }
+
+  ffArgs.push("-filter_complex", chains.join(";"));
+  if (base.kind === "video") ffArgs.push("-map", "0:v:0", "-c:v", "copy");
+  ffArgs.push("-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-t", duration.toFixed(3), mixedPath);
+
+  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+  if (!result.ok) {
+    console.warn(`  ! Could not mix TTS voiceover: ${result.stderr || result.stdout || "unknown error"}`);
+    return base;
+  }
+  try {
+    fs.rmSync(basePath, { force: true });
+  } catch {}
+
+  return {
+    ...base,
+    path: `assets/${mixedName}`,
+    hasAudio: true,
+  };
 }
 
 function applyMusic(project, plan, base, engineDir, assetsSubdir = "assets") {
@@ -3881,8 +3999,9 @@ Captions options:
   --out <dir>                     Output directory (default: edit/captions)
   --max-chars <n>                 Max characters per line (default: 42)
   --max-lines <n>                 Max lines per cue (default: 2)
-  --burn <video>                  Print an FFmpeg burn-in command for this video
+  --burn <video>                  Burn captions into this video
   --out-video <path>              Output for the burned video
+  --dry-run                       Print the burn command without running it
 
 Delivery options:
   --video <path>                  Render to deliver (default: renders/final.mp4 or draft.mp4)
@@ -3913,6 +4032,7 @@ Color options:
   --input <path>                  Source (default: plan.source)
   --out <path>                    Output (default: assets/generated/graded.mp4)
   --update-plan                   Point plan.source at the graded file
+  --skip-stabilize                Skip plan.color.stabilize
 
 TTS options:
   --script <path>                 Script source (default: script.md)

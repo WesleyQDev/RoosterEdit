@@ -15,11 +15,15 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | TTS | `features/tts.md` | Script to voiceover |
 | Multicam | `features/multicam.md` | Camera selection, J/L cuts, speed ramps |
 
+## Progress and questions
+
+Every layer starts with the current `Etapa X/8` marker. If a choice would change the cut, the look, the audio, or the cost, ask before proceeding instead of guessing.
+
 ## Status
 
-- Wired into `build`: music/SFX ducking, zoom/transitions, charts.
-- CLI layer: captions, delivery, reframe, b-roll, color, TTS, multicam.
-- Still manual: caption burn-in, two-pass stabilization, TTS voice track assembly, and speed/J-L application in the final timeline.
+- Wired into `build`: music/SFX ducking, TTS voiceover from `edit/voiceover.json`, zoom/transitions, charts.
+- CLI layer: captions (including burn-in), delivery, reframe, b-roll, color (including two-pass stabilization), multicam (including speed/J-L and camera concat).
+- Still manual: final color pass into the build (`color --update-plan` first), multicam into the build (`multicam --render --update-plan` first), and provider approval for TTS generation.
 
 ## CLI commands
 

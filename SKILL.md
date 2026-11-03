@@ -105,7 +105,7 @@ When the user wants the simplest route from raw footage to a finished video, fol
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
 3. **Write the style guide** — `style.md` plus the resolved profile.
 4. **Transcribe and plan** — HyperFrames transcribe (Parakeet/whisper.cpp) or Whisper writes `edit/transcript.json`; read it with `style.md` and write `edit/plan.json`. Show the plan and wait for approval.
-5. **Create the visual elements** — letreiros, graphics, lists, zooms, b-roll, lower thirds, and music. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
+5. **Create the visual elements** — letreiros, graphics, lists, zooms, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
 6. **Assemble, review, export** — run `build` to generate the HyperFrames or Remotion project from the approved plan; preview, QA, render to `renders/`.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.
@@ -119,7 +119,8 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Respect provenance.** Record where every asset came from and its license. A beautiful video with an unlicensed track is a liability.
 - **Degrade gracefully.** The harness may not have subagents, a browser, Node, FFmpeg, or TTS. Offer the best path available and say what is missing.
 - **Report short.** End every task with the result, the paths, and one next question. Do not narrate the whole process or dump commands unless the user asks.
-- **Finish the creative layer.** Cuts alone are not a video. Plan overlays, b-roll, music, or captions unless the user explicitly asked for a clean cut.
+- **Finish the creative layer.** Cuts alone are not a video. Plan overlays, b-roll, music, SFX, or captions unless the user explicitly asked for a clean cut.
+- **Ask when uncertain.** If a choice changes the cut, the look, the audio, or the cost, ask at the current `Etapa X/8`. Do not guess silently.
 - **Protect the context.** Video work is token-heavy. Redirect engine logs to files, read only the tail, use `digest` instead of the full transcript, and inspect a few key frames instead of every frame. Read `references/token-discipline.md`.
 
 ## Step 0 - Find the workspace

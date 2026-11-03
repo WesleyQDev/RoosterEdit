@@ -27,7 +27,7 @@ Read `references/video-pipeline.md` for the full mapping. This is the default fo
 
 ## Progress and gates
 
-Keep a compact 8-step tracker and show the current step in every update: environment, intake, assets/transcript, plan, timeline, build, preview/QA, render/delivery. At each gate, name the next action and ask before continuing, for example `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?` Do not print the whole checklist every time, and do not combine timeline and final render in one approval; preview and QA sit between them.
+Keep a compact 8-step tracker and show the current step in every update: environment, intake, assets/transcript, plan, timeline, build, preview/QA, render/delivery. At each gate, name the next action and ask before continuing, for example `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?` Do not print the whole checklist every time, and do not combine timeline and final render in one approval; preview and QA sit between them. If a creative, audio, or cost decision is unclear, ask at the current step instead of guessing.
 
 ## Phase 1 — Intake
 

@@ -2,6 +2,8 @@
 
 Use this layer when the edit needs a music bed, sound effects, or both. It turns the audio fields in `edit/plan.json` into an FFmpeg mix that keeps the voice intelligible and the delivery loudness on target.
 
+SFX are part of the channel's audio identity, not an optional afterthought. Tech, ads, motion graphics, and high-energy styles usually want whooshes, clicks, impacts, and UI sounds. Documentary and minimal styles should use them sparingly. If the channel style is unclear, ask before planning the audio layer.
+
 The helpers live in `scripts/features/audio.mjs`. They build filter graphs and argument arrays; they never spawn FFmpeg or touch the workspace.
 
 ## Plan fields

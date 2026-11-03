@@ -84,17 +84,17 @@ The filter quotes spaces and escapes Windows drive colons, brackets, commas, and
 
 - Use `caption-emphasis` in `edit/plan.json` for a few on-screen key lines; use this module for full captions.
 - Generate sidecars after `transcribe` and before final delivery.
-- `build` currently ignores captions. A burned caption pass is a separate FFmpeg step after the draft render, or a component added manually inside the engine.
+- `build` does not burn captions automatically. Run `captions --burn` after the draft render, or add caption elements manually inside the engine.
 - Do not claim captions in a delivery unless `captions.srt`, `captions.vtt`, or burned captions are actually present.
 
 ## Commands
 
 ```bash
 node "<skill>/scripts/rooster.mjs" captions <slug> [--out <dir>] [--max-chars 42] [--max-lines 2]
-node "<skill>/scripts/rooster.mjs" captions <slug> --burn renders/draft.mp4 [--out-video renders/captioned.mp4]
+node "<skill>/scripts/rooster.mjs" captions <slug> --burn renders/draft.mp4 [--out-video renders/captioned.mp4] [--dry-run]
 ```
 
-The command writes the sidecars under `edit/captions/` and prints the FFmpeg burn command. It does not execute the burn.
+The command writes the sidecars under `edit/captions/`. With `--burn`, it executes the FFmpeg burn and writes `renders/captioned.mp4` by default; `--dry-run` prints the command instead.
 
 ## QA
 

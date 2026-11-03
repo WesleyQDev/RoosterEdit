@@ -137,10 +137,10 @@ With no active filters, `colorArgs` falls back to stream copy. With filters, it 
 ## Commands
 
 ```bash
-node "<skill>/scripts/rooster.mjs" color <slug> [--input <path>] [--out <path>] [--update-plan]
+node "<skill>/scripts/rooster.mjs" color <slug> [--input <path>] [--out <path>] [--update-plan] [--skip-stabilize]
 ```
 
-The command writes `assets/generated/graded.mp4`; `--update-plan` points `plan.source` at the graded file before build. Stabilization still needs the separate two-pass flow.
+The command writes `assets/generated/graded.mp4`; `--update-plan` points `plan.source` at the graded file before build. When `plan.color.stabilize` is true, the command runs the two vidstab passes automatically unless `--skip-stabilize` is passed.
 
 ## QA
 
@@ -160,7 +160,7 @@ The command writes `assets/generated/graded.mp4`; `--update-plan` points `plan.s
 - This is a lightweight grade, not a color-managed pipeline. There is no HDR, log conversion, gamut mapping, or per-shot matching.
 - `eq` and `colorbalance` are approximations; a LUT or a dedicated grade is better for precise looks.
 - Stabilization needs two passes, a writable work directory, and an FFmpeg build with the `vidstab` filters. It cannot fix rolling shutter, motion blur, or a shot with no stable frame.
-- `colorArgs` ignores `color.stabilize`; run `buildStabilizePasses` separately or combine the filters manually.
+- `colorArgs` ignores `color.stabilize`; the `color` command runs `buildStabilizePasses` before the grade, or use `--skip-stabilize`.
 - `colorArgs` copies the audio stream. An incompatible audio codec/container combination will fail.
 - Plan validation checks that a declared LUT exists and warns when `stabilize` needs the two-pass flow; it does not validate every numeric range.
 - `build` does not call `colorArgs` or `buildStabilizePasses` yet; run the `color` command with `--update-plan` before building.

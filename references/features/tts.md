@@ -167,7 +167,7 @@ Then fill `duration`, accumulate `start`/`end` in the order the lines appear, an
 - Add each measured line to the timeline `a1` voice track as `{ id, src, start, end, volume }`.
 - Run loudness normalization after assembly (target around `-14 LUFS` for web video).
 - Cache per line and reuse unchanged audio. Regenerate only changed ids.
-- Current `build` does not yet consume `edit/voiceover.json` automatically; use the generated audio as the base or wire the voice track before final render.
+- `build` now reads measured lines from `edit/voiceover.json`, builds a voice track, and mixes it over the base audio before music/SFX. Lines without measured start/duration are ignored.
 
 ## Limitations
 
