@@ -52,6 +52,23 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 
 O plano é o ponto de controle. Ele vira um artefato revisável antes do preview e do render. Se ele estiver errado, o vídeo inteiro sai errado.
 
+## As 8 etapas
+
+O agente acompanha o projeto com um marcador `Etapa X/8` e só avança nos gates de aprovação. Etapas que não se aplicam são puladas com uma explicação curta.
+
+| Etapa | O que acontece | Você aprova |
+|---|---|---|
+| 1. Ambiente e workspace | doctor, workspace e canal | — |
+| 2. Brief e intake | objetivo, público, formato, duração e restrições | brief |
+| 3. Assets e transcrição | material, probe, transcrição e mapa editorial | — |
+| 4. Plano de edição | cortes, elementos, música e capítulos | plano |
+| 5. Storyboard e timeline | cenas, tempos, legendas e áudio | storyboard/timeline |
+| 6. Engine build | projeto HyperFrames ou Remotion | — |
+| 7. Preview e QA | preview no browser, frames e checklist | preview |
+| 8. Render e entrega | draft, final, thumbnail e metadata | render final |
+
+As etapas pesadas podem rodar em subagents para economizar contexto, mas o fluxo é o mesmo sem eles: os artefatos e os gates não mudam.
+
 ## Instalação
 
 A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, usando a pasta de skills que o seu harness lê, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer configurar o workspace.
