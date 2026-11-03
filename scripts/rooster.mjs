@@ -919,6 +919,11 @@ function validatePlan(plan, dir) {
     if (!cut.reason) errors.push(`plan: cut "${cut.id || "?"}" missing reason`);
   }
 
+  const sourceDuration =
+    Array.isArray(plan.keeps) && plan.keeps.length
+      ? Math.max(...plan.keeps.map((keep) => Number(keep.end) || 0))
+      : Number(plan.duration) || 0;
+
   for (const element of plan.elements || []) {
     checkId(element.id, "element");
     if (typeof element.start !== "number" || typeof element.end !== "number") {
@@ -928,7 +933,7 @@ function validatePlan(plan, dir) {
     }
     if (!element.type) errors.push(`plan: element "${element.id || "?"}" missing type`);
     if (!element.description) errors.push(`plan: element "${element.id || "?"}" missing description`);
-    if (typeof plan.duration === "number" && typeof element.end === "number" && element.end > plan.duration + 0.5) {
+    if (sourceDuration && typeof element.end === "number" && element.end > sourceDuration + 0.5) {
       warnings.push(`plan: element "${element.id || "?"}" ends after the source duration`);
     }
   }
@@ -964,6 +969,13 @@ function printPlanSummary(plan) {
     console.log(`  ${formatClock(cut.start)}–${formatClock(cut.end)}  ${cut.reason || "?"}${cut.note ? ` — ${cut.note}` : ""}`);
   }
 
+  if ((plan.keeps || []).length) {
+    heading(`Keeps (${plan.keeps.length})`);
+    for (const keep of plan.keeps) {
+      console.log(`  ${formatClock(keep.start)}–${formatClock(keep.end)}  ${keep.reason || ""}`);
+    }
+  }
+
   heading(`Elements (${(plan.elements || []).length})`);
   for (const element of plan.elements || []) {
     const text = element.text ? ` "${element.text}"` : "";
@@ -985,6 +997,10 @@ function hasHyperFrames() {
   const result = run("npx", ["--yes", "hyperframes", "--version"], { timeout: 2 * 60 * 1000 });
   hyperframesAvailable = result.ok && /\d+\.\d+\.\d+/.test(result.stdout);
   return hyperframesAvailable;
+}
+
+function hasFasterWhisper() {
+  return run("python", ["-c", "import faster_whisper"], { timeout: 30000 }).ok;
 }
 
 function groupWordsIntoSegments(words, maxWords = 14, maxGap = 0.8) {
@@ -1086,7 +1102,7 @@ function transcribeCommand(args) {
 
   // Prefer HyperFrames when available. It can use Parakeet (English) or
   // whisper.cpp (other languages) and writes a word-level transcript.
-  if (requestedEngine !== "whisper" && hasHyperFrames()) {
+  if (requestedEngine !== "whisper" && requestedEngine !== "faster-whisper" && hasHyperFrames()) {
     const workDir = path.join(outDir, ".transcribe");
     ensureDir(workDir);
     const hfResult = run(
@@ -1135,9 +1151,38 @@ function transcribeCommand(args) {
     }
   }
 
+  // Prefer faster-whisper when available. It is lighter than the OpenAI
+  // whisper CLI and handles Portuguese accents better with the base model.
+  if (!raw && (requestedEngine === "auto" || requestedEngine === "faster-whisper") && hasFasterWhisper()) {
+    const scriptPath = path.join(SKILL_ROOT, "scripts", "transcribe_faster.py");
+    const fasterOut = path.join(outDir, "transcript.json");
+    const result = run(
+      "python",
+      [
+        scriptPath,
+        "--input", input,
+        "--output", fasterOut,
+        "--language", language,
+        "--model", model,
+      ],
+      { cwd: project.dir, timeout: 2 * 60 * 60 * 1000 }
+    );
+    if (result.ok) {
+      const parsed = readJson(fasterOut, null);
+      if (parsed) {
+        raw = parsed;
+        used = "faster-whisper";
+      } else {
+        errors.push("faster-whisper finished but transcript.json is invalid");
+      }
+    } else {
+      errors.push(result.stderr || result.stdout || "faster-whisper failed");
+    }
+  }
+
   // Fallback to the OpenAI whisper CLI when HyperFrames is unavailable or
   // explicitly disabled.
-  if (!raw && requestedEngine !== "hyperframes") {
+  if (!raw && requestedEngine !== "hyperframes" && requestedEngine !== "faster-whisper") {
     const whisper = detectWhisper();
     if (whisper === "whisper") {
       const result = run(
@@ -1172,7 +1217,7 @@ function transcribeCommand(args) {
       } else {
         errors.push(result.stderr || result.stdout || "whisper failed");
       }
-    } else if (whisper) {
+    } else if (whisper && whisper !== "faster-whisper (python)") {
       errors.push(`Detected "${whisper}", but the fallback wraps the OpenAI whisper CLI.`);
     }
   }
@@ -1181,7 +1226,7 @@ function transcribeCommand(args) {
     fail(
       "Transcription failed.\n" +
         (errors.length ? errors.join("\n") + "\n" : "") +
-        "Install HyperFrames (npx hyperframes) or Whisper (python -m pip install --user -U openai-whisper)."
+        "Install HyperFrames (npx hyperframes), faster-whisper (python -m pip install --user -U faster-whisper), or Whisper (python -m pip install --user -U openai-whisper)."
     );
   }
 
@@ -1431,7 +1476,32 @@ function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "a
     !(keeps.length === 1 && keeps[0].start <= 0.001 && keeps[0].end >= (Number(plan.duration) || 0) - 0.001);
 
   if (!needsCut) {
-    const target = path.join(assetsDir, `base${sourceExt || (kind === "video" ? ".mp4" : kind === "image" ? ".png" : ".m4a")}`);
+    const target = path.join(assetsDir, `base${hasVideo ? ".mp4" : hasAudio ? ".m4a" : sourceExt || ".png"}`);
+
+    // Even without cuts, normalize the audio to the delivery target. Copying
+    // the video stream keeps this fast (audio-only re-encode).
+    if (hasAudio && !image && versionOf("ffmpeg", ["-version"])) {
+      const ffArgs = [
+        "-y", "-i", source,
+        ...(hasVideo ? ["-map", "0:v:0"] : []),
+        "-map", "0:a:0",
+        ...(hasVideo ? ["-c:v", "copy"] : []),
+        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
+        "-c:a", "aac", "-b:a", "192k",
+        target,
+      ];
+      const result = run("ffmpeg", ffArgs, { timeout: 30 * 60 * 1000 });
+      if (result.ok) {
+        return {
+          path: `assets/${path.basename(target)}`,
+          duration: Number(plan.duration) || 0,
+          hasVideo,
+          hasAudio,
+          kind,
+        };
+      }
+    }
+
     linkOrCopy(source, target);
     return {
       path: `assets/${path.basename(target)}`,
@@ -1456,16 +1526,16 @@ function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "a
   let maps = [];
   if (hasVideo && hasAudio) {
     const inputs = keeps.map((_, index) => `[v${index}][a${index}]`).join("");
-    concatFilter = `${inputs}concat=n=${keeps.length}:v=1:a=1[v][a]`;
-    maps = ["-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k"];
+    concatFilter = `${inputs}concat=n=${keeps.length}:v=1:a=1[v][a];[a]loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
+    maps = ["-map", "[v]", "-map", "[aout]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k"];
   } else if (hasVideo) {
     const inputs = keeps.map((_, index) => `[v${index}]`).join("");
     concatFilter = `${inputs}concat=n=${keeps.length}:v=1:a=0[v]`;
     maps = ["-map", "[v]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20"];
   } else {
     const inputs = keeps.map((_, index) => `[a${index}]`).join("");
-    concatFilter = `${inputs}concat=n=${keeps.length}:v=0:a=1[a]`;
-    maps = ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"];
+    concatFilter = `${inputs}concat=n=${keeps.length}:v=0:a=1[a];[a]loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
+    maps = ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"];
   }
 
   const target = path.join(assetsDir, `base${hasVideo ? ".mp4" : ".m4a"}`);
@@ -1505,16 +1575,16 @@ function renderHyperFramesElement(element, index) {
 
   switch (element.type) {
     case "letreiro":
-      return `<div ${common("title")}>${htmlEscape(text)}</div>`;
+      return `<div ${common("title")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
     case "caption-emphasis":
-      return `<div ${common("caption")}>${htmlEscape(text)}</div>`;
+      return `<div ${common("caption")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
     case "grafico":
     case "lista":
       return `<div ${common("card")}><span class="card-kicker">${element.type === "lista" ? "Lista" : "Grafico"}</span><strong>${htmlEscape(text)}</strong><p>${htmlEscape(element.description || "")}</p></div>`;
     case "lower-third":
       return `<div ${common("lower-third")}><strong>${htmlEscape(text)}</strong><span>${htmlEscape(element.description || "")}</span></div>`;
     case "end-card":
-      return `<div ${common("end-card")}><strong>${htmlEscape(text)}</strong><p>${htmlEscape(element.description || "")}</p></div>`;
+      return `<div ${common("end-card")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
     case "broll": {
       const asset = element.src || element.asset;
       if (asset) {
@@ -1542,6 +1612,32 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   const duration = Number(plan.duration) || 10;
   const lang = String(plan.language || "").toLowerCase().startsWith("pt") ? "pt-BR" : "en";
   const projectName = project.config.name || project.slug;
+  const panel = plan.layout?.type === "speaker-left-panel";
+  const panelBox = plan.layout?.panel || { x: 700, y: 40, width: 1160, height: 1000 };
+  const panelCss = panel
+    ? `
+      #panel {
+        position: absolute;
+        left: ${panelBox.x}px;
+        top: ${panelBox.y}px;
+        width: ${panelBox.width}px;
+        height: ${panelBox.height}px;
+        z-index: 1;
+        background: #060913;
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        border-radius: 24px;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+      }
+      #brand { left: ${panelBox.x + 80}px; top: ${panelBox.y + 30}px; }
+      .title { left: ${panelBox.x + 80}px; top: 50%; transform: translateY(-50%); width: ${panelBox.width - 160}px; font-size: 96px; }
+      .caption { left: ${panelBox.x + 80}px; top: 50%; bottom: auto; transform: translateY(-50%); width: ${panelBox.width - 160}px; font-size: 54px; }
+      .card { left: ${panelBox.x + 60}px; right: ${1920 - (panelBox.x + panelBox.width) + 60}px; top: ${panelBox.y + 240}px; }
+      .lower-third { left: ${panelBox.x + 80}px; bottom: ${1080 - (panelBox.y + panelBox.height) + 150}px; }
+      .lower-third span { font-size: 28px; }
+      .end-card { left: ${panelBox.x}px; right: ${1920 - (panelBox.x + panelBox.width)}px; top: ${panelBox.y}px; bottom: auto; height: ${panelBox.height}px; font-family: var(--display); font-size: 72px; font-weight: 700; }
+    `
+    : "";
+  const panelHtml = panel ? '<div id="panel"></div>' : "";
 
   const elements = (plan.elements || [])
     .map((element, index) => ({ element, index, html: renderHyperFramesElement(element, index) }))
@@ -1566,6 +1662,11 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   } else {
     baseHtml = `<audio id="voice" src="${base.path}" data-start="0" data-duration="${duration.toFixed(3)}"></audio>`;
   }
+
+  const baseTween =
+    base.kind === "image" || base.kind === "video"
+      ? `tl.to("#base", { scale: 1.035, duration: ${duration.toFixed(3)}, ease: "none" }, 0);`
+      : "";
 
   return `<!doctype html>
 <html lang="${lang}">
@@ -1599,12 +1700,16 @@ function renderHyperFramesHtml(project, plan, theme, base) {
           radial-gradient(circle at 20% 80%, color-mix(in srgb, var(--accent2) 12%, transparent), transparent 40%),
           var(--bg);
       }
-      #base { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      #base { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+      #brand, .title, .caption, .card, .lower-third, .end-card { z-index: 2; position: absolute; }
       #brand {
         position: absolute; left: 96px; top: 72px;
         color: var(--accent); font-family: var(--display);
         font-size: 28px; font-weight: 700; letter-spacing: 0.18em;
         text-transform: uppercase;
+        background: rgba(6, 9, 19, 0.78);
+        padding: 10px 16px;
+        border-radius: 8px;
       }
       .title {
         position: absolute; left: 96px; top: 240px; width: 1600px;
@@ -1612,11 +1717,34 @@ function renderHyperFramesHtml(project, plan, theme, base) {
         font-size: 104px; font-weight: 700; line-height: 1.02;
         letter-spacing: -0.04em;
       }
+      .title::after {
+        content: attr(data-description);
+        display: block;
+        margin-top: 18px;
+        color: var(--muted);
+        font-family: var(--body);
+        font-size: 28px;
+        font-weight: 500;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
       .caption {
         position: absolute; left: 96px; bottom: 170px; width: 1500px;
         color: var(--fg); font-family: var(--display);
         font-size: 68px; font-weight: 700; line-height: 1.08;
         letter-spacing: -0.03em;
+      }
+      .caption::before {
+        content: attr(data-description);
+        display: block;
+        margin-bottom: 18px;
+        color: var(--accent);
+        font-family: var(--body);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
       }
       .card {
         position: absolute; left: 200px; right: 200px; top: 300px;
@@ -1631,17 +1759,27 @@ function renderHyperFramesHtml(project, plan, theme, base) {
       .card p { margin-top: 18px; color: var(--muted); font-size: 28px; line-height: 1.35; }
       .lower-third {
         position: absolute; left: 96px; bottom: 96px;
-        padding-left: 24px; border-left: 6px solid var(--accent); color: var(--fg);
+        padding: 18px 24px; border-left: 6px solid var(--accent); color: var(--fg);
+        background: rgba(6, 9, 19, 0.84);
+        border-radius: 0 12px 12px 0;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
       }
       .lower-third strong { display: block; font-family: var(--display); font-size: 34px; }
-      .lower-third span { display: block; margin-top: 6px; color: var(--muted); font-size: 24px; }
+      .lower-third span { display: block; margin-top: 6px; color: var(--muted); font-size: 28px; }
       .end-card {
         position: absolute; inset: 0; display: flex; flex-direction: column;
         align-items: center; justify-content: center; text-align: center; color: var(--fg);
       }
-      .end-card strong { font-family: var(--display); font-size: 88px; }
-      .end-card p { margin-top: 24px; color: var(--muted); font-size: 28px; }
+      .end-card::after {
+        content: attr(data-description);
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 28px;
+        font-weight: 500;
+      }
       .broll { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      ${panelCss}
     </style>
   </head>
   <body>
@@ -1656,11 +1794,13 @@ function renderHyperFramesHtml(project, plan, theme, base) {
     >
       <div id="brand" class="clip" data-start="0" data-duration="${duration.toFixed(3)}" data-track-index="0">${htmlEscape(projectName)}</div>
       ${baseHtml}
+      ${panelHtml}
       ${elementHtml}
     </div>
     <script>
       const tl = gsap.timeline({ paused: true });
       tl.seek(0);
+      ${baseTween}
       ${timeline}
       window.__timelines["main"] = tl;
       tl.seek(0);
@@ -2113,7 +2253,7 @@ function ingest(args) {
     const destDir = path.join(dir, "assets", "source", slugify(path.parse(base).name));
     ensureDir(destDir);
     const dest = path.join(destDir, base);
-    fs.copyFileSync(source, dest);
+    linkOrCopy(source, dest);
     const probe = probeMedia(dest);
     const asset = {
       id: `asset-${shortHash(dest)}`,
@@ -2220,7 +2360,7 @@ Ingest options:
 
 Transcribe options:
   --input <path>                  Override the media file
-  --engine <id>                   auto | hyperframes | whisper (default: auto)
+  --engine <id>                   auto | hyperframes | whisper | faster-whisper (default: auto)
   --model <name>                  Whisper model (default: small)
   --language <code>               Language (default: pt)
 

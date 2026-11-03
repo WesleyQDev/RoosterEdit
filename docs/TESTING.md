@@ -78,6 +78,21 @@ Resultado:
 - Os dois builds aplicaram os cortes com FFmpeg, remapearam os tempos dos elementos, geraram o projeto do engine e renderizaram frames inspecionados visualmente.
 - O tema veio do profile `minimal` (fundo claro, tipografia escura, acento terracota).
 
+## 6. Teste com vídeo real (pitch Momai)
+
+Vídeo de entrada: `Boa 2910 01.mp4` (8:57, 1920×1080, 60 fps, 416 MB).
+
+- Transcrição com faster-whisper `base` (o `small` estava trocando acentos por `?`): 74 segmentos.
+- Plano inicial de highlight (88s) rejeitado pelo usuário: o painel cobria a tela e os cortes eram agressivos demais.
+- Plano corrigido: vídeo completo (537.13s), sem cortes, apenas lower thirds pequenos nos momentos-chave.
+- Render HyperFrames: 8:57.1, 1920×1080, 30 fps, H.264/AAC, ~86.4 MB.
+- Áudio normalizado em pós-processamento: -14.07 LUFS, true peak -1.37 dBFS.
+- `npx hyperframes check`: 0 erros, 0 warnings.
+- Frames inspecionados: slide/timer originais visíveis, sem painel cobrindo; lower-thirds legíveis com fundo escuro.
+- Tempo de render: ~11m55s com 6 workers.
+
+Lição: para footage real com slide estático, não cobrir a tela com um painel. Usar apenas lower-thirds/captions pequenos e deixar o vídeo contínuo. O `layout: speaker-left-panel` continua disponível para casos em que o usuário pedir explicitamente.
+
 ## O que funcionou
 
 - `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).

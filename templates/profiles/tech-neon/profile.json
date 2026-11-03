@@ -14,7 +14,7 @@
       "accent2": "#f472b6"
     },
     "typography": {
-      "display": { "family": "Space Grotesk", "weight": 700 },
+      "display": { "family": "Inter", "weight": 700 },
       "body": { "family": "Inter", "weight": 400 },
       "mono": { "family": "JetBrains Mono", "weight": 500 }
     },

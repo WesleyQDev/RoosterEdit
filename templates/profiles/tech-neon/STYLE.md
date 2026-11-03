@@ -20,7 +20,7 @@ Tecnologia noturna, precisa e um pouco cinematográfica. O contraste é alto, ma
 
 ## Tipografia
 
-- Display: Space Grotesk 700.
+- Display: Inter 700.
 - Corpo: Inter 400.
 - Mono: JetBrains Mono 500 para código, métricas e labels.
 - Títulos grandes, tracking levemente negativo.
