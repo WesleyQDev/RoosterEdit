@@ -207,7 +207,7 @@ Produce, in order:
 4. `storyboard/storyboard.json` — scenes, frames, durations, transitions, overlays, 3D cues.
 5. `edit/timeline.json` — the edit decision list in timeline form.
 
-Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval.
+Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
 
 If the user asked for `auto`, log the decisions and keep moving; if they asked for `guided`, stop at the gates that matter (brief, script, style/storyboard, rough cut, final).
 
@@ -287,7 +287,7 @@ The review page should make these obvious:
 
 ## Step 8 — QA
 
-Read `references/qa.md` for the full checklist. At minimum, verify:
+Read `references/qa.md` for the full checklist. Run `captions <slug>` first when the project needs caption sidecars. At minimum, verify:
 
 - resolution, aspect ratio, fps, and duration match the plan;
 - no unintended black frames, freeze frames, or gaps;
@@ -303,7 +303,7 @@ Fix the cheap issues before rendering. A technical QA pass on a draft is faster 
 
 ## Step 9 — Render and deliver
 
-Render a draft, inspect it, then render the final. Validate the output with FFprobe: duration, resolution, fps, audio channels, and loudness.
+Render a draft, inspect it, then render the final. Validate the output with FFprobe: duration, resolution, fps, audio channels, and loudness. Run `deliver <slug>` after the final render to write `renders/thumbnail.jpg` and `renders/metadata.json`.
 
 Deliver a package:
 
@@ -403,6 +403,7 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/profiles.md` | Profile schemas and resolution |
 | `references/timeline.md` | Timeline JSON, review page, and browser QA |
 | `references/qa.md` | Technical and editorial checklists |
+| `references/professional-elements.md` | Index of advanced layers and feature references |
 | `references/harness.md` | Capability detection and degradation |
 | `references/link-ingest.md` | Downloading video links with yt-dlp, metadata, subtitles, and licensing |
 | `references/schemas.md` | JSON schemas for project, channel, profile, timeline, manifest |
@@ -426,6 +427,12 @@ node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.you
 node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
+node "<skill>/scripts/rooster.mjs" captions en-tech/video-x
+node "<skill>/scripts/rooster.mjs" deliver en-tech/video-x
+node "<skill>/scripts/rooster.mjs" reframe en-tech/video-x --format 9:16
+node "<skill>/scripts/rooster.mjs" broll en-tech/video-x
+node "<skill>/scripts/rooster.mjs" audio en-tech/video-x
+node "<skill>/scripts/rooster.mjs" color en-tech/video-x --update-plan
 node "<skill>/scripts/rooster.mjs" list
 node "<skill>/scripts/rooster.mjs" check en-tech/video-x
 

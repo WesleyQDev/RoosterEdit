@@ -13,6 +13,12 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { writeCaptions, burnArgs } from "./features/captions.mjs";
+import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
+import { reframeArgs } from "./features/reframe.mjs";
+import { listMediaFiles, rankBroll, suggestBrollElements } from "./features/broll.mjs";
+import { mixAudioArgs } from "./features/audio.mjs";
+import { colorArgs } from "./features/color.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1498,6 +1504,26 @@ function validatePlan(plan, dir) {
     else if (!exists(path.join(dir, plan.music.src))) warnings.push(`plan: music not found "${plan.music.src}"`);
   }
 
+  for (const [index, clip] of (plan.sfx || []).entries()) {
+    if (!clip.id) errors.push(`plan: sfx[${index}] missing id`);
+    if (!clip.src) errors.push(`plan: sfx[${index}] missing src`);
+    else if (!exists(path.join(dir, clip.src))) warnings.push(`plan: sfx not found "${clip.src}"`);
+    if (typeof clip.start !== "number" || typeof clip.end !== "number") {
+      errors.push(`plan: sfx[${index}] needs numeric start/end`);
+    } else if (clip.start >= clip.end) {
+      errors.push(`plan: sfx[${index}] has start >= end`);
+    }
+  }
+
+  if (plan.color) {
+    if (plan.color.lut && !exists(path.join(dir, plan.color.lut))) {
+      warnings.push(`plan: color LUT not found "${plan.color.lut}"`);
+    }
+    if (plan.color.stabilize) {
+      warnings.push("plan: color.stabilize requires the two-pass vidstab flow");
+    }
+  }
+
   const notesText = (plan.notes || []).join(" ").toLowerCase();
   const cleanCut = /clean cut|cut only|s[oó] corte|sem elementos|no elements/.test(notesText);
   const hasVisualLayer = (plan.elements || []).length > 0;
@@ -1999,6 +2025,291 @@ function planCommand(args) {
   process.exit(errors.length ? 1 : 0);
 }
 
+function captionsCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  if (!exists(transcriptPath)) fail(`No transcript at ${transcriptPath}. Run "transcribe" first.`);
+
+  const outDir = args.out ? path.resolve(CWD, String(args.out)) : path.join(project.dir, "edit", "captions");
+  const result = writeCaptions({
+    transcriptPath,
+    outDir,
+    maxLineChars: args["max-chars"] ? Number(args["max-chars"]) : undefined,
+    maxLines: args["max-lines"] ? Number(args["max-lines"]) : undefined,
+  });
+
+  heading("Captions ready");
+  console.log(`  ${result.files.srt}`);
+  console.log(`  ${result.files.vtt}`);
+  console.log(`  ${result.files.json}`);
+  console.log(`  ${result.count} cue(s)`);
+
+  if (args.burn) {
+    const video = path.resolve(CWD, String(args.burn));
+    const out = args["out-video"]
+      ? path.resolve(CWD, String(args["out-video"]))
+      : path.join(project.dir, "renders", "captioned.mp4");
+    const burn = burnArgs({ video, srt: result.files.srt, out });
+    console.log("\nBurn with:");
+    console.log(`  ${burn.command}`);
+  }
+}
+
+function deliverCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const videoArg = args.video ? path.resolve(CWD, String(args.video)) : null;
+  const candidates = [
+    videoArg,
+    path.join(project.dir, "renders", "final.mp4"),
+    path.join(project.dir, "renders", "draft.mp4"),
+  ].filter(Boolean);
+  const video = candidates.find((candidate) => exists(candidate));
+  if (!video) fail("No render found. Render a draft/final or pass --video <path>.");
+
+  const probe = probeMedia(video) || {};
+  const thumbnailPath = args.thumb
+    ? path.resolve(CWD, String(args.thumb))
+    : path.join(project.dir, "renders", "thumbnail.jpg");
+  const thumbnail = createThumbnail({
+    video,
+    out: thumbnailPath,
+    time: args.time ? Number(args.time) : 1,
+  });
+  if (!thumbnail.ok) fail(`Thumbnail failed: ${thumbnail.error}`);
+
+  const captionsDir = path.join(project.dir, "edit", "captions");
+  const srtPath = path.join(captionsDir, "captions.srt");
+  const vttPath = path.join(captionsDir, "captions.vtt");
+  const captionsJsonPath = path.join(captionsDir, "captions.json");
+  const metadata = buildMetadata({
+    project: { ...project.config, slug: project.slug, title: project.config.name },
+    plan,
+    render: {
+      video,
+      thumbnail: thumbnailPath,
+      srt: exists(srtPath) ? srtPath : null,
+      vtt: exists(vttPath) ? vttPath : null,
+      captionsJson: exists(captionsJsonPath) ? captionsJsonPath : null,
+      ...probe,
+    },
+  });
+  const metadataPath = path.join(project.dir, "renders", "metadata.json");
+  writeJson(metadataPath, metadata);
+
+  heading("Delivery package");
+  console.log(`  video:     ${video}`);
+  console.log(`  thumbnail: ${thumbnailPath}`);
+  console.log(`  metadata:  ${metadataPath}`);
+  if (exists(srtPath)) console.log(`  captions:  ${srtPath}`);
+}
+
+function reframeCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const input = args.input
+    ? path.resolve(CWD, String(args.input))
+    : plan.source
+      ? path.resolve(project.dir, plan.source)
+      : null;
+  if (!input || !exists(input)) fail("Source not found. Pass --input <path> or set plan.source.");
+
+  const probe = probeMedia(input);
+  if (!probe || probe.error || !probe.width || !probe.height) {
+    fail(`Could not probe source dimensions: ${probe?.error || input}`);
+  }
+
+  const format = args.format || project.config.format?.aspect || "16:9";
+  const output = args.out
+    ? path.resolve(CWD, String(args.out))
+    : path.join(project.dir, "assets", "generated", `reframed-${String(format).replace(":", "x")}.mp4`);
+  ensureDir(path.dirname(output));
+
+  const ffArgs = reframeArgs({
+    input,
+    output,
+    sourceWidth: probe.width,
+    sourceHeight: probe.height,
+    format,
+    mode: args.mode || "center",
+    focusX: args["focus-x"] !== undefined ? Number(args["focus-x"]) : 0.5,
+    focusY: args["focus-y"] !== undefined ? Number(args["focus-y"]) : 0.5,
+  });
+  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+  if (!result.ok) fail(`FFmpeg reframe failed:\n${result.stderr || result.stdout || "unknown error"}`);
+
+  heading("Reframed");
+  console.log(`  ${output}`);
+  if (args["update-plan"]) {
+    const relative = path.relative(project.dir, output).replace(/\\/g, "/");
+    writeJson(planPath, { ...plan, source: relative });
+    console.log(`  plan.source updated to ${relative}`);
+  }
+}
+
+function brollCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  const transcript = exists(transcriptPath) ? readJson(transcriptPath, { segments: [] }) : { segments: [] };
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const sourcePath = plan.source ? path.resolve(project.dir, plan.source) : null;
+  const dirs = [
+    args.dir ? path.resolve(CWD, String(args.dir)) : null,
+    path.join(project.dir, "assets", "source"),
+    path.join(project.dir, "assets", "generated"),
+    path.join(project.dir, "assets", "licensed"),
+    path.join(WORKSPACE, "library", "broll"),
+  ].filter(Boolean);
+  const files = listMediaFiles(dirs).filter(
+    (file) =>
+      file !== sourcePath &&
+      !/^(reframed-|base-|voiceover-|music-)/i.test(path.basename(file))
+  );
+  const tags = args.tags ? String(args.tags).split(",").map((tag) => tag.trim()).filter(Boolean) : [];
+  const ranked = rankBroll({ files, transcriptText: transcript, tags });
+  const suggestions = suggestBrollElements({
+    files,
+    transcript,
+    max: args.max ? Number(args.max) : 3,
+    baseDir: project.dir,
+  });
+
+  const reportPath = path.join(project.dir, "edit", "broll-suggestions.json");
+  writeJson(reportPath, {
+    schema: "rooster.broll-suggestions/v1",
+    generatedAt: now(),
+    roots: dirs,
+    candidates: ranked,
+    suggestions,
+  });
+
+  heading("B-roll candidates");
+  for (const item of ranked.slice(0, args.limit ? Number(args.limit) : 10)) {
+    const score = String(item.score).padStart(3, " ");
+    console.log(`  ${score}  ${path.relative(project.dir, item.path)}`);
+  }
+  if (!ranked.length) console.log("  (none)");
+  console.log(`\n  Report: ${reportPath}`);
+
+  if (suggestions.length) {
+    heading("Suggested elements");
+    console.log(JSON.stringify(suggestions, null, 2));
+    if (args.write) {
+      const existing = plan.elements || [];
+      const added = suggestions.filter(
+        (suggestion) =>
+          !existing.some(
+            (element) => element.type === "broll" && element.src === suggestion.src && element.start === suggestion.start
+          )
+      );
+      writeJson(planPath, { ...plan, elements: [...existing, ...added] });
+      console.log(`\n  Added ${added.length} suggestion(s) to ${planPath}`);
+    }
+  }
+}
+
+function audioCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const input = args.input
+    ? path.resolve(CWD, String(args.input))
+    : plan.source
+      ? path.resolve(project.dir, plan.source)
+      : null;
+  if (!input || !exists(input)) fail("Source not found. Pass --input <path> or set plan.source.");
+
+  const music = plan.music?.src
+    ? { ...plan.music, src: path.resolve(project.dir, plan.music.src) }
+    : null;
+  const sfx = (plan.sfx || [])
+    .filter((clip) => clip?.src)
+    .map((clip) => ({ ...clip, src: path.resolve(project.dir, clip.src) }));
+  if (!music && !sfx.length) fail("No plan.music or plan.sfx to mix.");
+
+  const probe = probeMedia(input);
+  if (!probe || probe.error) fail(`Could not probe source: ${probe?.error || input}`);
+  const output = args.out
+    ? path.resolve(CWD, String(args.out))
+    : path.join(project.dir, "assets", "generated", "audio-mix.mp4");
+  ensureDir(path.dirname(output));
+
+  const ffArgs = mixAudioArgs({
+    base: {
+      path: input,
+      kind: probe.width ? "video" : "audio",
+      hasAudio: probe.audio,
+      duration: probe.duration,
+    },
+    music,
+    sfx,
+    out: output,
+    duration: probe.duration,
+  });
+  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+  if (!result.ok) fail(`Audio mix failed:\n${result.stderr || result.stdout || "unknown error"}`);
+
+  heading("Audio mix ready");
+  console.log(`  ${output}`);
+  console.log("  Preview it before building; the plan still owns the music/SFX decisions.");
+}
+
+function colorCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const input = args.input
+    ? path.resolve(CWD, String(args.input))
+    : plan.source
+      ? path.resolve(project.dir, plan.source)
+      : null;
+  if (!input || !exists(input)) fail("Source not found. Pass --input <path> or set plan.source.");
+
+  const color = plan.color && typeof plan.color === "object" ? plan.color : {};
+  if (!Object.keys(color).length) fail("No plan.color settings to apply.");
+  if (color.stabilize) {
+    console.warn("  ! plan.color.stabilize needs the separate two-pass vidstab flow; color filters will run without stabilization.");
+  }
+
+  const output = args.out
+    ? path.resolve(CWD, String(args.out))
+    : path.join(project.dir, "assets", "generated", "graded.mp4");
+  ensureDir(path.dirname(output));
+
+  const ffArgs = colorArgs({ input, output, color });
+  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+  if (!result.ok) fail(`Color pass failed:\n${result.stderr || result.stdout || "unknown error"}`);
+
+  heading("Color pass ready");
+  console.log(`  ${output}`);
+  if (args["update-plan"]) {
+    const relative = path.relative(project.dir, output).replace(/\\/g, "/");
+    writeJson(planPath, { ...plan, source: relative });
+    console.log(`  plan.source updated to ${relative}`);
+  }
+}
+
 function checkRoot(args) {
   const dir = WORKSPACE;
   const errors = [];
@@ -2296,54 +2607,67 @@ function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "a
 }
 
 function applyMusic(project, plan, base, engineDir, assetsSubdir = "assets") {
-  const music = plan.music;
-  if (!music || !music.src) return base;
-
-  const musicSource = path.resolve(project.dir, music.src);
-  if (!exists(musicSource)) {
-    console.warn(`  ! Music not found: ${musicSource}`);
-    return base;
+  let music = plan.music?.src
+    ? { ...plan.music, src: path.resolve(project.dir, plan.music.src) }
+    : null;
+  if (music && !exists(music.src)) {
+    console.warn(`  ! Music not found: ${music.src}`);
+    music = null;
   }
+
+  const sfx = (plan.sfx || [])
+    .map((clip, index) => {
+      if (!clip?.src) {
+        console.warn(`  ! SFX ${index + 1} is missing src`);
+        return null;
+      }
+      const source = path.resolve(project.dir, clip.src);
+      if (!exists(source)) {
+        console.warn(`  ! SFX not found: ${source}`);
+        return null;
+      }
+      return { ...clip, src: source };
+    })
+    .filter(Boolean);
+
+  if (!music && !sfx.length) return base;
   if (base.kind === "image") {
-    console.warn("  ! Music mixing for still-image projects is not automated; add the track in the engine.");
+    console.warn("  ! Audio mixing for still-image projects is not automated; add the track in the engine.");
     return base;
   }
   if (!versionOf("ffmpeg", ["-version"])) {
-    console.warn("  ! FFmpeg not found; music was not mixed.");
+    console.warn("  ! FFmpeg not found; audio was not mixed.");
     return base;
   }
 
   const duration = Math.max(0.1, Number(base.duration) || Number(plan.duration) || 0);
-  const start = Math.max(0, Number(music.start) || 0);
-  const requestedEnd = Number(music.end) || start + duration;
-  const end = Math.min(start + duration, Math.max(start + 0.1, requestedEnd));
-  const musicDuration = Math.max(0.1, end - start);
-  const gainDb = Number.isFinite(Number(music.gainDb)) ? Number(music.gainDb) : -18;
-  const volume = Math.pow(10, gainDb / 20);
-  const fadeOutStart = Math.max(0, musicDuration - 1.5);
   const basePath = path.join(engineDir, assetsSubdir, path.basename(base.path));
   const ext = path.extname(base.path) || ".mp4";
-  const mixedName = `base-music${ext}`;
+  const mixedName = `base-mix${ext}`;
   const mixedPath = path.join(engineDir, assetsSubdir, mixedName);
 
-  const musicFilter = `[1:a]atrim=start=${start}:end=${start + musicDuration},asetpts=PTS-STARTPTS,volume=${volume.toFixed(4)},afade=t=in:st=0:d=1.2,afade=t=out:st=${fadeOutStart.toFixed(3)}:d=1.5,apad=whole_dur=${duration}[m]`;
-  const filter = base.hasAudio
-    ? `${musicFilter};[0:a][m]amix=inputs=2:duration=first:dropout_transition=2[aout]`
-    : `${musicFilter};[m]anull[aout]`;
-
-  const ffArgs = [
-    "-y",
-    "-i", basePath,
-    "-stream_loop", "-1",
-    "-i", musicSource,
-    "-filter_complex", filter,
-  ];
-  if (base.kind === "video") ffArgs.push("-map", "0:v:0", "-c:v", "copy");
-  ffArgs.push("-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-shortest", mixedPath);
+  let ffArgs;
+  try {
+    ffArgs = mixAudioArgs({
+      base: {
+        path: basePath,
+        kind: base.kind,
+        hasAudio: base.hasAudio,
+        duration,
+      },
+      music,
+      sfx,
+      out: mixedPath,
+      duration,
+    });
+  } catch (error) {
+    console.warn(`  ! Could not build audio mix: ${error.message}`);
+    return base;
+  }
 
   const result = run("ffmpeg", ffArgs, { timeout: 30 * 60 * 1000 });
   if (!result.ok) {
-    console.warn(`  ! Could not mix music: ${result.stderr || result.stdout || "unknown error"}`);
+    console.warn(`  ! Could not mix audio: ${result.stderr || result.stdout || "unknown error"}`);
     return base;
   }
   try {
@@ -3181,6 +3505,12 @@ Commands:
   digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check|--show]    Validate, show, and write edit/plan.html
+  captions <slug> [options]       Generate SRT/VTT from the transcript
+  deliver <slug> [options]        Extract thumbnail and write metadata.json
+  reframe <slug> [options]        Crop/scale the source to another aspect ratio
+  broll <slug> [options]          Rank local b-roll and suggest plan elements
+  audio <slug> [options]          Preview plan.music + plan.sfx mix
+  color <slug> [options]          Apply plan.color filters to the source
   build <slug> [options]          Build a HyperFrames or Remotion project from the plan
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
@@ -3205,6 +3535,43 @@ Plan options:
   --check                         Validate only
   --show                          Show the plan summary (default)
   --json                          Machine-readable output
+
+Captions options:
+  --out <dir>                     Output directory (default: edit/captions)
+  --max-chars <n>                 Max characters per line (default: 42)
+  --max-lines <n>                 Max lines per cue (default: 2)
+  --burn <video>                  Print an FFmpeg burn-in command for this video
+  --out-video <path>              Output for the burned video
+
+Delivery options:
+  --video <path>                  Render to deliver (default: renders/final.mp4 or draft.mp4)
+  --thumb <path>                  Thumbnail output (default: renders/thumbnail.jpg)
+  --time <seconds>                Thumbnail timestamp (default: 1)
+
+Reframe options:
+  --input <path>                  Source (default: plan.source)
+  --format <aspect>               16:9 | 9:16 | 1:1 | 4:5 (default: project format)
+  --out <path>                    Output (default: assets/generated/reframed-<aspect>.mp4)
+  --mode <id>                     center | left | right | focus
+  --focus-x <0..1>                Horizontal focus for mode=focus
+  --focus-y <0..1>                Vertical focus for mode=focus
+  --update-plan                   Point plan.source at the reframed file
+
+B-roll options:
+  --dir <path>                    Extra directory to scan
+  --tags <list>                   Comma-separated keywords
+  --max <n>                       Maximum suggested elements (default: 3)
+  --limit <n>                     Maximum candidates printed (default: 10)
+  --write                         Append suggestions to edit/plan.json
+
+Audio mix options:
+  --input <path>                  Source (default: plan.source)
+  --out <path>                    Output (default: assets/generated/audio-mix.mp4)
+
+Color options:
+  --input <path>                  Source (default: plan.source)
+  --out <path>                    Output (default: assets/generated/graded.mp4)
+  --update-plan                   Point plan.source at the graded file
 
 Build options:
   --engine <id>                   hyperframes | remotion (default: auto)
@@ -3329,6 +3696,24 @@ function main() {
       return;
     case "plan":
       planCommand(args);
+      return;
+    case "captions":
+      captionsCommand(args);
+      return;
+    case "deliver":
+      deliverCommand(args);
+      return;
+    case "reframe":
+      reframeCommand(args);
+      return;
+    case "broll":
+      brollCommand(args);
+      return;
+    case "audio":
+      audioCommand(args);
+      return;
+    case "color":
+      colorCommand(args);
       return;
     case "build":
       buildCommand(args);

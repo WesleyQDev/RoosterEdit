@@ -1,0 +1,32 @@
+# Professional elements
+
+These are the layers that separate a cut-only edit from a finished video. Load only the reference for the layer you need; do not put all of this in `SKILL.md`.
+
+| Layer | Reference | What it adds |
+|---|---|---|
+| Captions | `features/captions.md` | SRT/VTT, readable cues, burn-in, accessibility |
+| Motion | `features/motion.md` | Real zooms, fades, dips, slides |
+| Audio | `features/audio.md` | Music ducking, SFX, loudness |
+| Reframe | `features/reframe.md` | 16:9 to 9:16/1:1/4:5 crop and focus |
+| Delivery | `features/delivery.md` | Thumbnail, metadata, chapters, package |
+| Color | `features/color.md` | LUT, contrast, temperature, denoise, stabilization |
+| B-roll | `features/broll.md` | Local discovery, ranking, placement suggestions |
+| Charts | `features/charts.md` | Real bar/line/pie graphics |
+| TTS | `features/tts.md` | Script to voiceover |
+| Multicam | `features/multicam.md` | Camera selection, J/L cuts, speed ramps |
+
+## Order of work
+
+1. Captions and motion: highest impact on retention and perceived quality.
+2. Audio and reframe: music ducking, SFX, and vertical delivery.
+3. Delivery: thumbnail, metadata, captions sidecars, package.
+4. Color, b-roll, charts, TTS and multicam: use when the brief needs them.
+
+## Rules
+
+- Keep `edit/plan.json` as the source of truth. A layer is approved in the plan before build.
+- A layer that is not in the plan is not in the video.
+- Do not cover the footage with a full-screen layer unless the user asks for it.
+- Record licenses for music, SFX, b-roll, fonts and stock.
+- If a layer is omitted, record why in `notes`.
+- Do not grow `SKILL.md` with feature details. Add them to the matching feature reference.
