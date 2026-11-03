@@ -15,6 +15,10 @@ O `doctor` verifica tudo:
 node scripts/rooster.mjs doctor --json
 ```
 
+## Com um agente
+
+Se você quer que o agente instale e valide tudo, o prompt pronto está no [README](../README.md). As seções abaixo cobrem a instalação manual.
+
 ## OpenCode — projeto local
 
 Na raiz do projeto de vídeo:

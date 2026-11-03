@@ -24,9 +24,9 @@
   <a href="#documentação">Documentação</a>
 </p>
 
-RoosterEdit é uma skill para agentes de IA que trabalham com vídeo. Ela organiza o projeto, transcreve o material, monta o plano de edição, aplica os cortes e entrega o vídeo pronto para revisar.
+RoosterEdit é uma skill que ensina agentes de IA a trabalhar com vídeo. Ela junta transcrição, plano de edição, cortes e render em um fluxo só, do material bruto ao arquivo final.
 
-O agente não sai renderizando por conta própria. Primeiro ele mostra o plano e espera o seu OK. Isso evita o erro mais caro do processo: produzir um vídeo inteiro em cima de uma edição errada.
+Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e gráficos, monta cenas em 3D e produz conteúdo para redes sociais. Você escolhe o formato, o estilo e a ferramenta de render, HyperFrames ou Remotion. O agente cuida do projeto do começo ao fim.
 
 ## O que já funciona
 
@@ -50,9 +50,9 @@ O plano é o ponto de controle. Se ele estiver errado, o vídeo inteiro sai erra
 
 ## Instalação
 
-Você vai precisar de Node 20+, FFmpeg com FFprobe e um browser. Whisper, `yt-dlp` e GPU são opcionais.
+A instalação é feita pelo seu agente. Ele clona a skill, confere Node, FFmpeg e o browser, e explica o que ainda falta instalar.
 
-O jeito mais simples é deixar o seu agente instalar e validar tudo. Copie o prompt abaixo e cole na conversa com o seu agente:
+Copie o prompt abaixo e cole na conversa com o seu agente:
 
 ```text
 Instale a skill RoosterEdit neste projeto e valide o ambiente.
@@ -72,15 +72,13 @@ Instale a skill RoosterEdit neste projeto e valide o ambiente.
    - o que ainda precisa ser instalado.
 ```
 
-Se preferir instalar na mão, o passo a passo e as soluções de problemas estão em [`docs/INSTALL.md`](docs/INSTALL.md).
+Se preferir o caminho manual, o passo a passo completo está em [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Primeiro vídeo
 
-Depois de instalar, você não precisa decorar comandos. Peça ao agente algo como "quero fazer um vídeo de 60 segundos sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano.
+Peça ao agente algo como "quero fazer um vídeo de 60 segundos sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano.
 
-Quando ele pedir, coloque o material bruto na pasta do projeto. Depois é só revisar o plano e aprovar. A partir daí o agente gera o projeto, abre o preview e renderiza o vídeo.
-
-O passo a passo completo, com dicas para o primeiro projeto, está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
+Você revisa, aprova e ele segue para o preview e o render. O passo a passo está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
 
 ## Motores
 
