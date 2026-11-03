@@ -18,10 +18,10 @@ For a single video with real footage, the shortest route is:
 
 1. Prepare FFmpeg, Node, Python, Whisper, HyperFrames (with permission).
 2. Create/resolve the project and put raw media in `assets/source/`.
-3. `art-director` writes `style.md` and resolves the profile.
+3. `art-director` writes `style.md` and resolves the profile. Run `styleproof <slug>` and approve the three frames.
 4. `transcript-analyst` transcribes to `edit/transcript.json` and writes `edit/analysis.json`; `editor` writes `edit/plan.json`; show the plan and wait for approval.
-5. `engineer` builds the visual elements from the plan.
-6. `engineer` assembles in HyperFrames or Remotion; `qa` reviews, then `engineer` renders to `renders/`.
+5. `engineer` builds the visual elements from the plan. Run `build --sample 3` and approve the sample first.
+6. `engineer` assembles in HyperFrames or Remotion; `qa` reviews `preview/index.html` and the frames, then `engineer` renders to `renders/`. Use `export` for an NLE handoff.
 
 Read `references/video-pipeline.md` for the full mapping. This is the default for single-video jobs; the rest of this document is the broader studio pipeline.
 

@@ -19,14 +19,15 @@ rooster/
 │       │       ├── brief.md
 │       │       ├── script.md
 │       │       ├── style.md
+│       │       ├── style/proof/
 │       │       ├── storyboard/
 │       │       ├── assets/{source,generated,licensed}/
-│       │       ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/}
+│       │       ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/,export/}
 │       │       ├── engine/{hyperframes|remotion}/
 │       │       ├── work/{handoffs,logs,scratch,notes}/
 │       │       ├── preview/
 │       │       ├── renders/
-│       │       ├── qa/
+│       │       ├── qa/{report.md,text-review.md,frames/}
 │       │       └── review.md
 │       ├── profiles/
 │       ├── assets/
@@ -126,6 +127,18 @@ work/
 ```
 
 O principal lê os handoffs, vê o `plan.html` e 3–5 frames. A transcrição completa, o código gerado e os logs ficam fora do contexto principal. O protocolo está em [`references/subagents.md`](../references/subagents.md) e o contrato de retorno em [`agents/_handoff.md`](../agents/_handoff.md).
+
+## Review e handoff
+
+| Artefato | Comando | Uso |
+|---|---|---|
+| `style/proof/index.html` | `styleproof <slug>` | 3 frames de amostra do estilo antes do plano |
+| `edit/plan.html` | `plan <slug> --show` | Plano com player, contexto da transcrição e textos para revisar |
+| `preview/index.html` | `preview <slug>` | Player, timeline, validação, assets e checklist de QA |
+| `qa/text-review.md` | `textcheck <slug>` | Todos os textos em tela com timecodes e alertas |
+| `edit/export/` | `export <slug> --format both` | EDL/FCPXML para DaVinci ou Premiere |
+
+O `preview` e o `styleproof` são arquivos HTML estáticos; funcionam sem servidor. O `export` é um handoff, não substitui `edit/plan.json`.
 
 ## Perfis
 

@@ -167,6 +167,43 @@ The compact editorial map produced by `transcript-analyst`. It is the input for 
 
 Required: `schema`, `durationSec`, `topics`, `beats`. Each beat needs `id`, `in`, `out`, `label`. `cuts`, `broll`, `claims`, and `speakers` are optional.
 
+## styleproof.json
+
+```json
+{
+  "schema": "rooster.styleproof/v1",
+  "project": "meu-video",
+  "profile": "minimal",
+  "format": { "width": 1920, "height": 1080, "fps": 30 },
+  "frames": [
+    { "id": "hook", "label": "Hook", "purpose": "Headline, contrast, energy" },
+    { "id": "data", "label": "Dado", "purpose": "Chart, number, comparison" },
+    { "id": "caption", "label": "Legenda", "purpose": "Caption, lower third, safe area" }
+  ],
+  "createdAt": "2026-11-03T00:00:00.000Z"
+}
+```
+
+The `style/proof/index.html` file is the review artifact; `proof.json` records what was approved.
+
+## text-review.json
+
+```json
+{
+  "schema": "rooster.textreview/v1",
+  "project": "meu-video",
+  "items": [
+    { "source": "plan", "id": "el-001", "type": "letreiro", "start": 3, "end": 6, "text": "A virada" }
+  ],
+  "issues": [
+    { "level": "warning", "id": "el-001", "message": "texto longo (82 caracteres)" }
+  ],
+  "createdAt": "2026-11-03T00:00:00.000Z"
+}
+```
+
+`qa/text-review.md` is the human-readable version.
+
 ## plan.json
 
 ```json

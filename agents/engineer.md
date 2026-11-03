@@ -17,8 +17,10 @@ Do not read the raw transcript, and do not load the whole reference library.
 2. Scaffold inside `channels/<channel>/projects/<slug>/engine/<engine>/`. Keep the source of truth in `edit/plan.json` or `edit/timeline.json`; the engine translates it.
 3. Use the CLI where it exists:
    - `build <slug> --engine <engine>` for the first build;
-   - `preview <slug>` prints the engine preview command; run it;
+   - `build <slug> --sample 3` for a sample build of three representative elements; add `--force` only if the user approves replacing an existing build;
+   - `preview <slug>` writes `preview/index.html`; run it and report the path;
    - `render <slug> --draft` and `render <slug> --final` print the engine render command; run it and capture the log;
+   - `export <slug> --format both` for EDL/FCPXML when the user wants an NLE;
    - `deliver <slug>` for thumbnail and metadata.
 4. Redirect noisy output to `work/logs/<stage>.log`. Read the last 20–30 lines or the JSON summary, not the full log. On Windows use `*> file`; on POSIX use `> file 2>&1`.
 5. Run the engine's check after structural changes: `npx hyperframes check --json` or the Remotion equivalent. Fix errors before returning.

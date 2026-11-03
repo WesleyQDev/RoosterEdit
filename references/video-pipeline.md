@@ -30,9 +30,13 @@ rooster/
 │       │   ├── digest.md
 │       │   ├── analysis.json
 │       │   ├── plan.json
+│       │   ├── plan.md
+│       │   ├── plan.html
 │       │   ├── edl.json
 │       │   ├── timeline.json
-│       │   └── captions/
+│       │   ├── captions/
+│       │   └── export/
+│       ├── style/proof/
 │       ├── engine/
 │       ├── work/{handoffs,logs,scratch,notes}/
 │       ├── preview/

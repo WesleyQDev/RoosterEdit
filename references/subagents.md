@@ -35,12 +35,12 @@ If any of these is missing, if the subagent cannot read the skill folder, or if 
 | 03 Transcript | `transcript-analyst.md` | media, brief | `edit/transcript.json`, `edit/digest.md`, `edit/analysis.json` | duration, topics, beats, flags |
 | 04 Script | `scriptwriter.md` | brief, analysis | `script.md`, `script.json` | hook + beat summary |
 | 04 Plan | `editor.md` | brief, style, analysis, manifest | `edit/plan.json`, `plan.md`, `plan.html` | plan summary + risks |
-| 05 Style | `art-director.md` | brief, profile, plan | `style.md`, `storyboard/storyboard.json` | tokens + scene count + asset needs |
+| 05 Style | `art-director.md` | brief, profile, plan | `style.md`, `style/proof/`, `storyboard/storyboard.json` | tokens + scene count + asset needs |
 | 05 Timeline | `editor.md` | plan, storyboard | `edit/timeline.json`, `edit/edl.json` | duration math + markers |
 | 05 Audio | `audio-director.md` | plan, timeline, script | `edit/voiceover.json`, audio fields | voice/music/mix decisions |
 | 06 Build | `engineer.md` | plan, style, timeline | `engine/<engine>/`, `work/logs/` | status + paths + blocker |
-| 07 QA | `qa.md` | render, plan, checklist | `qa/report.md`, frames, probes | verdict + top issues + frames |
-| 08 Render | `engineer.md` | approved plan, QA | `renders/`, delivery files | final path + probe stats |
+| 07 QA | `qa.md` | render, plan, checklist | `qa/report.md`, `qa/text-review.md`, frames, probes | verdict + top issues + frames |
+| 08 Render | `engineer.md` | approved plan, QA | `renders/`, delivery files, `edit/export/` | final path + probe stats |
 
 The step numbers match the 8-step tracker in `SKILL.md`. A step can use more than one role; each role still returns its own handoff.
 
@@ -133,23 +133,23 @@ This is the highest-value delegation. `transcript-analyst` runs transcription if
 
 ### 04 Script and plan
 
-`scriptwriter` turns the analysis into a script or paper edit. `editor` turns the approved script into `edit/plan.json` with cuts, elements, music, and duration math; it also writes `edit/timeline.json` and `edit/edl.json` when the project uses them. The main agent reviews `plan.html` with the user; it does not read the plan JSON unless a field must be edited. Plan changes go back to the editor, not into the main thread.
+`scriptwriter` turns the analysis into a script or paper edit. `editor` turns the approved script into `edit/plan.json` with cuts, elements, music, and duration math; it also writes `edit/timeline.json` and `edit/edl.json` when the project uses them. The main agent reviews `plan.html` with the user; it does not read the plan JSON unless a field must be edited. The HTML now includes transcript context and the text-review table. Plan changes go back to the editor, not into the main thread. Run `textcheck` before the final approval.
 
 ### 05 Style, storyboard, and audio
 
-`art-director` resolves the profile and writes `style.md` plus the storyboard. `audio-director` handles TTS, music, SFX, and mix decisions after the plan exists; it may edit only the audio fields of the plan. Keep these two serialized: both touch the plan or the artifacts derived from it.
+`art-director` resolves the profile and writes `style.md` plus the storyboard. It also produces the three-frame style proof (`styleproof`) for the hook, data, and caption frames. `audio-director` handles TTS, music, SFX, and mix decisions after the plan exists; it may edit only the audio fields of the plan. Keep these two serialized: both touch the plan or the artifacts derived from it.
 
 ### 06 Build
 
-`engineer` owns the engine project, the build logs, and the fixes. Give it the plan path and the engine, not the plan contents. It redirects output to `work/logs/`, reads the tail, runs the engine check, and returns status and artifact paths. Generated code never enters the main context. If a fix needs an editorial decision, the engineer returns `needs-decision` with one question instead of changing the story.
+`engineer` owns the engine project, the build logs, and the fixes. Give it the plan path and the engine, not the plan contents. It redirects output to `work/logs/`, reads the tail, runs the engine check, and returns status and artifact paths. Generated code never enters the main context. Before the full build, it runs `build --sample 3` so the user can approve three representative elements. If a fix needs an editorial decision, the engineer returns `needs-decision` with one question instead of changing the story.
 
 ### 07 Preview and QA
 
-`qa` opens the preview when a browser is available, captures screenshots, checks console and network errors, probes the render, extracts 5–9 frames, and writes `qa/report.md`. It returns a verdict, the blocking issues, and the frame paths. The main agent looks at 3–5 of those frames itself before asking the user to approve: visual judgment is the director's job, not a delegated checkbox.
+`qa` opens `preview/index.html` when a browser is available, captures screenshots, checks console and network errors, probes the render, extracts 5–9 frames, and writes `qa/report.md`. It runs `textcheck` and reviews `qa/text-review.md`, then checks every cut boundary by ear. It returns a verdict, the blocking issues, and the frame paths. The main agent looks at 3–5 of those frames itself before asking the user to approve: visual judgment is the director's job, not a delegated checkbox.
 
 ### 08 Render and delivery
 
-Use `engineer` in render or package mode. It renders the draft or final, validates with FFprobe, writes `renders/thumbnail.jpg` and `renders/metadata.json`, and returns the path and stats. The main agent verifies that the file exists and reports it; it does not read the render log.
+Use `engineer` in render or package mode. It renders the draft or final, validates with FFprobe, writes `renders/thumbnail.jpg` and `renders/metadata.json`, and returns the path and stats. If the user wants an NLE, run `export <slug> --format both` and hand over `edit/export/`. The main agent verifies that the file exists and reports it; it does not read the render log.
 
 ### 09 Learn
 

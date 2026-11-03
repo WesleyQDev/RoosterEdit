@@ -19,6 +19,7 @@ Cada perfil tem `profile.json` (contrato legível por máquina) e `STYLE.md` (di
 |---|---|
 | `style.md` | Template de guia de estilo para `channels/<canal>/projects/<slug>/style.md` |
 | `plan.example.json` | Exemplo de `edit/plan.json` com cortes e elementos |
+| `install-prompt.pt-BR.md` | Prompt único de instalação + dependências + workspace |
 | `bootstrap-prompt.pt-BR.md` | Prompt de setup inspirado no vídeo de referência, adaptado ao RoosterEdit |
 
 ## Starters de engine (planejados)

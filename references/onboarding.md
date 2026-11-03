@@ -65,6 +65,10 @@ Show one line and ask for confirmation:
 
 If the user confirms, run `init` and `channel new`. If they correct one item, apply it and confirm again. Do not ask the twelve fields.
 
+Start with `guided` for the first one to three videos. When the style is stable and the user trusts the preview, offer `channel set <id> autonomy auto`; do not switch silently.
+
+Before the first plan, run `styleproof <slug>` and approve the three frames. The look is cheaper to change there than after the build.
+
 ## Duration is per project
 
 A channel does not define how many seconds a video has. Duration belongs to each project and can change from video to video. When creating a project, ask for the target duration or infer it from the brief, then pass `--duration`.

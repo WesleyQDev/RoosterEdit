@@ -2,6 +2,8 @@
 
 QA has two jobs: catch technical defects before the user sees them, and catch editorial problems before the render budget is spent. Do both on a draft, not on the final.
 
+Watch the draft end to end at least once before the final render. Sampling frames catches composition and safe-area issues; it does not catch a cut in the middle of a word, a caption that flashes, or a music cue that lands late. Run `textcheck <slug>` and review `qa/text-review.md` before approving.
+
 ## Technical checklist
 
 ### Format
@@ -20,6 +22,8 @@ QA has two jobs: catch technical defects before the user sees them, and catch ed
 
 - [ ] Text is inside the title-safe area (80%).
 - [ ] Key action is inside the action-safe area (90%).
+- [ ] Every on-screen text in `qa/text-review.md` was proofread.
+- [ ] No placeholder, duplicate, or truncated text remains.
 - [ ] Contrast is readable at mobile size.
 - [ ] Fonts are loaded and licensed.
 - [ ] Logos are not distorted.
@@ -35,6 +39,8 @@ QA has two jobs: catch technical defects before the user sees them, and catch ed
 - [ ] Integrated loudness matches the target (-14 LUFS for YouTube, -16 for podcasts, -23 for broadcast).
 - [ ] Music is ducked under voice.
 - [ ] No long silences or abrupt audio cuts.
+- [ ] No cut starts or ends inside a word.
+- [ ] Every cut boundary was checked by ear.
 - [ ] SFX are not louder than the voice.
 - [ ] Stereo/mono layout is correct.
 - [ ] No sample-rate mismatch or drift.
@@ -151,6 +157,8 @@ Write `qa/report.md`:
 - Frames: `qa/frames/`
 - Probe: `qa/probe.json`
 - Loudness: `qa/loudness.json`
+- Text review: `qa/text-review.md`
+- Preview: `preview/index.html`
 
 ## Editorial notes
 - Hook:

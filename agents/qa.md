@@ -20,9 +20,10 @@ Do not read the raw transcript or the generated engine code.
 5. Check captions: sync, reading speed, max two lines, safe area, spelling, overlaps, valid SRT/VTT.
 6. Check safe areas and contrast on mobile. Check that overlays do not cover faces, captions, or key visuals.
 7. Check every planned element, b-roll, and music cue is present. If something was omitted, record it.
-8. Use the browser when available: open the preview, take screenshots, read console errors and failed network requests.
+8. Use the browser when available: open `preview/index.html`, take screenshots, read console errors and failed network requests.
 9. Write `qa/report.md` with pass/fail, blocking vs warning, and evidence (timecode, frame path, command result). Write `qa/probe.json` and `qa/loudness.json`.
-10. Separate technical, editorial, accessibility, and license findings. Cite the specific frame or timecode for each.
+10. Run `textcheck <slug>` and review `qa/text-review.md`. Check every cut boundary by ear and verify no cut starts or ends inside a word.
+11. Separate technical, editorial, accessibility, and license findings. Cite the specific frame or timecode for each.
 
 ## Quality bar
 

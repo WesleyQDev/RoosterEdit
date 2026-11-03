@@ -37,7 +37,11 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 - Organizar materiais por canais, com idioma, formato, estilo, voz e política de assets.
 - Transcrever com HyperFrames/Parakeet ou Whisper.
 - Montar um plano com cortes, capítulos, elementos visuais, b-roll e música.
+- Aprovar 3 frames de estilo e 3 elementos de amostra antes do build completo.
 - Gerar o projeto em HyperFrames ou Remotion já com os cortes e a música aplicados.
+- Revisar o plano e a timeline no browser com player, contexto da transcrição e QA.
+- Listar todos os textos em tela e avisar sobre cortes no meio de palavras.
+- Exportar EDL/FCPXML para finalizar no DaVinci Resolve ou Premiere.
 - Baixar links autorizados com `yt-dlp`.
 - Usar perfis prontos ou criar os seus.
 - Revisar no preview e renderizar o arquivo final.
@@ -67,11 +71,13 @@ O agente acompanha o projeto com um marcador `Etapa X/8` e só avança nos gates
 | 7. Preview e QA | preview no browser, frames e checklist | preview |
 | 8. Render e entrega | draft, final, thumbnail e metadata | render final |
 
-As etapas pesadas podem rodar em subagents para economizar contexto, mas o fluxo é o mesmo sem eles: os artefatos e os gates não mudam.
+As etapas pesadas podem rodar em subagents para economizar contexto, mas o fluxo é o mesmo sem eles: os artefatos e os gates não mudam. Antes do plano, peça 3 frames de amostra do estilo (`styleproof`); antes do build completo, peça 3 elementos de amostra (`build --sample 3`). Isso evita refazer o vídeo inteiro por causa do look.
 
 ## Instalação
 
 A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, usando a pasta de skills que o seu harness lê, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer configurar o workspace.
+
+Você não precisa rodar comandos no terminal: o agente executa e mostra o resultado. Se quiser o prompt único de instalação + dependências + workspace, use [`templates/install-prompt.pt-BR.md`](templates/install-prompt.pt-BR.md). Custos esperados estão em [`docs/COSTS.md`](docs/COSTS.md).
 
 Copie o prompt abaixo e cole na conversa com o seu agente:
 
@@ -95,7 +101,7 @@ Se preferir o caminho manual, o passo a passo completo está em [`docs/INSTALL.m
 
 Peça ao agente algo como "quero fazer um vídeo de 60 segundos sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano. Se você for fornecer os vídeos, ele cria e abre a pasta `assets/source/` para você colocar os arquivos.
 
-Você revisa, aprova e ele segue para o preview e o render. O passo a passo está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
+Você revisa, aprova e ele segue para o preview e o render. Comece com autonomia `guided` nos primeiros vídeos: o agente mostra o style proof, o plano e o preview antes de seguir. Quando o estilo estiver estável, mude o canal para `auto`. O passo a passo está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
 
 ## Motores
 
@@ -131,6 +137,8 @@ Trabalhar com vídeo gasta tokens, então a skill foi feita para ler o mínimo n
 - [`docs/WORKSPACE.md`](docs/WORKSPACE.md): como o workspace é organizado.
 - [`docs/ASSETS.md`](docs/ASSETS.md): direitos e políticas de assets.
 - [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md): como gastar menos contexto.
+- [`docs/COSTS.md`](docs/COSTS.md): o que é grátis, o que é opcional e como evitar retrabalho.
+- [`docs/REFERENCE-VIDEO-IMPROVEMENTS.md`](docs/REFERENCE-VIDEO-IMPROVEMENTS.md): o que o vídeo de referência ensina e o que já foi incorporado.
 - [`docs/TESTING.md`](docs/TESTING.md): o que já foi testado.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): próximos passos.
 

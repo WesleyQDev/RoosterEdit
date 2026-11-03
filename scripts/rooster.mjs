@@ -12,7 +12,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeCaptions, burnArgs } from "./features/captions.mjs";
 import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
 import { reframeArgs, targetDimensions } from "./features/reframe.mjs";
@@ -981,19 +981,45 @@ function openProject(args) {
 
   const target = args.project ? project.dir : path.join(project.dir, "assets", "source");
   ensureDir(target);
-  console.log(target);
+  openPath(target, { print: args.print });
+}
 
-  if (args.print) return;
+function openPath(target, options = {}) {
+  console.log(target);
+  if (options.print) return;
   const command = process.platform === "win32" ? "explorer.exe" : process.platform === "darwin" ? "open" : "xdg-open";
   const result = spawnSync(command, [target], { stdio: "ignore" });
   if (result.error) {
-    console.log(`Could not open automatically. Open this folder manually: ${target}`);
+    console.log(`Could not open automatically. Open this path manually: ${target}`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// list
+// paths and list
 // ---------------------------------------------------------------------------
+
+function pathsCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
+  const paths = {
+    project: project.dir,
+    source: path.join(project.dir, "assets", "source"),
+    style: path.join(project.dir, "style.md"),
+    work: [path.join(project.dir, "edit"), path.join(project.dir, "work")],
+    final: path.join(project.dir, "renders"),
+  };
+  if (args.json) {
+    console.log(JSON.stringify(paths, null, 2));
+    return;
+  }
+  heading(`Paths — ${project.slug}`);
+  console.log(`  bruto    ${paths.source}`);
+  console.log(`  estilo   ${paths.style}`);
+  console.log(`  trabalho ${paths.work.join(" + ")}`);
+  console.log(`  final    ${paths.final}`);
+  console.log(`  projeto  ${paths.project}`);
+}
+
 
 function listWorkspace(args) {
   if (!exists(WORKSPACE)) {
@@ -1494,6 +1520,34 @@ function validateTimeline(timeline, dir) {
   return { errors, warnings };
 }
 
+function cutBoundaryWarnings(plan, dir) {
+  const transcript = readJson(path.join(dir, "edit", "transcript.json"), null);
+  const words = Array.isArray(transcript?.words) ? transcript.words : [];
+  if (!words.length) return [];
+  const tolerance = 0.03;
+  const warnings = [];
+  const wordAt = (time) =>
+    words.find(
+      (word) =>
+        typeof word.start === "number" &&
+        typeof word.end === "number" &&
+        Number(word.start) + tolerance < time &&
+        time < Number(word.end) - tolerance
+    );
+  for (const cut of plan.cuts || []) {
+    if (typeof cut.start !== "number" || typeof cut.end !== "number") continue;
+    for (const [label, time] of [["start", cut.start], ["end", cut.end]]) {
+      const word = wordAt(time);
+      if (word) {
+        warnings.push(
+          `plan: cut "${cut.id || "?"}" ${label}s inside word "${word.text}" (${Number(word.start).toFixed(2)}–${Number(word.end).toFixed(2)})`
+        );
+      }
+    }
+  }
+  return warnings;
+}
+
 function validatePlan(plan, dir) {
   const errors = [];
   const warnings = [];
@@ -1587,9 +1641,10 @@ function validatePlan(plan, dir) {
   }
 
   const sourceDuration =
-    Array.isArray(plan.keeps) && plan.keeps.length
+    Number(plan.duration) ||
+    (Array.isArray(plan.keeps) && plan.keeps.length
       ? Math.max(...plan.keeps.map((keep) => Number(keep.end) || 0))
-      : Number(plan.duration) || 0;
+      : 0);
 
   for (const element of plan.elements || []) {
     checkId(element.id, "element");
@@ -1617,6 +1672,8 @@ function validatePlan(plan, dir) {
     else lastChapter = chapter.start;
     if (!chapter.title) errors.push("plan: chapter missing title");
   }
+
+  warnings.push(...cutBoundaryWarnings(plan, dir));
 
   return { errors, warnings };
 }
@@ -1722,29 +1779,56 @@ function planMarkdown(plan) {
   return lines.join("\n") + "\n";
 }
 
-function planHtml(plan, project) {
+function planHtml(plan, project, transcript = null) {
   const title = project?.config?.name || project?.slug || "Edit plan";
   const elementsList = plan.elements || [];
   const brollCount = elementsList.filter((element) => element.type === "broll").length;
   const noVisualElements = !elementsList.length;
   const noMusic = !plan.music?.src;
+  const segments = Array.isArray(transcript?.segments) ? transcript.segments : [];
+  const sourcePath = plan.source ? path.resolve(project.dir, plan.source) : null;
+  const sourceVideo = sourcePath && exists(sourcePath) && /\.(mp4|webm|mov|m4v)$/i.test(sourcePath) && !/\.json$/i.test(sourcePath);
+  const mediaRel = sourceVideo
+    ? encodeURI(path.relative(path.join(project.dir, "edit"), sourcePath).replace(/\\/g, "/"))
+    : null;
+  const clipName = path.basename(String(plan.source || ""));
+  const contextFor = (start, end) => {
+    const from = Math.max(0, Number(start) || 0);
+    const to = Math.max(from, Number(end) || from);
+    const overlapping = segments
+      .filter((segment) => Number(segment.end) > from && Number(segment.start) < to)
+      .map((segment) => String(segment.text || "").trim())
+      .filter(Boolean);
+    const text = overlapping.join(" ").replace(/\s+/g, " ").trim();
+    if (!text) return "";
+    return text.length > 180 ? `${text.slice(0, 177)}…` : text;
+  };
+  const timeCell = (value) =>
+    mediaRel ? `<a href="#" onclick="seek(${Number(value) || 0});return false">${formatClock(value)}</a>` : formatClock(value);
   const cuts = (plan.cuts || [])
     .map(
       (cut) =>
-        `<tr><td>${formatClock(cut.start)}-${formatClock(cut.end)}</td><td>${htmlEscape(cut.reason || "")}</td><td>${htmlEscape(cut.note || "")}</td></tr>`
+        `<tr><td>${timeCell(cut.start)}–${formatClock(cut.end)}</td><td>${htmlEscape(cut.reason || "")}</td><td>${htmlEscape(cut.note || "")}</td><td class="ctx">${htmlEscape(contextFor(cut.start, cut.end))}</td></tr>`
     )
     .join("");
   const keeps = (plan.keeps || [])
-    .map((keep) => `<tr><td>${formatClock(keep.start)}-${formatClock(keep.end)}</td><td>${htmlEscape(keep.reason || "")}</td></tr>`)
+    .map((keep) => `<tr><td>${timeCell(keep.start)}–${formatClock(keep.end)}</td><td>${htmlEscape(keep.reason || "")}</td></tr>`)
     .join("");
   const elements = elementsList
     .map(
       (element) =>
-        `<tr><td>${formatClock(element.start)}-${formatClock(element.end)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "")}</td><td>${htmlEscape(element.description || "")}</td></tr>`
+        `<tr><td>${timeCell(element.start)}–${formatClock(element.end)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "")}</td><td>${htmlEscape(element.description || "")}</td><td class="ctx">${htmlEscape(contextFor(element.start, element.end))}</td></tr>`
     )
     .join("");
   const chapters = (plan.chapters || [])
-    .map((chapter) => `<tr><td>${formatClock(chapter.start)}</td><td>${htmlEscape(chapter.title || "")}</td></tr>`)
+    .map((chapter) => `<tr><td>${timeCell(chapter.start)}</td><td>${htmlEscape(chapter.title || "")}</td></tr>`)
+    .join("");
+  const textItems = elementsList.filter((element) => element.text || ["letreiro", "grafico", "lista", "lower-third", "caption-emphasis", "end-card"].includes(element.type));
+  const textReview = textItems
+    .map(
+      (element) =>
+        `<tr><td>${timeCell(element.start)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "(sem texto)")}</td></tr>`
+    )
     .join("");
 
   return `<!doctype html>
@@ -1769,26 +1853,189 @@ function planHtml(plan, project) {
     tr:last-child td { border-bottom:0; }
     .empty { color:var(--muted); margin:0; }
     .gate { margin-top:24px; color:var(--muted); }
+    .player { width:100%; max-height:440px; background:#000; border-radius:10px; margin-bottom:18px; display:block; }
+    .ctx { color:var(--muted); font-size:13px; }
+    .text-review td:nth-child(3) { font-weight:600; }
   </style>
 </head>
 <body>
   <main>
     <h1>Plano de edição</h1>
     <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)}` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
+    ${mediaRel ? `<video id="player" class="player" controls preload="metadata" src="${mediaRel}"></video>` : ""}
     ${plan.summary ? `<div class="summary">${htmlEscape(plan.summary)}</div>` : ""}
     <section><h2>Camada criativa</h2><p>Elementos visuais: ${elementsList.length}${brollCount ? ` (b-roll: ${brollCount})` : ""}<br />Música: ${plan.music?.src ? htmlEscape(plan.music.src) : "nenhuma"}</p>${noVisualElements ? `<p class="empty">Sem elementos visuais. Adicione letreiros, b-roll ou gráficos, ou registre um corte limpo em <code>notes</code>.</p>` : ""}${noMusic ? `<p class="empty">Sem música. Adicione uma faixa ou registre "no music requested" em <code>notes</code>.</p>` : ""}</section>
-    <section><h2>Cortes (${(plan.cuts || []).length})</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="empty">Nenhum corte.</p>`}</section>
+    <section><h2>Cortes (${(plan.cuts || []).length})</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th><th>Contexto</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="empty">Nenhum corte.</p>`}</section>
     ${keeps ? `<section><h2>Trechos mantidos (${(plan.keeps || []).length})</h2><table><thead><tr><th>Tempo</th><th>Motivo</th></tr></thead><tbody>${keeps}</tbody></table></section>` : ""}
-    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto</th><th>Descrição</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
+    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto</th><th>Descrição</th><th>Contexto</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
+    ${textReview ? `<section><h2>Textos para revisar</h2><table class="text-review"><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto em tela</th></tr></thead><tbody>${textReview}</tbody></table></section>` : ""}
     ${chapters ? `<section><h2>Capítulos</h2><table><thead><tr><th>Tempo</th><th>Título</th></tr></thead><tbody>${chapters}</tbody></table></section>` : ""}
-    <p class="gate">Aprove este plano antes de criar a timeline e renderizar.</p>
+    <p class="gate">Aprove este plano antes de criar a timeline e renderizar.${mediaRel ? " Clique em um tempo para pular o player." : ""}</p>
   </main>
+  <script>
+    const player = document.getElementById("player");
+    function seek(seconds) {
+      if (!player) return;
+      player.currentTime = Math.max(0, Number(seconds) || 0);
+      player.play().catch(() => {});
+      player.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  </script>
 </body>
 </html>
 `;
 }
 
 let hyperframesAvailable = null;
+
+// ---------------------------------------------------------------------------
+// style proof
+// ---------------------------------------------------------------------------
+
+function styleProofCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
+
+  const profile = resolveProfile(project.config.profile) || {};
+  const theme = themeFromProfile(profile);
+  const format = project.config.format || { width: 1920, height: 1080, fps: 30, aspect: "16:9" };
+  const stylePath = path.join(project.dir, "style.md");
+  const styleText = exists(stylePath) ? fs.readFileSync(stylePath, "utf8") : "";
+  const outDir = path.join(project.dir, "style", "proof");
+  const htmlPath = path.join(outDir, "index.html");
+  const manifestPath = path.join(outDir, "proof.json");
+
+  ensureDir(outDir);
+  writeText(htmlPath, styleProofHtml(project, profile, theme, format, styleText));
+  writeJson(manifestPath, {
+    schema: "rooster.styleproof/v1",
+    project: project.slug,
+    profile: project.config.profile || null,
+    format,
+    frames: [
+      { id: "hook", label: "Hook", purpose: "Headline, contrast, and first-three-seconds energy" },
+      { id: "data", label: "Dado", purpose: "Chart, number, or comparison treatment" },
+      { id: "caption", label: "Legenda", purpose: "Caption, lower third, and safe-area check" },
+    ],
+    createdAt: now(),
+  });
+
+  heading("Style proof");
+  console.log(`  ${htmlPath}`);
+  console.log("\n  Review the three frames before the plan. Ask for color, type,");
+  console.log("  motion, or density changes while the proof is open.");
+  if (args.open) openPath(htmlPath);
+}
+
+function styleProofHtml(project, profile, theme, format, styleText) {
+  const name = project.config.name || project.slug;
+  const profileId = project.config.profile || "default";
+  const aspect = `${format.width || 1920} / ${format.height || 1080}`;
+  const display = theme.display || "Inter";
+  const body = theme.body || "Inter";
+  const styleNote = styleText
+    ? styleText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line && !/^[#\-*]/.test(line)) || ""
+    : "";
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Style proof — ${htmlEscape(name)}</title>
+  <style>
+    :root { color-scheme: dark; --bg:${theme.bg}; --fg:${theme.fg}; --muted:${theme.muted}; --accent:${theme.accent}; --accent2:${theme.accent2}; --line:color-mix(in srgb, var(--fg) 16%, transparent); }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:40px; background:#0a0d14; color:var(--fg); font:15px/1.55 ${JSON.stringify(body)}, system-ui, sans-serif; }
+    main { max-width:1180px; margin:0 auto; }
+    h1 { margin:0 0 6px; font-size:30px; letter-spacing:-0.03em; }
+    .meta { color:var(--muted); margin-bottom:28px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:22px; }
+    .frame { background:var(--bg); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.35); }
+    .canvas { position:relative; aspect-ratio:${aspect}; overflow:hidden; padding:9%; display:flex; flex-direction:column; justify-content:center; background:var(--bg); color:var(--fg); }
+    .canvas::after { content:""; position:absolute; inset:0; background:radial-gradient(circle at 78% 18%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 42%), radial-gradient(circle at 18% 86%, color-mix(in srgb, var(--accent2) 14%, transparent), transparent 40%); pointer-events:none; }
+    .kicker { position:relative; z-index:1; color:var(--accent); font-size:clamp(10px,1.4vw,18px); font-weight:700; letter-spacing:.18em; text-transform:uppercase; margin-bottom:6%; }
+    .headline { position:relative; z-index:1; font-family:${JSON.stringify(display)}, ${JSON.stringify(body)}, system-ui, sans-serif; font-size:clamp(22px,5.2vw,58px); line-height:.98; letter-spacing:-0.045em; font-weight:800; max-width:92%; }
+    .sub { position:relative; z-index:1; color:var(--muted); font-size:clamp(11px,1.7vw,20px); margin-top:5%; max-width:78%; }
+    .rule { position:relative; z-index:1; width:26%; height:4px; background:var(--accent); margin-top:7%; }
+    .big { position:relative; z-index:1; font-family:${JSON.stringify(display)}, ${JSON.stringify(body)}, system-ui, sans-serif; font-size:clamp(38px,10vw,104px); line-height:.9; letter-spacing:-0.06em; font-weight:800; }
+    .big span { color:var(--accent); }
+    .bars { position:relative; z-index:1; display:flex; align-items:flex-end; gap:4%; height:24%; margin-top:6%; }
+    .bar { flex:1; background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 35%, var(--bg))); border-radius:6px 6px 0 0; min-height:8px; }
+    .bar:nth-child(2) { height:62%; background:linear-gradient(180deg, var(--accent2), color-mix(in srgb, var(--accent2) 30%, var(--bg))); }
+    .bar:nth-child(3) { height:38%; }
+    .caption { position:absolute; z-index:2; left:8%; right:8%; bottom:10%; text-align:center; font-family:${JSON.stringify(display)}, ${JSON.stringify(body)}, system-ui, sans-serif; font-size:clamp(14px,2.7vw,30px); line-height:1.12; font-weight:800; letter-spacing:-0.02em; text-shadow:0 2px 12px rgba(0,0,0,.8); }
+    .lower { position:absolute; z-index:2; left:8%; bottom:8%; padding-left:3%; border-left:4px solid var(--accent); }
+    .lower strong { display:block; font-size:clamp(13px,2.2vw,26px); }
+    .lower span { display:block; color:var(--muted); font-size:clamp(10px,1.6vw,18px); margin-top:2px; }
+    .label { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    .label strong { color:var(--fg); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .tokens { margin-top:26px; border:1px solid var(--line); border-radius:14px; padding:18px 20px; background:rgba(255,255,255,.02); }
+    .tokens h2 { margin:0 0 10px; font-size:16px; }
+    .swatches { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    .swatch { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+    .dot { width:18px; height:18px; border-radius:5px; border:1px solid var(--line); }
+    .note { color:var(--muted); font-size:13px; margin-top:8px; }
+    .gate { margin-top:28px; padding:14px 18px; border-left:3px solid var(--accent); background:rgba(255,255,255,.03); color:var(--muted); }
+    @media (max-width: 620px) { body { padding:20px; } .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Style proof</h1>
+  <p class="meta">${htmlEscape(name)} · profile <code>${htmlEscape(profileId)}</code> · ${format.width || 1920}×${format.height || 1080} · ${format.fps || 30} fps</p>
+
+  <div class="grid">
+    <article class="frame">
+      <div class="canvas">
+        <div class="kicker">${htmlEscape(profile?.tokens?.motion?.feel || "Abertura")}</div>
+        <div class="headline">A ideia que<br />muda o jogo.</div>
+        <div class="sub">${htmlEscape(styleNote || "Texto de apoio para validar contraste, tipografia e respiro.")}</div>
+        <div class="rule"></div>
+      </div>
+      <div class="label"><strong>1 · Hook</strong><span>headline + contraste</span></div>
+    </article>
+
+    <article class="frame">
+      <div class="canvas">
+        <div class="kicker">Prova</div>
+        <div class="big">3<span>×</span> mais rápido</div>
+        <div class="bars"><div class="bar" style="height:82%"></div><div class="bar"></div><div class="bar"></div></div>
+        <div class="sub">Um gráfico de exemplo com a paleta e a tipografia do perfil.</div>
+      </div>
+      <div class="label"><strong>2 · Dado</strong><span>gráfico + número</span></div>
+    </article>
+
+    <article class="frame">
+      <div class="canvas">
+        <div class="kicker">Em tela</div>
+        <div class="headline" style="font-size:clamp(18px,4.2vw,46px)">O detalhe que<br />ninguém mostra.</div>
+        <div class="caption">Legenda de exemplo em duas linhas, dentro da área segura.</div>
+        <div class="lower"><strong>Nome do convidado</strong><span>Cargo · Empresa</span></div>
+      </div>
+      <div class="label"><strong>3 · Legenda</strong><span>safe area + lower third</span></div>
+    </article>
+  </div>
+
+  <section class="tokens">
+    <h2>Tokens em uso</h2>
+    <div class="swatches">
+      <span class="swatch"><span class="dot" style="background:${theme.bg}"></span>bg ${htmlEscape(theme.bg)}</span>
+      <span class="swatch"><span class="dot" style="background:${theme.fg}"></span>fg ${htmlEscape(theme.fg)}</span>
+      <span class="swatch"><span class="dot" style="background:${theme.accent}"></span>accent ${htmlEscape(theme.accent)}</span>
+      <span class="swatch"><span class="dot" style="background:${theme.accent2}"></span>accent 2 ${htmlEscape(theme.accent2)}</span>
+    </div>
+    <p class="note">Display: ${htmlEscape(display)} · Body: ${htmlEscape(body)}. Se uma fonte não estiver instalada, o browser usa o fallback do sistema.</p>
+  </section>
+
+  <p class="gate">Aprove estes 3 frames antes do plano e do build. Peça ajustes de cor, tipografia, densidade ou motion agora — depois o custo é maior.</p>
+</main>
+</body>
+</html>
+`;
+}
 
 function hasHyperFrames() {
   if (hyperframesAvailable !== null) return hyperframesAvailable;
@@ -2059,8 +2306,10 @@ function planCommand(args) {
     printPlanSummary(plan);
     const markdownPath = path.join(project.dir, "edit", "plan.md");
     const htmlPath = path.join(project.dir, "edit", "plan.html");
+    const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+    const transcript = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
     writeText(markdownPath, planMarkdown(plan));
-    writeText(htmlPath, planHtml(plan, project));
+    writeText(htmlPath, planHtml(plan, project, transcript));
     console.log(`\n  Artifact: ${htmlPath}`);
     console.log(`  Markdown: ${markdownPath}`);
   }
@@ -2072,6 +2321,111 @@ function planCommand(args) {
   console.log(`\n  ${errors.length} error(s), ${warnings.length} warning(s)`);
   console.log("\n  The plan must be approved before building.");
   process.exit(errors.length ? 1 : 0);
+}
+
+function textcheckCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
+
+  const plan = readJson(path.join(project.dir, "edit", "plan.json"), { elements: [] });
+  const storyboard = readJson(path.join(project.dir, "storyboard", "storyboard.json"), { scenes: [] });
+  const items = [];
+
+  for (const element of plan.elements || []) {
+    items.push({
+      source: "plan",
+      id: element.id || null,
+      type: element.type || "element",
+      start: element.start ?? null,
+      end: element.end ?? null,
+      text: String(element.text || "").trim(),
+    });
+  }
+
+  for (const scene of storyboard.scenes || []) {
+    const raw = scene.onScreenText ?? scene.on_screen_text ?? scene.text;
+    const values = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    for (const value of values) {
+      const text = typeof value === "string" ? value : value?.text ?? value?.label ?? "";
+      items.push({
+        source: "storyboard",
+        id: scene.id || null,
+        type: "scene text",
+        start: scene.start ?? null,
+        end: scene.end ?? null,
+        text: String(text || "").trim(),
+      });
+    }
+  }
+
+  const textTypes = new Set(["letreiro", "grafico", "lista", "lower-third", "caption-emphasis", "end-card"]);
+  const seen = new Map();
+  const issues = [];
+  for (const item of items) {
+    const text = item.text;
+    if (!text) {
+      if (textTypes.has(item.type)) issues.push({ level: "error", id: item.id, message: "texto vazio para um elemento que depende de texto" });
+      continue;
+    }
+    const key = text.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(key)) issues.push({ level: "warning", id: item.id, message: `texto duplicado (já apareceu em ${seen.get(key)})` });
+    else seen.set(key, `${item.source}:${item.id || item.type}`);
+    if (text.length > 80) issues.push({ level: "warning", id: item.id, message: `texto longo (${text.length} caracteres)` });
+    if (text.length > 20 && text === text.toUpperCase() && /[A-ZÀ-Ý]/.test(text)) {
+      issues.push({ level: "warning", id: item.id, message: "texto todo em maiúsculas" });
+    }
+    if (/\s{2,}/.test(text)) issues.push({ level: "warning", id: item.id, message: "espaços duplicados" });
+    if (/^\s|\s$/.test(item.text)) issues.push({ level: "warning", id: item.id, message: "espaço no início/fim" });
+    if (/\?\?|TODO|TBD|FIXME/i.test(text)) issues.push({ level: "error", id: item.id, message: "placeholder no texto" });
+  }
+
+  const outDir = path.join(project.dir, "qa");
+  ensureDir(outDir);
+  const rows = items
+    .map(
+      (item) =>
+        `| ${Number.isFinite(Number(item.start)) ? formatClock(item.start) : "—"} | ${item.source} | ${item.id || "—"} | ${item.type} | ${String(item.text || "").replace(/\|/g, "\\|") || "(vazio)"} |`
+    )
+    .join("\n");
+  const issueRows = issues.length
+    ? issues.map((issue) => `- **${issue.level}** · ${issue.id || "—"} — ${issue.message}`).join("\n")
+    : "- Nenhum alerta automático. Ainda assim, revise manualmente.";
+  const markdown = `# Text review — ${project.config.name || project.slug}
+
+Gerado por \`textcheck\`. Revise cada texto em tela contra o estilo e o contexto.
+
+## Textos
+
+| Tempo | Origem | ID | Tipo | Texto |
+|---|---|---|---|---|
+${rows || "| — | — | — | — | Nenhum texto encontrado. |"}
+
+## Alertas
+
+${issueRows}
+
+## Checklist
+
+- [ ] Ortografia e acentuação
+- [ ] Consistência de nomes e números
+- [ ] Texto dentro da safe area
+- [ ] Nenhum placeholder
+- [ ] Texto legível no mobile
+`;
+  writeText(path.join(outDir, "text-review.md"), markdown);
+  writeJson(path.join(outDir, "text-review.json"), {
+    schema: "rooster.textreview/v1",
+    project: project.slug,
+    items,
+    issues,
+    createdAt: now(),
+  });
+
+  heading("Text review");
+  console.log(`  ${path.join(outDir, "text-review.md")}`);
+  console.log(`  ${items.length} text(s), ${issues.length} issue(s)`);
+  for (const issue of issues.slice(0, 8)) console.log(`  ! ${issue.id || "—"}: ${issue.message}`);
+  if (issues.length > 8) console.log(`  … ${issues.length - 8} more in the file`);
 }
 
 function captionsCommand(args) {
@@ -2746,6 +3100,35 @@ function remapPlan(plan) {
   };
 
   return { plan: remapped, cuts, keeps, duration };
+}
+
+function samplePlan(plan, count) {
+  const elements = Array.isArray(plan.elements) ? plan.elements : [];
+  const wanted = Number.isFinite(count) && count > 0 ? Math.floor(count) : 3;
+  if (!elements.length || wanted >= elements.length) return plan;
+
+  const priority = [
+    ["letreiro"],
+    ["grafico", "lista"],
+    ["caption-emphasis", "lower-third"],
+    ["zoom", "broll"],
+    ["transition", "end-card"],
+  ];
+  const selected = [];
+  for (const types of priority) {
+    const found = elements.find((element) => types.includes(element.type) && !selected.includes(element));
+    if (found) selected.push(found);
+    if (selected.length >= wanted) break;
+  }
+  for (const element of elements) {
+    if (selected.length >= wanted) break;
+    if (!selected.includes(element)) selected.push(element);
+  }
+
+  return {
+    ...plan,
+    elements: selected.sort((a, b) => (Number(a.start) || 0) - (Number(b.start) || 0)),
+  };
 }
 
 function planForBuild(plan, args) {
@@ -3674,7 +4057,11 @@ function buildCommand(args) {
     fail(`Engine "${engine}" is not a creative build target. Use hyperframes or remotion (FFmpeg is a media utility).`);
   }
 
-  const result = engine === "hyperframes" ? buildHyperFrames(project, plan, args) : buildRemotion(project, plan, args);
+  const sampleWanted = args.sample === true ? 3 : Number(args.sample);
+  const isSample = Number.isFinite(sampleWanted) && sampleWanted > 0;
+  const buildPlan = isSample ? samplePlan(plan, sampleWanted) : plan;
+
+  const result = engine === "hyperframes" ? buildHyperFrames(project, buildPlan, args) : buildRemotion(project, buildPlan, args);
 
   const updated = {
     ...project.config,
@@ -3685,9 +4072,13 @@ function buildCommand(args) {
   };
   writeJson(path.join(project.dir, "project.json"), updated);
 
-  heading(`Built ${engine} project`);
+  heading(`Built ${engine} project${isSample ? " (sample)" : ""}`);
   console.log(`  ${result.engineDir}`);
   console.log(`  Media: ${result.base.kind} · ${result.duration.toFixed(2)}s`);
+  if (isSample) {
+    console.log(`  Sample: ${buildPlan.elements.length} of ${(plan.elements || []).length} element(s)`);
+    console.log("  Approve these elements, then rebuild with --force for the full set.");
+  }
   console.log("\nNext:");
   if (engine === "hyperframes") {
     console.log(`  cd "${result.engineDir}"`);
@@ -3894,31 +4285,428 @@ function ingest(args) {
 // ---------------------------------------------------------------------------
 
 function preview(args) {
-  const slug = projectSlugFromArg(args);
-  const { dir, config } = findProject(slug);
-  if (!exists(dir) || !config) fail(`Project "${slug}" not found.`);
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
 
-  const engineDir = path.join(dir, "engine");
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const timelinePath = path.join(project.dir, "edit", "timeline.json");
+  const plan = exists(planPath) ? readJson(planPath, null) : null;
+  const timeline = exists(timelinePath) ? readJson(timelinePath, null) : null;
+  if (!plan && !timeline) {
+    fail("No edit/plan.json or edit/timeline.json found. Build the plan before previewing.");
+  }
+
+  const planCheck = plan ? validatePlan(plan, project.dir) : { errors: [], warnings: [] };
+  const timelineCheck = timeline ? validateTimeline(timeline, project.dir) : { errors: [], warnings: [] };
+  const validation = {
+    errors: [...planCheck.errors, ...timelineCheck.errors],
+    warnings: [...planCheck.warnings, ...timelineCheck.warnings],
+  };
+  const manifest = readJson(path.join(project.dir, "assets", "manifest.json"), { assets: [] });
+  const outDir = path.join(project.dir, "preview");
+  const htmlPath = path.join(outDir, "index.html");
+
+  ensureDir(outDir);
+  writeText(htmlPath, previewHtml(project, plan, timeline, validation, manifest));
+
+  heading("Preview");
+  console.log(`  ${htmlPath}`);
+  if (validation.errors.length) console.log(`  ! ${validation.errors.length} validation error(s) — review before rendering.`);
+  if (validation.warnings.length) console.log(`  ! ${validation.warnings.length} warning(s).`);
+
+  const engineDir = path.join(project.dir, "engine");
   const hyperframes = path.join(engineDir, "hyperframes");
   const remotion = path.join(engineDir, "remotion");
-  const ffmpeg = path.join(engineDir, "ffmpeg");
-
-  heading(`Preview — ${slug}`);
   if (exists(hyperframes)) {
-    console.log("  HyperFrames project found. Run:");
-    console.log(`    cd "${hyperframes}" && npx hyperframes preview`);
+    console.log(`\n  Native preview: cd "${hyperframes}" && npx hyperframes preview`);
   } else if (exists(remotion)) {
-    console.log("  Remotion project found. Run:");
-    console.log(`    cd "${remotion}" && npx remotion studio`);
-  } else if (exists(ffmpeg)) {
-    console.log("  FFmpeg project found. Render a draft and open it:");
-    console.log(`    node "${path.join(SKILL_ROOT, "scripts", "rooster.mjs")}" render ${slug} --draft`);
-  } else {
-    console.log("  No engine project yet. Build the storyboard and timeline first.");
-    console.log(`  Timeline: ${path.join(dir, "edit", "timeline.json")}`);
+    console.log(`\n  Native preview: cd "${remotion}" && npx remotion studio`);
+  } else if (exists(path.join(engineDir, "ffmpeg"))) {
+    console.log(`\n  Render a draft first: node "<skill>/scripts/rooster.mjs" render ${project.slug} --draft`);
   }
-  console.log("\n  Unified review page is planned for the next phase.");
+
+  if (args.open) openPath(htmlPath);
 }
+
+function previewHtml(project, plan, timeline, validation, manifest) {
+  const name = project.config.name || project.slug;
+  const format = timeline?.format || project.config.format || plan?.format || {};
+  const duration = Number(plan?.duration || format.duration) || 0;
+  const fps = Number(format.fps) || 30;
+  const previewDir = path.join(project.dir, "preview");
+  const mediaCandidates = [
+    { label: "Draft", file: path.join(project.dir, "renders", "draft.mp4") },
+    { label: "Final", file: path.join(project.dir, "renders", "final.mp4") },
+    { label: "Source", file: plan?.source ? path.resolve(project.dir, plan.source) : null },
+  ].filter((entry) => entry.file && exists(entry.file) && /\.(mp4|webm|mov|m4v)$/i.test(entry.file));
+  const media = mediaCandidates[0] || null;
+  const mediaRel = media ? encodeURI(path.relative(previewDir, media.file).replace(/\\/g, "/")) : null;
+  const seek = (value) => `<a href="#" onclick="seek(${Number(value) || 0});return false">${formatClock(value)}</a>`;
+  const timeCell = (value) => (mediaRel ? seek(value) : formatClock(value));
+
+  const cuts = (plan?.cuts || [])
+    .map(
+      (cut) =>
+        `<tr><td>${timeCell(cut.start)} – ${formatClock(cut.end)}</td><td>${htmlEscape(cut.reason || "")}</td><td>${htmlEscape(cut.note || "")}</td></tr>`
+    )
+    .join("");
+  const elements = (plan?.elements || [])
+    .map(
+      (element) =>
+        `<tr><td>${timeCell(element.start)} – ${formatClock(element.end)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "")}</td><td>${htmlEscape(element.description || "")}</td></tr>`
+    )
+    .join("");
+  const chapters = (plan?.chapters || [])
+    .map((chapter) => `<tr><td>${timeCell(chapter.start)}</td><td>${htmlEscape(chapter.title || "")}</td></tr>`)
+    .join("");
+
+  const tracks = (timeline?.tracks || [])
+    .map((track) => {
+      const clips = (track.clips || [])
+        .map(
+          (clip) =>
+            `<li><strong>${formatClock(clip.start)} – ${formatClock(clip.end)}</strong> · ${htmlEscape(clip.id || clip.src || clip.scene || "clip")}${clip.src ? ` <span class="muted">${htmlEscape(clip.src)}</span>` : ""}</li>`
+        )
+        .join("");
+      return `<div class="track"><h3>${htmlEscape(track.id || track.kind || "track")} · ${htmlEscape(track.kind || "")}</h3>${clips ? `<ul>${clips}</ul>` : `<p class="muted">No clips.</p>`}</div>`;
+    })
+    .join("");
+
+  const captionsDir = path.join(project.dir, "edit", "captions");
+  const captions = exists(captionsDir)
+    ? fs
+        .readdirSync(captionsDir)
+        .filter((file) => /\.(srt|vtt|json)$/i.test(file))
+        .map((file) => `<li>${htmlEscape(file)}</li>`)
+        .join("")
+    : "";
+  const voiceover = readJson(path.join(project.dir, "edit", "voiceover.json"), null);
+  const voiceLines = Array.isArray(voiceover?.lines) ? voiceover.lines.length : 0;
+  const manifestAssets = Array.isArray(manifest?.assets) ? manifest.assets : [];
+  const missingAssets = manifestAssets.filter((asset) => asset.path && !exists(path.resolve(project.dir, asset.path)));
+  const rendersDir = path.join(project.dir, "renders");
+  const renders = exists(rendersDir)
+    ? fs
+        .readdirSync(rendersDir)
+        .filter((file) => /\.(mp4|mov|webm|jpg|png)$/i.test(file))
+        .map((file) => `<li>${htmlEscape(file)}</li>`)
+        .join("")
+    : "";
+
+  const issueList = (items, className) =>
+    items.length ? `<ul class="${className}">${items.map((item) => `<li>${htmlEscape(item)}</li>`).join("")}</ul>` : `<p class="muted">None.</p>`;
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preview — ${htmlEscape(name)}</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b0f19; --card:#121826; --line:#263041; --fg:#f8fafc; --muted:#94a3b8; --accent:#22d3ee; --danger:#fb7185; --warn:#fbbf24; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:32px; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width:1200px; margin:0 auto; }
+    h1 { margin:0 0 6px; font-size:30px; letter-spacing:-.03em; }
+    h2 { margin:0 0 12px; font-size:18px; }
+    h3 { margin:0 0 6px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    a { color:var(--accent); }
+    .meta { color:var(--muted); margin-bottom:22px; }
+    .grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(280px,1fr); gap:20px; align-items:start; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:18px; }
+    video { width:100%; border-radius:10px; background:#000; display:block; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; font-size:13px; }
+    th { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+    tr:last-child td { border-bottom:0; }
+    ul { margin:0; padding-left:18px; }
+    li { margin:4px 0; }
+    .muted { color:var(--muted); }
+    .track { border-top:1px solid var(--line); padding-top:10px; margin-top:10px; }
+    .track:first-child { border-top:0; padding-top:0; margin-top:0; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; }
+    .errors { color:var(--danger); }
+    .warnings { color:var(--warn); }
+    .gate { border-left:3px solid var(--accent); background:rgba(34,211,238,.06); padding:14px 16px; border-radius:8px; }
+    button { background:var(--accent); color:#061018; border:0; border-radius:8px; padding:10px 14px; font-weight:700; cursor:pointer; }
+    .checklist label { display:block; margin:6px 0; color:var(--muted); }
+    .checklist input { margin-right:8px; }
+    @media (max-width: 900px) { .grid { grid-template-columns:1fr; } body { padding:18px; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Preview</h1>
+  <p class="meta">${htmlEscape(name)} · ${format.width || 1920}×${format.height || 1080} · ${fps} fps · ${formatClock(duration)} · engine <span class="pill">${htmlEscape(project.config.engine || "auto")}</span></p>
+
+  <div class="grid">
+    <div>
+      <section class="card">
+        <h2>Player</h2>
+        ${mediaRel ? `<video id="player" controls preload="metadata" src="${mediaRel}"></video><p class="muted">${htmlEscape(media.label)}: ${htmlEscape(path.basename(media.file))}</p>` : `<p class="muted">No video render yet. Render a draft or use the native engine preview.</p>`}
+      </section>
+
+      <section class="card">
+        <h2>Plano</h2>
+        <p>${htmlEscape(plan?.summary || "No plan summary.")}</p>
+        <p class="muted">${(plan?.cuts || []).length} cut(s) · ${(plan?.elements || []).length} element(s) · ${(plan?.chapters || []).length} chapter(s)</p>
+      </section>
+
+      <section class="card">
+        <h2>Cortes</h2>
+        ${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="muted">No cuts.</p>`}
+      </section>
+
+      <section class="card">
+        <h2>Elementos</h2>
+        ${elements ? `<table><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto</th><th>Descrição</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="muted">No elements.</p>`}
+      </section>
+
+      <section class="card">
+        <h2>Timeline</h2>
+        ${tracks || `<p class="muted">No timeline.json yet.</p>`}
+      </section>
+    </div>
+
+    <aside>
+      <section class="card">
+        <h2>Validação</h2>
+        <h3>Erros</h3>
+        ${issueList(validation.errors, "errors")}
+        <h3>Warnings</h3>
+        ${issueList(validation.warnings, "warnings")}
+        ${exists(path.join(project.dir, "qa", "report.md")) ? `<p class="muted">QA: <a href="../qa/report.md">qa/report.md</a></p>` : ""}
+        ${exists(path.join(project.dir, "style", "proof", "index.html")) ? `<p class="muted">Style proof: <a href="../style/proof/index.html">style/proof/index.html</a></p>` : ""}
+      </section>
+
+      <section class="card">
+        <h2>Assets e áudio</h2>
+        <p class="muted">${manifestAssets.length} asset(s) no manifest · ${missingAssets.length} faltando</p>
+        ${missingAssets.length ? `<ul class="errors">${missingAssets.map((asset) => `<li>${htmlEscape(asset.path)}</li>`).join("")}</ul>` : ""}
+        <p class="muted">Música: ${htmlEscape(plan?.music?.src || "nenhuma")}</p>
+        <p class="muted">Voz: ${voiceLines} linha(s) em voiceover.json</p>
+        <h3>Legendas</h3>
+        ${captions ? `<ul>${captions}</ul>` : `<p class="muted">None.</p>`}
+        <h3>Renders</h3>
+        ${renders ? `<ul>${renders}</ul>` : `<p class="muted">None.</p>`}
+      </section>
+
+      <section class="card checklist">
+        <h2>QA checklist</h2>
+        <label><input type="checkbox" /> Assisti ao draft inteiro uma vez</label>
+        <label><input type="checkbox" /> Textos em tela revisados</label>
+        <label><input type="checkbox" /> Nenhum corte no meio de palavra</label>
+        <label><input type="checkbox" /> Áudio sem clipping e no loudness alvo</label>
+        <label><input type="checkbox" /> Legendas sincronizadas e na safe area</label>
+        <label><input type="checkbox" /> Assets e licenças conferidos</label>
+        <label><input type="checkbox" /> Hook nos primeiros 3 segundos</label>
+        <label><input type="checkbox" /> CTA e ritmo conferem com o plano</label>
+      </section>
+
+      <section class="card gate">
+        <h2>Aprovação</h2>
+        <p class="muted">Revise o player, o plano e a timeline. A aprovação final continua no chat.</p>
+        <button onclick="approve()">Copiar aprovação</button>
+      </section>
+    </aside>
+  </div>
+</main>
+<script>
+  const player = document.getElementById('player');
+  function seek(seconds) {
+    if (!player) return;
+    player.currentTime = Math.max(0, Number(seconds) || 0);
+    player.play().catch(() => {});
+    player.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function approve() {
+    const text = 'Preview aprovado. Pode seguir para o render final.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        document.querySelector('.gate button').textContent = 'Copiado';
+      }).catch(() => prompt('Copie a mensagem:', text));
+    } else {
+      prompt('Copie a mensagem:', text);
+    }
+  }
+</script>
+</body>
+</html>
+`;
+}
+
+function exportCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  if (!exists(planPath)) fail(`No edit/plan.json found at ${planPath}. Write the plan first.`);
+  const plan = readJson(planPath, null);
+  if (!plan) fail(`Invalid plan JSON at ${planPath}.`);
+  if (!plan.source) fail("The plan has no source. Set source in edit/plan.json.");
+  const { errors } = validatePlan(plan, project.dir);
+  if (errors.length) fail(`The plan has ${errors.length} error(s):\n${errors.map((error) => `- ${error}`).join("\n")}`);
+
+  const requested = String(args.format || "both").toLowerCase();
+  if (!["edl", "fcpxml", "both"].includes(requested)) {
+    fail(`Unsupported format "${requested}". Use --format edl, fcpxml, or both.`);
+  }
+  const source = path.resolve(project.dir, plan.source || "");
+  if (!exists(source)) fail(`Plan source not found: ${source}`);
+  const fps = Number(args.fps) || Number(plan.format?.fps) || Number(project.config.format?.fps) || 30;
+  const keeps = keepsFromPlan(plan);
+  const outDir = path.join(project.dir, "edit", "export");
+  const files = [];
+
+  ensureDir(outDir);
+  if (requested === "edl" || requested === "both") {
+    const file = path.join(outDir, "cuts.edl");
+    writeText(file, edlText(project, plan, keeps, fps));
+    files.push(file);
+  }
+  if (requested === "fcpxml" || requested === "both") {
+    const file = path.join(outDir, "timeline.fcpxml");
+    writeText(file, fcpxmlText(project, plan, keeps, fps));
+    files.push(file);
+  }
+  writeText(path.join(outDir, "README.md"), exportReadme(project, plan, keeps, fps));
+
+  heading("NLE export");
+  for (const file of files) console.log(`  ${file}`);
+  console.log(`  ${path.join(outDir, "README.md")}`);
+  console.log("\n  Import the EDL/FCPXML in DaVinci Resolve or Premiere.");
+  console.log("  EDL is cuts-only; FCPXML is the track/overlay handoff. The plan remains the source of truth.");
+}
+
+function editTimecode(seconds, fps) {
+  const totalFrames = Math.max(0, Math.round(Number(seconds) * fps));
+  const rate = Math.max(1, Math.round(fps));
+  const frames = totalFrames % rate;
+  const totalSeconds = Math.floor(totalFrames / rate);
+  const secs = totalSeconds % 60;
+  const mins = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
+}
+
+function edlReel(plan) {
+  const base = path.basename(String(plan.source || "rooster")).replace(/\.[^.]+$/, "");
+  const clean = base.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  return clean || "ROOSTER";
+}
+
+function edlText(project, plan, keeps, fps) {
+  const title = String(project.config.name || project.slug).replace(/\r?\n/g, " ");
+  const clip = path.basename(String(plan.source || "source"));
+  const reel = edlReel(plan);
+  const lines = [`TITLE: ${title}`, "FCM: NON-DROP FRAME", ""];
+  let record = 0;
+  keeps.forEach((keep, index) => {
+    const sourceIn = editTimecode(keep.start, fps);
+    const sourceOut = editTimecode(keep.end, fps);
+    const recordIn = editTimecode(record, fps);
+    const recordOut = editTimecode(record + (keep.end - keep.start), fps);
+    lines.push(
+      `${String(index + 1).padStart(3, "0")}  ${reel.padEnd(8, " ")} V     C        ${sourceIn} ${sourceOut} ${recordIn} ${recordOut}`
+    );
+    lines.push(`* FROM CLIP NAME: ${clip}`);
+    if (keep.reason) lines.push(`* COMMENT: ${String(keep.reason).replace(/\r?\n/g, " ")}`);
+    lines.push("");
+    record += keep.end - keep.start;
+  });
+  return lines.join("\n");
+}
+
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function fcpxmlTime(seconds, fps) {
+  const frames = Math.max(0, Math.round(Number(seconds) * fps));
+  return `${frames}/${Math.max(1, Math.round(fps))}s`;
+}
+
+function fcpxmlText(project, plan, keeps, fps) {
+  const source = path.resolve(project.dir, plan.source);
+  const probe = probeMedia(source) || {};
+  const width = Number(plan.format?.width) || Number(project.config.format?.width) || probe.width || 1920;
+  const height = Number(plan.format?.height) || Number(project.config.format?.height) || probe.height || 1080;
+  const sourceDuration = Math.max(...keeps.map((keep) => keep.end), Number(plan.duration) || 0);
+  const total = keeps.reduce((sum, keep) => sum + (keep.end - keep.start), 0);
+  const assetId = "r2";
+  const formatId = "r1";
+  const clipName = path.basename(String(plan.source || "source"));
+  const mediaUrl = pathToFileURL(source).href;
+  const clips = keeps
+    .map((keep, index) => {
+      const recordStart = keeps.slice(0, index).reduce((sum, item) => sum + (item.end - item.start), 0);
+      const duration = keep.end - keep.start;
+      return `            <asset-clip ref="${assetId}" offset="${fcpxmlTime(recordStart, fps)}" start="${fcpxmlTime(keep.start, fps)}" duration="${fcpxmlTime(duration, fps)}" name="${xmlEscape(clipName)}" />`;
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="${formatId}" name="Rooster ${width}x${height} ${Math.round(fps)}p" frameDuration="${fcpxmlTime(1 / fps, fps)}" width="${width}" height="${height}" />
+    <asset id="${assetId}" name="${xmlEscape(clipName)}" start="0s" duration="${fcpxmlTime(sourceDuration, fps)}" hasVideo="${probe.width ? 1 : 0}" hasAudio="${probe.audio ? 1 : 0}" format="${formatId}">
+      <media-rep kind="original-media" src="${xmlEscape(mediaUrl)}" />
+    </asset>
+  </resources>
+  <library>
+    <event name="RoosterEdit">
+      <project name="${xmlEscape(project.config.name || project.slug)}">
+        <sequence format="${formatId}" duration="${fcpxmlTime(total, fps)}" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+          <spine>
+${clips}
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>
+`;
+}
+
+function exportReadme(project, plan, keeps, fps) {
+  return `# NLE export — ${project.config.name || project.slug}
+
+Generated from \`edit/plan.json\`. The plan remains the source of truth; this is a handoff, not a new edit.
+
+- \`cuts.edl\` — CMX 3600, cuts only. Import in DaVinci Resolve or Premiere, then relink the source media if asked.
+- \`timeline.fcpxml\` — basic FCPXML 1.10 with the same cuts on a single video track. Overlays, music, and captions are not included.
+
+## DaVinci Resolve
+
+1. Open the project and create a timeline with the same frame rate (${Math.round(fps)} fps).
+2. File > Import > Timeline, or drag the file into the media pool.
+3. Relink the source file if the path changed.
+4. Add overlays, music, and captions from \`edit/plan.json\` and \`edit/timeline.json\`.
+
+## Premiere Pro
+
+1. File > Import, select the EDL or FCPXML.
+2. Relink the source file if needed.
+
+## Limits
+
+- EDL does not carry overlays, effects, captions, or music.
+- FCPXML here is intentionally minimal; complex effects remain engine-side.
+- Non-integer frame rates and drop-frame timecode need manual review.
+- Keep the original source in \`${plan.source || "assets/source"}\`.
+
+The full edit is still reproducible with:
+
+\`\`\`bash
+node "<skill>/scripts/rooster.mjs" build ${project.slug} --engine hyperframes
+\`\`\`
+`;
+}
+
 
 function render(args) {
   const slug = projectSlugFromArg(args);
@@ -3957,6 +4745,7 @@ Commands:
   init [--dir <path>] [--force]   Create a workspace
   new <slug> [options]            Create a project inside a channel
   open <slug> [--project] [--print] Open assets/source or the project folder
+  paths <slug> [--json]           Show bruto/estilo/trabalho/final paths
   list [--json]                   List channels, projects, and profiles
   channel list|show|new|set|use   Manage channels and their defaults
   check <slug> [--json]           Validate project and timeline
@@ -3966,6 +4755,8 @@ Commands:
   digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check|--show]    Validate, show, and write edit/plan.html
+  textcheck <slug>                Write qa/text-review.md with on-screen text
+  styleproof <slug> [--open]      Write style/proof/index.html with 3 frames
   captions <slug> [options]       Generate SRT/VTT from the transcript
   deliver <slug> [options]        Extract thumbnail and write metadata.json
   reframe <slug> [options]        Crop/scale the source to another aspect ratio
@@ -3975,9 +4766,10 @@ Commands:
   tts <slug> [options]            Build (and optionally generate) a voiceover
   multicam <slug> [options]       Normalize cameras, J/L cuts, and speed ramps
   build <slug> [options]          Build a HyperFrames or Remotion project from the plan
+  export <slug> [options]         Export cuts to EDL/FCPXML for DaVinci or Premiere
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
-  preview <slug>                  Show the preview path for the engine
+  preview <slug> [--open]         Write preview/index.html with player and timeline
   render <slug> [--draft|--final] Show the render command for the engine
 
 Ingest options:
@@ -4057,6 +4849,17 @@ Build options:
   --no-cuts                       Ignore plan cuts and use the original source
   --allow-cut-only                Allow a plan with no visual elements
   --allow-no-music                Allow a plan with no music decision
+  --sample <n>                    Build only n representative elements (default: 3)
+
+Export options:
+  --format <id>                   edl | fcpxml | both (default: both)
+  --fps <n>                       Timecode frame rate (default: project/plan fps)
+
+Style proof options:
+  --open                          Open style/proof/index.html after writing
+
+Preview options:
+  --open                          Open preview/index.html after writing
 
 New project options:
   --channel <id>                  Channel (default: workspace default)
@@ -4153,6 +4956,9 @@ function main() {
     case "open":
       openProject(args);
       return;
+    case "paths":
+      pathsCommand(args);
+      return;
     case "list":
       listWorkspace(args);
       return;
@@ -4174,6 +4980,12 @@ function main() {
       return;
     case "plan":
       planCommand(args);
+      return;
+    case "textcheck":
+      textcheckCommand(args);
+      return;
+    case "styleproof":
+      styleProofCommand(args);
       return;
     case "captions":
       captionsCommand(args);
@@ -4201,6 +5013,9 @@ function main() {
       return;
     case "build":
       buildCommand(args);
+      return;
+    case "export":
+      exportCommand(args);
       return;
     case "ingest":
       ingest(args);

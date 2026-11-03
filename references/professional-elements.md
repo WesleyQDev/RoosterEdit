@@ -9,6 +9,7 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | Audio | `features/audio.md` | Music ducking, SFX, loudness |
 | Reframe | `features/reframe.md` | 16:9 to 9:16/1:1/4:5 crop and focus |
 | Delivery | `features/delivery.md` | Thumbnail, metadata, chapters, package |
+| NLE handoff | `nle-handoff.md` | EDL/FCPXML for DaVinci/Premiere |
 | Color | `features/color.md` | LUT, contrast, temperature, denoise, stabilization |
 | B-roll | `features/broll.md` | Local discovery, ranking, placement suggestions |
 | Charts | `features/charts.md` | Real bar/line/pie graphics |
@@ -36,6 +37,7 @@ node "<skill>/scripts/rooster.mjs" audio <slug>
 node "<skill>/scripts/rooster.mjs" color <slug> [--update-plan]
 node "<skill>/scripts/rooster.mjs" tts <slug> [--generate]
 node "<skill>/scripts/rooster.mjs" multicam <slug> [--render] [--update-plan]
+node "<skill>/scripts/rooster.mjs" export <slug> [--format edl|fcpxml|both]
 ```
 `zoom`, `transition` and chart elements are part of `edit/plan.json` and are consumed by `build`.
 

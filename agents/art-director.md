@@ -24,7 +24,8 @@ Do not read the raw transcript, engine code, or render logs.
 3. Write `storyboard/storyboard.json`. Every scene gets id, title, duration, visual description, camera/motion, on-screen text, voice line, audio cue, asset references, transition, and engine hint.
 4. Keep the scene count feasible for the duration. A 60-second video rarely needs more than 12–15 scenes.
 5. Make a shot list of missing assets and generated-image prompts. If an asset may not exist, say so now.
-6. Check the storyboard against the script: every beat has a scene, every scene has a purpose, and the total duration matches the target.
+6. Run `styleproof <slug>` to write `style/proof/index.html` with the hook, data, and caption frames. Review the proof against the profile; this is the cheapest place to change the look.
+7. Check the storyboard against the script: every beat has a scene, every scene has a purpose, and the total duration matches the target.
 
 ## Quality bar
 

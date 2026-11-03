@@ -142,10 +142,10 @@ When the user wants the simplest route from raw footage to a finished video, fol
 
 1. **Prepare the machine** — FFmpeg, Node.js LTS, Python 3, HyperFrames, and Whisper (or HyperFrames' Parakeet/whisper.cpp). Ask before installing anything.
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
-3. **Write the style guide** — `art-director` writes `style.md` and resolves the profile.
-4. **Transcribe and plan** — `transcript-analyst` writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`; `editor` writes `edit/plan.json` from the analysis and `style.md`. Show the plan and wait for approval.
+3. **Write the style guide** — `art-director` writes `style.md` and resolves the profile. Run `styleproof <slug>` and approve the three sample frames before planning.
+4. **Transcribe and plan** — `transcript-analyst` writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`; `editor` writes `edit/plan.json` from the analysis and `style.md`. Show `plan.html` with transcript context and wait for approval.
 5. **Create the visual elements** — `engineer` builds letreiros, graphics, lists, zooms, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
-6. **Assemble, review, export** — `engineer` runs `build` to generate the HyperFrames or Remotion project from the approved plan; `qa` inspects the preview and `engineer` renders to `renders/`.
+6. **Assemble, review, export** — `engineer` runs `build` to generate the HyperFrames or Remotion project from the approved plan; use `--sample 3` before the full build. `qa` inspects `preview/index.html` and the frames, then `engineer` renders to `renders/`; `export` writes an EDL/FCPXML handoff when the user wants DaVinci or Premiere.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.
 
@@ -189,7 +189,7 @@ Run:
 node "<skill>/scripts/rooster.mjs" doctor --json
 ```
 
-This reports Node, npm, Python, FFmpeg, FFprobe, Git, GPU, detected engines, TTS providers, `yt-dlp`, Whisper, and the HyperFrames CLI. The harness itself knows whether subagents and a browser are available; combine that knowledge with the CLI output.
+This reports Node, npm, Python, FFmpeg, FFprobe, Git, GPU, detected engines, TTS providers, `yt-dlp`, Whisper, and the HyperFrames CLI. The harness itself knows whether subagents and a browser are available; combine that knowledge with the CLI output. For costs, read `docs/COSTS.md`; never call a paid provider without explicit permission.
 
 Read `references/harness.md` when something is missing. The short version:
 
@@ -238,15 +238,15 @@ The project can override anything it inherits from the channel. There is no sepa
 
 If the user has no channel, create one first. If they have no profile, offer three paths: use a built-in, create one from their brand assets, or derive one from a reference. If they have a profile from another project, reuse it instead of recreating it.
 
+After the profile resolves, run `styleproof <slug>` and show the three frames. Do not plan or build until the look is approved.
+
 ## Step 4 — Plan before building
 
 Produce, in order:
 
-1. `brief.md` — goal, audience, platform, duration, tone, CTA, references, constraints.
-2. `script.md` / `script.json` — spoken lines, on-screen text, scene beats.
-3. `style.md` — the resolved visual and audio direction.
-4. `storyboard/storyboard.json` — scenes, frames, durations, transitions, overlays, 3D cues.
-5. `edit/timeline.json` — the edit decision list in timeline form.
+1. `brief.md`, `script.md`/`script.json`, and `style.md` — the goal, the words, and the look.
+2. `storyboard/storyboard.json` and `edit/timeline.json` — the scene plan and the edit decision list.
+3. `edit/plan.json` — the fast-path plan the user approves before the build.
 
 Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. Delegate the draft to `editor`; review the HTML with the user instead of building the JSON by hand in the main thread. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
 
@@ -306,6 +306,8 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 
 Run the build through `engineer`. It owns the generated code, the logs in `work/logs/`, and the fixes, and returns status, artifact paths, and any blocker. The main agent does not run the command above directly; it passes the approved plan and the engine. If a fix changes the story, the engineer returns `needs-decision` instead of editing the plan.
 
+Before the full build, use `build <slug> --sample 3`. It builds three representative elements over the real cuts so the user can approve motion, type, and density without paying for the whole video. Rebuild with `--force` after approval.
+
 For the fast path, Option 1 is automatic assembly in HyperFrames for HTML/CSS/GSAP motion. Option 2 is Remotion for React, data-driven scenes, and 3D. FFmpeg remains a utility for cuts, proxies, captions, and audio. Both engines start from the same approved plan.
 
 ## Step 7 — Preview and review
@@ -315,7 +317,7 @@ Offer a preview before rendering:
 - HyperFrames: `npx hyperframes preview` (or the bundled adapter).
 - Remotion: `npx remotion studio`.
 - FFmpeg: render a low-resolution draft and show it in the review page.
-- Unified review: `node "<skill>/scripts/rooster.mjs" preview <slug>`.
+- Unified review: `node "<skill>/scripts/rooster.mjs" preview <slug>` writes `preview/index.html` with the player, plan, timeline, captions, audio, validation, and QA checklist. Open it with `--open` when the harness has a browser.
 
 Read `references/timeline.md` for the timeline contract and the review page. When a browser is available, use it: open the preview, take screenshots, check console errors, and inspect the timeline. When it is not, render stills at key beats and read them as images. `qa` can open the preview, capture the screenshots and console errors, and write the report; look at 3–5 of its frames yourself before deciding.
 
@@ -330,7 +332,7 @@ The review page should make these obvious:
 
 ## Step 8 — QA
 
-Read `references/qa.md` for the full checklist. Run `captions <slug>` first when the project needs caption sidecars. Spawn `qa` with the checklist, the render path, and the plan; it returns the verdict, blocking issues with evidence, and frame paths. At minimum, verify:
+Read `references/qa.md` for the full checklist. Run `captions <slug>` first when the project needs caption sidecars, and `textcheck <slug>` to list every on-screen text with its timecode. Spawn `qa` with the checklist, the render path, and the plan; it returns the verdict, blocking issues with evidence, and frame paths. At minimum, verify:
 
 - resolution, aspect ratio, fps, and duration match the plan;
 - no unintended black frames, freeze frames, or gaps;
@@ -340,7 +342,10 @@ Read `references/qa.md` for the full checklist. Run `captions <slug>` first when
 - every asset exists and has a recorded license;
 - the hook lands in the first three seconds;
 - the pacing matches the channel and the plan;
-- the brand profile is applied consistently.
+- the brand profile is applied consistently;
+- no cut starts or ends inside a word, and every cut boundary was checked by ear;
+- every on-screen text in `qa/text-review.md` was proofread;
+- the full draft was watched once, not only sampled frames.
 
 Fix the cheap issues before rendering. A technical QA pass on a draft is faster than re-rendering a final. Send fixes back to `engineer`; do not rebuild by hand in the main thread.
 
@@ -348,20 +353,9 @@ Fix the cheap issues before rendering. A technical QA pass on a draft is faster 
 
 Use `engineer` in render mode: render a draft, inspect 3–5 frames, then render the final. The engineer validates the output with FFprobe (duration, resolution, fps, audio channels, loudness) and runs `deliver <slug>` to write `renders/thumbnail.jpg` and `renders/metadata.json`. It returns the final path and the probe stats, not the log.
 
-Deliver a package:
+If the user wants to finish in DaVinci Resolve or Premiere, run `export <slug> --format both` after the plan is stable. It writes `edit/export/cuts.edl` and `timeline.fcpxml`; these are handoffs, not a replacement for the plan.
 
-```text
-renders/
-├── final.mp4
-├── draft.mp4
-├── captions.srt
-├── captions.vtt
-├── thumbnail.png
-├── metadata.json
-└── project-archive.zip
-```
-
-`metadata.json` should include title, description, tags, chapters, aspect ratio, duration, and any platform-specific fields. Do not upload anywhere without explicit permission.
+Deliver `renders/final.mp4`, `renders/draft.mp4`, `captions.srt`/`.vtt`, `thumbnail.jpg`, `metadata.json`, and the project archive. `metadata.json` should include title, description, tags, chapters, aspect ratio, duration, and any platform-specific fields. Do not upload anywhere without explicit permission.
 
 ## Step 10 — Learn
 
@@ -399,14 +393,15 @@ rooster/
 │   │   ├── brief.md
 │   │   ├── script.md
 │   │   ├── style.md
+│   │   ├── style/proof/
 │   │   ├── storyboard/
 │   │   ├── assets/{source,generated,licensed}/
-│   │   ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/}
+│   │   ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/,export/}
 │   │   ├── engine/{hyperframes|remotion|ffmpeg}/
 │   │   ├── work/{handoffs,logs,scratch,notes}/
 │   │   ├── preview/
 │   │   ├── renders/
-│   │   ├── qa/
+│   │   ├── qa/{report.md,text-review.md,frames/}
 │   │   └── review.md
 │   ├── profiles/<id>/
 │   ├── assets/
@@ -449,6 +444,7 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/timeline.md` | Timeline JSON, review page, and browser QA |
 | `references/qa.md` | Technical and editorial checklists |
 | `references/professional-elements.md` | Index of advanced layers and feature references |
+| `references/nle-handoff.md` | EDL/FCPXML export and DaVinci/Premiere import |
 | `references/harness.md` | Capability detection and degradation |
 | `references/link-ingest.md` | Downloading video links with yt-dlp, metadata, subtitles, and licensing |
 | `references/schemas.md` | JSON schemas for project, channel, profile, transcript, analysis, timeline, manifest |
@@ -459,27 +455,29 @@ If the user already has a different structure, adapt to it and record the mappin
 # Workspace
 node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" doctor --json
-node "<skill>/scripts/rooster.mjs" config show
 
 # Channel
 node "<skill>/scripts/rooster.mjs" channel new en-tech --language en --format 16:9 --profile tech-neon --voice tts
-node "<skill>/scripts/rooster.mjs" channel list
 
 # Project
 node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
 node "<skill>/scripts/rooster.mjs" open en-tech/video-x
+node "<skill>/scripts/rooster.mjs" paths en-tech/video-x
 node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.youtube.com/watch?v=..." --confirm-rights
 node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
+node "<skill>/scripts/rooster.mjs" styleproof en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
+node "<skill>/scripts/rooster.mjs" textcheck en-tech/video-x
 # Advanced layers: see references/professional-elements.md
-node "<skill>/scripts/rooster.mjs" list
 node "<skill>/scripts/rooster.mjs" check en-tech/video-x
 
-# Review (planned)
-node "<skill>/scripts/rooster.mjs" preview meu-video
-node "<skill>/scripts/rooster.mjs" render meu-video --draft
-node "<skill>/scripts/rooster.mjs" render meu-video --final
+# Review and handoff
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --sample 3
+node "<skill>/scripts/rooster.mjs" preview en-tech/video-x --open
+node "<skill>/scripts/rooster.mjs" export en-tech/video-x --format both
+node "<skill>/scripts/rooster.mjs" render en-tech/video-x --draft
+node "<skill>/scripts/rooster.mjs" render en-tech/video-x --final
 ```
 
 If a command is not implemented yet, do the equivalent manually and tell the user what you did. Do not pretend the CLI succeeded.
@@ -492,6 +490,8 @@ A good RoosterEdit session feels like working with a director who also knows the
 - the agent asks two or three sharp questions, not twenty;
 - the plan appears as a brief, a script, and a storyboard the user can react to;
 - the style is consistent because it comes from a profile, not from vibes;
+- three style-proof frames and three sample elements are approved before the full build;
 - the preview is visible in the browser before the expensive render;
+- every on-screen text is proofread and every cut boundary was checked by ear;
 - the final package includes the video, captions, thumbnail, and metadata;
 - the next video starts faster because the profile or component was saved and the channel already holds the defaults.

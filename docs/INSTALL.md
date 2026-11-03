@@ -2,6 +2,8 @@
 
 O repositório inteiro é a skill. Não há build step: basta clonar/copiar para uma pasta de skills que o agente já descubra.
 
+Você não precisa rodar os comandos manualmente; o agente executa e mostra o resultado. Se quiser um prompt único de instalação + dependências + workspace, use [`templates/install-prompt.pt-BR.md`](../templates/install-prompt.pt-BR.md). Custos esperados estão em [`docs/COSTS.md`](COSTS.md).
+
 ## Requisitos
 
 - Node.js 20+ (recomendado 22/24)

@@ -67,6 +67,8 @@ node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
 - Reuse transcrição, TTS e projetos; não refaça o que não mudou.
 - Para transcrição longa, use `transcript-analyst`: ele grava `edit/analysis.json` e devolve só os beats e as flags.
 - Para build e render, use `engineer`: os logs ficam em `work/logs/` e o principal recebe só status e caminhos.
+- `styleproof` e `preview` geram HTML; abra no navegador em vez de colar o HTML no chat.
+- `textcheck` grava `qa/text-review.md`; leia só os alertas e os textos, não o JSON.
 - Feche a tarefa em 5–10 linhas: resultado, caminhos e uma próxima pergunta. Detalhes ficam nos arquivos.
 
 ## O que não cortar

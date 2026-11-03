@@ -104,6 +104,21 @@ Teste em workspace temporário, com o papel `agents/producer.md`:
 
 O teste confirma o contrato de retorno e o isolamento de contexto. Ainda falta testar a cadeia completa (transcript → plan → build → QA → render) com subagents em um projeto real.
 
+## 8. Style proof, preview, textcheck, export e sample build
+
+Teste em projeto temporário de 10s, com um corte e quatro elementos:
+
+- `styleproof` gerou `style/proof/index.html` com os três frames e `proof.json`.
+- `preview` gerou `preview/index.html` com player, plano, timeline, validação, assets e checklist.
+- `textcheck` gerou `qa/text-review.md` com 4 textos e 0 alertas; ao adicionar um storyboard com texto duplicado, gerou 1 alerta.
+- `export` gerou `edit/export/cuts.edl` e `timeline.fcpxml`; o FCPXML passou no parser XML do Python.
+- `check` avisou que o corte começava no meio da palavra "importante".
+- `build --sample 3` gerou 3 dos 4 elementos; o HyperFrames check passou.
+- `build --force` gerou o projeto completo; o check passou.
+- `paths` mostrou a visão bruto/estilo/trabalho/final.
+
+Ainda falta testar em um projeto real, com mídia longa, legendas queimadas e importação do FCPXML no DaVinci.
+
 ## O que funcionou
 
 - `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).

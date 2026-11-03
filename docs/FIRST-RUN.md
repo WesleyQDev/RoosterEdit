@@ -84,11 +84,17 @@ O `project.json` registra `channel` e `overrides`, então dá para ver o que vei
 
 ## Plano e progresso
 
+Antes do plano, o agente pode rodar `styleproof <slug>` e abrir `style/proof/index.html` com três frames de amostra (hook, dado e legenda). Aprove o look nessa etapa: mudar cor e tipografia depois do build é caro.
+
 Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug> --show`, que gera `edit/plan.md` e `edit/plan.html`. Se o harness permitir exibir arquivos, ele abre o HTML no preview; se não, mostra o resumo no chat. O pedido de aprovação vem com o marcador de etapa, por exemplo: **“Etapa 4/8 — Plano pronto. Posso seguir com a timeline?”**
 
-As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta.
+As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta. Comece em `guided` nos primeiros vídeos e mude para `auto` quando o estilo estiver estável.
 
 O plano precisa incluir a camada criativa: elementos visuais, b-roll e música, ou uma justificativa explícita para omitir. **Só corte não conta como vídeo final.** O `build` recusa um plano só de corte ou sem decisão de música; registre a exceção em `notes` ou use `--allow-cut-only` / `--allow-no-music` quando for intencional.
+
+Antes do build completo, peça `build <slug> --sample 3`: o agente gera só três elementos representativos para você aprovar o motion e a tipografia. Depois do OK, rode o build completo com `--force`.
+
+Na revisão final, abra `preview/index.html` (rode `preview <slug>`) e rode `textcheck <slug>` para listar todos os textos em tela. Assista ao draft inteiro uma vez e confira os cortes de áudio antes do render final.
 
 As camadas avançadas — legendas, motion, áudio, reframe, entrega, cor, b-roll, gráficos, TTS e multicâmera — estão indexadas em [`references/professional-elements.md`](../references/professional-elements.md). O `SKILL.md` só aponta para esse índice.
 

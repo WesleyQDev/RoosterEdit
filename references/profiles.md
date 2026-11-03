@@ -127,7 +127,7 @@ Keep inheritance shallow. A profile that extends three levels is hard to reason 
 1. Ask for logo, colors, fonts, and 2–3 reference posts/videos.
 2. Extract a palette and type scale.
 3. Write `profile.json` and `STYLE.md`.
-4. Create a one-frame test composition to validate contrast and typography.
+4. Run `styleproof <slug>` and review the three frames: hook, data/graphic, and caption/lower third.
 5. Save it in `rooster/profiles/<id>`.
 
 ### From a reference video
@@ -136,7 +136,7 @@ Keep inheritance shallow. A profile that extends three levels is hard to reason 
 2. Describe the palette, type, motion, texture, and pacing in concrete terms.
 3. Separate what is style from what is content.
 4. Rebuild the style with original assets; do not copy copyrighted frames or music.
-5. Validate with a test frame.
+5. Validate with `styleproof` before reusing the profile.
 
 ### From the user's existing project
 
@@ -144,6 +144,16 @@ Keep inheritance shallow. A profile that extends three levels is hard to reason 
 2. Copy the tokens and component references into a new profile.
 3. Remove project-specific copy and assets that do not belong in a reusable profile.
 4. Name it after the visual identity, not the project.
+
+## Style proof
+
+The three-frame proof is the cheapest place to reject a look. Run:
+
+```bash
+node "<skill>/scripts/rooster.mjs" styleproof <slug> --open
+```
+
+It writes `style/proof/index.html` and `style/proof/proof.json` with a hook frame, a data/graphic frame, and a caption/lower-third frame, using the resolved profile tokens. Approve the look before the plan or the build. Change colors, type, density, and motion here, not after the full render.
 
 ## Forking
 

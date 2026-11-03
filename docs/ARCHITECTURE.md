@@ -65,6 +65,7 @@ RoosterEdit/
 │   ├── profiles.md
 │   ├── timeline.md
 │   ├── qa.md
+│   ├── nle-handoff.md
 │   ├── harness.md
 │   └── schemas.md
 ├── scripts/
@@ -147,6 +148,8 @@ rooster/
 │       │       ├── brief.md
 │       │       ├── script.md
 │       │       ├── style.md
+│       │       ├── style/
+│       │       │   └── proof/
 │       │       ├── storyboard/
 │       │       │   ├── storyboard.json
 │       │       │   └── frames/
@@ -165,7 +168,8 @@ rooster/
 │       │       │   ├── timeline.json
 │       │       │   ├── edl.json
 │       │       │   ├── captions/
-│       │       │   └── audio/
+│       │       │   ├── audio/
+│       │       │   └── export/
 │       │       ├── engine/
 │       │       │   ├── hyperframes/
 │       │       │   ├── remotion/
@@ -177,7 +181,7 @@ rooster/
 │       │       │   └── notes/
 │       │       ├── preview/
 │       │       ├── renders/
-│       │       ├── qa/
+│       │       ├── qa/{report.md,text-review.md,frames/}
 │       │       └── review.md
 │       ├── profiles/
 │       ├── assets/
@@ -417,6 +421,8 @@ Não perguntar tudo de uma vez. Perguntar só o que falta e o que muda a decisã
 
 Gerar `style.md` com paleta, tipografia, motion, referências e prompts.
 
+Depois de resolver o perfil, rodar `styleproof <slug>` para gerar `style/proof/index.html` com três frames (hook, dado, legenda/lower third). Aprovar o look antes do plano; mudar estilo depois do build é caro.
+
 ### 7.5 Assets
 
 - Ingerir em `assets/source`, `assets/generated` ou `assets/licensed`.
@@ -476,7 +482,7 @@ Para cortes específicos, usar `--download-sections "*00:01:20-00:02:10"` com mo
 
 ### 7.8 Preview
 
-- `node scripts/rooster.mjs preview <slug>` sobe o review unificado.
+- `node scripts/rooster.mjs preview <slug>` escreve `preview/index.html` com player, plano, timeline, legendas, áudio, assets faltando e checklist de QA.
 - Estúdios nativos: Remotion Studio ou HyperFrames preview.
 - Browser agents podem abrir, tirar screenshot e inspecionar console.
 
@@ -487,10 +493,13 @@ Checklist técnico e editorial em `references/qa.md`:
 - resolução, aspect, fps, duração;
 - black frames, freeze frames;
 - loudness, clipping, silêncio;
+- cortes no meio de palavras;
 - legendas: sync, leitura, safe area;
+- textos em tela (`textcheck` e `qa/text-review.md`);
 - safe areas: 90% action, 80% title;
 - licenças e assets faltando;
-- hook, ritmo, clareza, CTA, consistência de marca.
+- hook, ritmo, clareza, CTA, consistência de marca;
+- assistir ao draft inteiro uma vez.
 
 ### 7.10 Render + entrega
 
@@ -498,6 +507,7 @@ Checklist técnico e editorial em `references/qa.md`:
 - Final em alta qualidade.
 - Validar com FFprobe.
 - Entregar MP4, SRT/VTT, thumbnail, metadata e arquivo do projeto.
+- `export <slug>` para EDL/FCPXML quando o usuário quiser finalizar no DaVinci ou Premiere.
 
 ### 7.11 Learn
 

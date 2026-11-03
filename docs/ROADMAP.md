@@ -39,7 +39,10 @@
 - [x] Build automático de `edit/plan.json` para HyperFrames/Remotion (v1: cortes, elementos e mídia base).
 - [ ] Build mais rico: b-roll, gráficos, listas e 3D.
 - [ ] Adapter FFmpeg (EDL → filtergraph).
-- [ ] Preview unificado com timeline e QA.
+- [x] Preview unificado com timeline e QA.
+- [x] Handoff NLE com EDL/FCPXML.
+- [x] Style proof de 3 frames e sample build de 3 elementos.
+- [x] Text review e validação de corte no meio de palavra.
 - [ ] `render` e `package`.
 
 ## Fase 4 — 3D e qualidade

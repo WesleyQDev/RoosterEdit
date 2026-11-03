@@ -129,6 +129,7 @@ Do not describe a video as "beautiful" or "correct" without seeing at least repr
 - Render drafts at lower resolution/quality; render final only after approval.
 - Do not call paid APIs in a loop; batch and reuse.
 - Ask before using a paid provider or a cloud render.
+- Read `docs/COSTS.md` when the user asks what is free, what is optional, and what causes rework.
 
 ## Security
 

@@ -229,7 +229,9 @@ Aprovar este plano? Só vou criar a timeline e os visuais depois do seu OK.
 
 `node "<skill>/scripts/rooster.mjs" plan <slug> --show` writes the same summary to `edit/plan.md` and `edit/plan.html`. If the harness can display a file or open a browser, show `edit/plan.html` in the review pane or browser. Otherwise, paste the summary in chat and give the file path. Ask for approval with the progress marker, for example: `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?`
 
-Wait for an explicit approval. If the user changes the plan, update `edit/plan.json` and show it again.
+The HTML review includes a player, clickable timecodes, the transcript context for each cut and element, and a **Textos para revisar** table. The context is there so the user can approve a cut without opening the raw transcript.
+
+Wait for an explicit approval. If the user changes the plan, update `edit/plan.json` and show it again. Run `textcheck <slug>` before the final approval to list every on-screen text.
 
 ## Validation
 
@@ -245,7 +247,8 @@ Wait for an explicit approval. If the user changes the plan, update `edit/plan.j
 - the plan has at least one visual element unless `notes` records a clean-cut request;
 - the plan has a music decision, or `notes` records that no music was requested;
 - no duplicate ids;
-- chapters are sorted by start time.
+- chapters are sorted by start time;
+- when `edit/transcript.json` has word-level timestamps, no cut starts or ends inside a word (warning).
 
 `--show` prints the human-readable summary.
 

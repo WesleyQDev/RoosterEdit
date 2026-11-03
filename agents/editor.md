@@ -19,8 +19,9 @@ Do not read the raw transcript, engine code, or render logs. The analysis alread
 4. Make the music decision explicit. Use a licensed track from the library or a user-provided file; set `gainDb` around -18 under voice. If there is no music, record why in `notes`.
 5. Check duration math: cuts, keeps, and elements must add up to the target within a sensible tolerance.
 6. Check every path in the plan against `assets/manifest.json`. A missing asset is a blocker, not a placeholder.
-7. Write `edit/plan.json`, then run `plan <slug> --show` from the directory that contains `rooster/` to write `edit/plan.md` and `edit/plan.html`. Validate with `plan <slug> --check`.
-8. Update `edit/edl.json` and `edit/timeline.json` when the project uses them. Keep the plan as the source of truth.
+7. Write `edit/plan.json`, then run `plan <slug> --show` from the directory that contains `rooster/` to write `edit/plan.md` and `edit/plan.html`. Validate with `plan <slug> --check`. The HTML includes transcript context and the text-review table; review it before asking for approval.
+8. Run `textcheck <slug>` and fix any placeholder, duplicate, or truncated on-screen text before returning.
+9. Update `edit/edl.json` and `edit/timeline.json` when the project uses them. Keep the plan as the source of truth.
 
 ## Quality bar
 

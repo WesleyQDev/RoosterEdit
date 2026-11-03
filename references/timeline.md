@@ -211,18 +211,23 @@ Markers are useful for review and QA:
 
 ## Review page
 
-`node "<skill>/scripts/rooster.mjs" preview <slug>` should serve a page with:
+`node "<skill>/scripts/rooster.mjs" preview <slug>` writes `preview/index.html` and prints the path. `--open` opens it when the harness has a browser. The page works without a build step or a server; it is a single HTML file with vanilla JS/CSS.
 
-- **Player**: engine preview iframe, Remotion Player, or a draft MP4.
-- **Timeline**: tracks, clips, playhead, zoom, markers.
-- **Storyboard**: scene cards with thumbnails and durations.
-- **QA**: checklist with pass/fail and notes.
-- **Status**: project status, missing assets, render progress.
-- **Actions**: open native studio, render draft, copy feedback.
+It includes:
 
-The page should work without a build step. Prefer a single HTML file with vanilla JS/CSS, served by a small Node HTTP server. Keep the UI readable and fast; this is a review tool, not a full NLE.
+- **Player**: draft MP4, final MP4, or the source video. Timecodes in the plan seek the player.
+- **Plan**: summary, cuts, elements, chapters, and validation warnings.
+- **Timeline**: tracks and clips from `edit/timeline.json`.
+- **Assets and audio**: manifest count, missing files, music, voiceover lines, captions, renders.
+- **QA**: checklist with the items that matter before the final render.
+- **Approval**: a copy button for the approval message; the actual gate stays in the chat.
+- **Links**: `qa/report.md` and `style/proof/index.html` when they exist.
+
+The page should work without a build step. Keep it readable and fast; this is a review tool, not a full NLE.
 
 ### JSON endpoints
+
+The static page does not need endpoints. If the page grows into a server-backed review tool, add:
 
 | Endpoint | Returns |
 |---|---|
