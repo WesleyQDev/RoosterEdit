@@ -1,0 +1,66 @@
+{
+  "schema": "rooster.plan/v1",
+  "source": "assets/source/video.mp4",
+  "style": "style.md",
+  "language": "pt-BR",
+  "duration": 612.4,
+  "summary": "Entrevista sobre começar um negócio depois de perder o emprego.",
+  "cuts": [
+    {
+      "id": "cut-001",
+      "start": 12.4,
+      "end": 18.2,
+      "reason": "long-pause",
+      "confidence": 0.9
+    },
+    {
+      "id": "cut-002",
+      "start": 41.0,
+      "end": 46.5,
+      "reason": "retake",
+      "note": "O próximo take é mais forte",
+      "confidence": 0.95
+    }
+  ],
+  "keeps": [
+    {
+      "id": "keep-001",
+      "start": 18.2,
+      "end": 41.0,
+      "reason": "melhor explicação do problema"
+    }
+  ],
+  "elements": [
+    {
+      "id": "el-001",
+      "type": "letreiro",
+      "start": 3.0,
+      "end": 6.0,
+      "text": "A virada",
+      "description": "Título com a promessa central do vídeo",
+      "style": "bold uppercase, cor de destaque"
+    },
+    {
+      "id": "el-002",
+      "type": "grafico",
+      "start": 32.0,
+      "end": 38.0,
+      "text": "3 decisões",
+      "description": "Diagrama de três passos aparece um item por vez"
+    },
+    {
+      "id": "el-003",
+      "type": "zoom",
+      "start": 52.0,
+      "end": 55.0,
+      "description": "Punch-in lento no rosto do entrevistado no insight principal"
+    }
+  ],
+  "chapters": [
+    { "start": 0, "title": "Introdução" },
+    { "start": 45, "title": "O problema" }
+  ],
+  "notes": [
+    "Manter o áudio original; sem música nos primeiros 5 segundos."
+  ]
+}

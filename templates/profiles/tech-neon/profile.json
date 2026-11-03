@@ -1,0 +1,53 @@
+{
+  "schema": "rooster.profile/v1",
+  "id": "tech-neon",
+  "name": "Tech Neon",
+  "description": "Dark tech, cyan/magenta, grid, kinetic type, subtle glow",
+  "extends": "minimal",
+  "scope": "global",
+  "tokens": {
+    "colors": {
+      "bg": "#060913",
+      "fg": "#f8fafc",
+      "muted": "#94a3b8",
+      "accent": "#22d3ee",
+      "accent2": "#f472b6"
+    },
+    "typography": {
+      "display": { "family": "Space Grotesk", "weight": 700 },
+      "body": { "family": "Inter", "weight": 400 },
+      "mono": { "family": "JetBrains Mono", "weight": 500 }
+    },
+    "radius": 12,
+    "spacing": 8,
+    "motion": {
+      "ease": "power3.out",
+      "fast": 0.18,
+      "normal": 0.35,
+      "slow": 0.6
+    }
+  },
+  "captions": {
+    "mode": "burned",
+    "font": "Inter",
+    "weight": 700,
+    "size": 42,
+    "color": "#ffffff",
+    "stroke": "#000000",
+    "position": "bottom",
+    "maxCharsPerLine": 32
+  },
+  "audio": {
+    "loudnessLufs": -14,
+    "music": "synthwave",
+    "sfx": "digital"
+  },
+  "prompts": {
+    "style": "dark tech, cyan and magenta rim light, volumetric fog, clean geometry, subtle grid, high contrast",
+    "negative": "clutter, warm tones, handwritten type, low contrast, noisy"
+  },
+  "engines": {
+    "preferred": "hyperframes",
+    "supported": ["hyperframes", "remotion"]
+  }
+}

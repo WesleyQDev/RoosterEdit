@@ -1,0 +1,106 @@
+# Testes do fluxo
+
+Data: 2026-11-03
+
+Ambiente: Windows, Node.js 24.14, FFmpeg 8.1, HyperFrames 0.9.8, Remotion 4.0.540, Python 3.13.
+
+## 1. Transcrição com HyperFrames
+
+Arquivo de teste: amostra pública `jfk.wav` do repositório whisper.cpp.
+
+```bash
+node "<skill>/scripts/rooster.mjs" transcribe demo --language en --model small
+```
+
+Resultado:
+
+- `edit/transcript.json` com schema `rooster.transcript/v1`;
+- 3 segmentos e 22 palavras com timestamps;
+- `edit/captions/transcript.srt` gerado;
+- engine usada: `hyperframes` (Parakeet);
+- texto reconhecido: “And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.”
+
+## 2. Plano de edição
+
+`edit/plan.json` criado com:
+
+- 1 corte (`long-pause`, 4.24–5.2s);
+- 3 elementos (`letreiro`, `caption-emphasis`, `caption-emphasis`);
+- 1 capítulo.
+
+```bash
+node "<skill>/scripts/rooster.mjs" plan demo --show
+```
+
+Resultado: `0 error(s), 0 warning(s)`. O comando mostra o resumo e lembra que o plano precisa de aprovação antes do build.
+
+## 3. HyperFrames
+
+```bash
+npx hyperframes init demo-hf --non-interactive --skip-transcribe --skip-skills --resolution landscape
+npx hyperframes check --json
+npx hyperframes render --quality draft -o out.mp4
+```
+
+Resultado:
+
+- composição de 10.64s, 1920×1080, 30 fps, com áudio;
+- `check`: 0 erros, 0 warnings após ajustar o primeiro frame e o tamanho do rodapé;
+- render: MP4 H.264/AAC, 10.66s, 1920×1080, ~599 KB;
+- frames em 1s e 6s inspecionados visualmente.
+
+## 4. Remotion
+
+```bash
+npx create-video@latest --yes --blank remotion-test
+npx remotion still src/index.ts JFKTest out-still.png --frame=30
+npx remotion render src/index.ts JFKTest out.mp4
+```
+
+Resultado:
+
+- composição `JFKTest`, 320 frames, 30 fps, 1920×1080, com áudio;
+- still em PNG inspecionado visualmente;
+- render: MP4 H.264/AAC, 10.667s, 1920×1080, ~707 KB;
+- frame em 6s inspecionado visualmente.
+
+## 5. Build automático
+
+```bash
+node "<skill>/scripts/rooster.mjs" build demo --engine hyperframes --force
+node "<skill>/scripts/rooster.mjs" build demo --engine remotion --force
+```
+
+Resultado:
+
+- HyperFrames: 9.44s (o corte de 4.24–5.2s foi aplicado), 1920×1080, 30 fps, H.264/AAC, ~464 KB.
+- Remotion: 9.472s, 1920×1080, 30 fps, H.264/AAC, ~546 KB.
+- Os dois builds aplicaram os cortes com FFmpeg, remapearam os tempos dos elementos, geraram o projeto do engine e renderizaram frames inspecionados visualmente.
+- O tema veio do profile `minimal` (fundo claro, tipografia escura, acento terracota).
+
+## O que funcionou
+
+- `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).
+- `transcribe` usa HyperFrames/Parakeet e normaliza o resultado para `edit/transcript.json`.
+- `plan` valida `edit/plan.json` e mostra cortes, elementos e capítulos.
+- `build` gera projetos HyperFrames e Remotion a partir do plano, aplica cortes e copia os assets.
+- HyperFrames renderiza um MP4 real a partir de uma composição HTML/GSAP.
+- Remotion renderiza um MP4 real a partir de uma composição React.
+
+## O que ainda não foi testado
+
+- Transcrição em português com whisper.cpp: o ambiente usou Parakeet (inglês). Para português, é preciso instalar whisper.cpp ou o Whisper CLI.
+- Download de link do YouTube com `yt-dlp`: o YouTube bloqueia este ambiente com bot check. O código e o gate de direitos estão implementados, mas o download real precisa ser testado em uma máquina/rede autorizada.
+- Build v1 cobre letreiros, caption-emphasis, cards e cortes. B-roll, gráficos ricos, listas e 3D ainda precisam de templates mais específicos.
+- Preview unificado no browser e render wrapper do CLI.
+
+## Reproduzir
+
+1. Crie um workspace:
+   ```bash
+   node "<skill>/scripts/rooster.mjs" init
+   node "<skill>/scripts/rooster.mjs" new demo --category talking-head --profile minimal
+   ```
+2. Coloque um áudio/vídeo em `rooster/projects/demo/assets/source/`.
+3. Rode `transcribe`, crie `edit/plan.json` e rode `plan --show`.
+4. Use `npx hyperframes` ou `npx remotion` para montar e renderizar.

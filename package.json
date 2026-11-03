@@ -1,0 +1,38 @@
+{
+  "name": "rooster-edit",
+  "version": "0.1.0",
+  "description": "A video studio for AI agents: plan, edit, and render videos with HyperFrames and Remotion.",
+  "type": "module",
+  "bin": {
+    "rooster": "scripts/rooster.mjs"
+  },
+  "scripts": {
+    "doctor": "node scripts/rooster.mjs doctor",
+    "sync": "node scripts/sync-skill.mjs",
+    "validate": "node scripts/validate.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "SKILL.md",
+    "references",
+    "scripts",
+    "templates",
+    "agents",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "video",
+    "video-editing",
+    "hyperframes",
+    "remotion",
+    "ffmpeg",
+    "ai-agent",
+    "opencode",
+    "skill"
+  ],
+  "license": "MIT"
+}

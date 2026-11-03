@@ -1,0 +1,71 @@
+{
+  "skill_name": "rooster-edit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Tenho 40 minutos de entrevista em `footage/entrevista.mp4` e alguns b-rolls em `footage/broll/`. Quero um vídeo de 90 segundos para o YouTube, com cortes secos, legendas em português e uma trilha discreta. Não quero gravar narração.",
+      "expected_output": "O agente deve identificar a categoria talking-head, source live, voice user, criar o workspace/projeto, transcrever a entrevista, propor um corte de 90s com EDL/timeline, selecionar b-roll, gerar legendas, escolher FFmpeg ou Remotion, mostrar preview/timeline e só renderizar após aprovação.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Crie um explainer de 45 segundos sobre 'como funciona um LLM' para TikTok, 9:16, sem gravar nada. Use narração TTS em pt-BR e um visual tech neon. Quero ver a timeline no browser antes de renderizar.",
+      "expected_output": "O agente deve identificar faceless-explainer, source generated, voice tts, formato 9:16, criar script/storyboard, resolver ou criar um perfil tech-neon, gerar TTS e legendas, montar timeline no HyperFrames, abrir o preview no browser e aguardar aprovação antes do render final.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Quero um short 3D de 20 segundos com um robô fofo explicando o que é computação quântica, estilo cartoon low-poly, usando Three.js. Sem fala, só música e legendas.",
+      "expected_output": "O agente deve identificar 3d-cartoon, source generated, voice none, 9:16 ou 16:9 conforme confirmação, escolher Remotion + @remotion/three ou HyperFrames + Three.js, criar storyboard com personagem/câmera, implementar a cena 3D determinística, adicionar música e legendas e validar frames antes do render.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Reaproveite o perfil visual do projeto `lancamento-produto` para um novo vídeo de 30s sobre a feature X, mas em 16:9, com legendas queimadas e narração TTS.",
+      "expected_output": "O agente deve localizar o perfil usado por `lancamento-produto`, reutilizá-lo no novo projeto (sem recriar o estilo), aplicar overrides de formato 16:9, legendas burned e voice tts, e registrar a proveniência do perfil no project.json.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Estou num ambiente sem Node e sem FFmpeg. Tenho uma ideia de vídeo e alguns assets. Quero o brief, o roteiro, o storyboard e um plano de edição, mesmo sem conseguir renderizar.",
+      "expected_output": "O agente deve rodar o doctor, reconhecer que Node/FFmpeg não estão disponíveis, não fingir render, gerar brief/script/storyboard/edit/plan.json e explicar que HyperFrames e Remotion precisam de Node para renderizar.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Edite esse vídeo e me mostre a timeline no browser. Quero ver os cortes, legendas e trilha, e poder aprovar antes do render.",
+      "expected_output": "O agente deve criar ou carregar o projeto, montar `edit/timeline.json`, subir o preview unificado e/ou o estúdio nativo, mostrar tracks/cortes/legendas/trilha, verificar o preview com screenshot/console e parar no gate de aprovação antes de renderizar.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Make a 30-second product launch video from these screenshots and a logo. No voiceover, upbeat music, captions, 16:9. Use my brand colors.",
+      "expected_output": "O agente deve identificar product-promo, source generated/hybrid, voice none, usar os screenshots e o logo como assets, criar um perfil a partir das cores da marca, montar storyboard com callouts, adicionar música e legendas, escolher HyperFrames ou Remotion e entregar preview antes do render.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "I have a bunch of clips and I want a cool video for Instagram.",
+      "expected_output": "O agente não deve renderizar imediatamente. Deve fazer intake curto (objetivo, duração, formato 9:16, voz/música, estilo, nível de autonomia), propor uma categoria social-short e um plano, e confirmar os pontos caros de mudar antes de criar o projeto.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "Quero usar este vídeo do YouTube como base: https://www.youtube.com/watch?v=EIj7WPiKmOE. Baixe o material, extraia o áudio e a transcrição, e proponha um corte de 60 segundos com os melhores momentos.",
+      "expected_output": "O agente deve confirmar que o usuário tem direito de usar o conteúdo, verificar se yt-dlp e FFmpeg estão disponíveis, baixar o vídeo para assets/source com info.json/thumbnail/legendas, registrar proveniência no manifest, transcrever o áudio, propor um corte de 60s com timestamps e mostrar o plano antes de renderizar.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "Tenho um vídeo bruto em assets/source/entrevista.mp4. Transcreva com Whisper, leia meu style.md e monte um plano de edição com cortes e elementos. Me mostre o plano antes de criar qualquer coisa.",
+      "expected_output": "O agente deve rodar o doctor, transcrever com Whisper para edit/transcript.json, ler style.md, criar edit/plan.json com cuts e elements, mostrar o resumo do plano e parar no gate de aprovação. Não deve criar timeline, engine ou render antes do OK.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "O plano em edit/plan.json está aprovado. Gere o projeto HyperFrames, rode o check e renderize um draft. Depois gere o equivalente em Remotion.",
+      "expected_output": "O agente deve rodar build --engine hyperframes, validar com npx hyperframes check, renderizar um draft; depois rodar build --engine remotion, npm install e render; reportar caminhos, duração e diferenças entre os dois motores.",
+      "files": []
+    }
+  ]
+}

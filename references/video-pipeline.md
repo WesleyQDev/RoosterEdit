@@ -1,0 +1,216 @@
+# Video-inspired 6-step workflow
+
+This fast path borrows the **sequence** and the **approval discipline** from the reference video "Como editar vídeos com IA usando o Claude Code" by Marcos Lemos. It does **not** copy the video's folder names. RoosterEdit keeps its own workspace structure and maps the video's concepts into it.
+
+## Reference video vs. RoosterEdit
+
+| Reference video | RoosterEdit |
+|---|---|
+| `bruto/` | `projects/<slug>/assets/source/` |
+| `estilo/ESTILO.md` | `projects/<slug>/style.md` + resolved profile |
+| `trabalho/transcricao.json` | `projects/<slug>/edit/transcript.json` |
+| `trabalho/plano.json` | `projects/<slug>/edit/plan.json` |
+| `final/` | `projects/<slug>/renders/` |
+| `estilo/` references | `projects/<slug>/style/` + `profiles/<id>/references/` |
+
+The project structure stays:
+
+```text
+rooster/
+├── projects/<slug>/
+│   ├── project.json
+│   ├── brief.md
+│   ├── style.md
+│   ├── style/
+│   ├── assets/source/
+│   ├── edit/
+│   │   ├── transcript.json
+│   │   ├── plan.json
+│   │   ├── edl.json
+│   │   ├── timeline.json
+│   │   └── captions/
+│   ├── engine/
+│   ├── preview/
+│   ├── renders/
+│   └── qa/
+├── profiles/
+├── categories/
+└── library/
+```
+
+## Step 1 — Prepare the machine
+
+Check and, if missing, install:
+
+- FFmpeg
+- Node.js LTS
+- Python 3
+- Whisper (local, free transcription)
+- HyperFrames (via its skill or CLI)
+
+Ask for permission before each installation. Test Whisper with a short audio file before relying on it.
+
+```bash
+ffmpeg -version
+node --version
+python --version
+whisper --help
+npx skills add heygen-com/hyperframes
+```
+
+If the user only wants planning, do not install anything. Explain what is missing and continue with the plan.
+
+## Step 2 — Create or resolve the project
+
+Create a RoosterEdit project with a category and a profile:
+
+```bash
+node "<skill>/scripts/rooster.mjs" new meu-video \
+  --category talking-head \
+  --profile minimal \
+  --source live \
+  --voice user
+```
+
+Put raw media in `projects/meu-video/assets/source/`. If the user already has a project, resolve its category/profile instead of creating a new one.
+
+## Step 3 — Write the style guide
+
+Write `projects/<slug>/style.md` and resolve the profile. The video uses a single `ESTILO.md`; RoosterEdit separates the human-readable guide (`style.md`) from the reusable identity (`profiles/<id>/profile.json`).
+
+The style guide should include:
+
+- tone and references;
+- palette and typography;
+- motion and transitions;
+- caption style;
+- music and SFX palette;
+- what to avoid;
+- examples of frames or links.
+
+## Step 4 — Transcribe and plan
+
+### Transcribe
+
+Prefer HyperFrames transcribe. It uses Parakeet for English and whisper.cpp for other languages, and writes word-level timestamps:
+
+```bash
+npx hyperframes transcribe projects/meu-video/assets/source/video.mp4 \
+  --language pt \
+  --model small \
+  --json \
+  --to srt \
+  -o projects/meu-video/edit/captions/transcript.srt
+```
+
+Or use Whisper locally:
+
+```bash
+whisper projects/meu-video/assets/source/video.mp4 \
+  --model small \
+  --language pt \
+  --output_format json \
+  --output_dir projects/meu-video/edit
+```
+
+Save the result as `edit/transcript.json` (and optionally `.srt`). The transcript must include the start and end time of each sentence or segment.
+
+The RoosterEdit CLI wraps both paths:
+
+```bash
+node "<skill>/scripts/rooster.mjs" transcribe meu-video --language pt --model small
+```
+
+It prefers HyperFrames when available and falls back to the OpenAI Whisper CLI.
+
+### Plan
+
+Read `edit/transcript.json` and `style.md`, understand the subject, and write `edit/plan.json`:
+
+- cuts for long pauses, repetitions, false starts, and retakes;
+- the strongest take to keep;
+- overlays: letreiros, graphics, lists, zooms, b-roll;
+- start, end, and description for every cut and element;
+- a short summary and chapter markers.
+
+Read `references/edit-plan.md` for the schema and heuristics.
+
+### Show the plan before building
+
+Always show the user a readable summary of `edit/plan.json` and wait for approval. Do not create the HyperFrames project, the timeline, or the final render before the plan is approved. This is the most important gate in the workflow.
+
+## Step 5 — Create the visual elements
+
+Turn the approved plan into scenes:
+
+- **Letreiros**: short titles, names, key phrases.
+- **Gráficos**: diagrams, charts, numbers, comparisons.
+- **Listas**: steps, checklist items, rankings.
+- **Zooms**: punch-ins on faces, products, or details.
+- **B-roll**: footage or images that illustrate the words.
+- **Lower thirds**: names and roles.
+
+Choose the engine:
+
+- HyperFrames for HTML/CSS/GSAP motion and automatic assembly;
+- Remotion for React, data-driven scenes, and 3D;
+- FFmpeg for simple cuts, captions, and audio.
+
+## Step 6 — Assemble, review, export
+
+### Option 1 — Automatic assembly
+
+Build a HyperFrames project from the approved plan:
+
+```bash
+node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
+```
+
+The build applies the plan's cuts with FFmpeg, remaps the element timings, copies the media, and writes a working composition. Preview it in the browser. Review the cuts, captions, overlays, and audio. Render to `renders/final.mp4`.
+
+### Option 2 — Remotion
+
+Build a Remotion project from the approved plan when the video needs React components, data-driven scenes, interaction, or 3D via `@remotion/three`:
+
+```bash
+node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
+```
+
+Preview in Remotion Studio, then render to `renders/final.mp4`.
+
+### Review and export
+
+- Watch the draft with the user.
+- Fix timing, captions, audio, and visual issues.
+- Render the final.
+- Validate with FFprobe.
+- Deliver `renders/final.mp4`, `edit/captions/captions.srt`, `renders/thumbnail.png`, and `renders/metadata.json`.
+
+## What we keep from the video
+
+- The 6-step sequence.
+- The idea of a single visual style guide.
+- Local Whisper transcription with timestamps.
+- An edit plan with cuts and visual elements.
+- A hard approval gate before building.
+- Two assembly paths: HyperFrames for HTML/GSAP motion, Remotion for React/3D/data.
+- A final review and export step.
+
+## What we adapt
+
+- Folder names: we use `projects/<slug>/` instead of `bruto/estilo/trabalho/final`.
+- The style guide is split into `style.md` and a reusable profile.
+- The plan is `edit/plan.json`, not `trabalho/plano.json`.
+- The plan feeds an engine-agnostic timeline (`edit/timeline.json`), not only one engine.
+- Categories and profiles make the workflow reusable across videos.
+- QA, licenses, captions, and delivery are first-class.
+
+## Anti-patterns
+
+- Copying the video's folder names literally when the project already has a structure.
+- Building before the plan is approved.
+- Skipping the style guide and improvising the look.
+- Treating automatic captions as final.
+- Creating overlays for every sentence instead of for the moments that need them.
+- Rendering before watching the preview.
+- Trying to force HyperFrames into a React/3D project instead of using Remotion.

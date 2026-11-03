@@ -1,0 +1,53 @@
+{
+  "schema": "rooster.profile/v1",
+  "id": "minimal",
+  "name": "Minimal",
+  "description": "Clean editorial: warm white, black type, restrained motion, one accent",
+  "extends": null,
+  "scope": "global",
+  "tokens": {
+    "colors": {
+      "bg": "#f7f5f2",
+      "fg": "#111111",
+      "muted": "#6b6b6b",
+      "accent": "#e4572e",
+      "accent2": "#111111"
+    },
+    "typography": {
+      "display": { "family": "Inter", "weight": 700 },
+      "body": { "family": "Inter", "weight": 400 },
+      "mono": { "family": "JetBrains Mono", "weight": 500 }
+    },
+    "radius": 4,
+    "spacing": 8,
+    "motion": {
+      "ease": "power2.out",
+      "fast": 0.15,
+      "normal": 0.3,
+      "slow": 0.5
+    }
+  },
+  "captions": {
+    "mode": "burned",
+    "font": "Inter",
+    "weight": 600,
+    "size": 40,
+    "color": "#111111",
+    "stroke": "#f7f5f2",
+    "position": "bottom",
+    "maxCharsPerLine": 34
+  },
+  "audio": {
+    "loudnessLufs": -14,
+    "music": "ambient",
+    "sfx": "subtle"
+  },
+  "prompts": {
+    "style": "clean editorial, warm white background, black typography, one accent color, generous negative space",
+    "negative": "neon, clutter, heavy gradients, 3d, glossy"
+  },
+  "engines": {
+    "preferred": "hyperframes",
+    "supported": ["hyperframes", "remotion", "ffmpeg"]
+  }
+}

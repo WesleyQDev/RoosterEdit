@@ -1,0 +1,54 @@
+{
+  "schema": "rooster.profile/v1",
+  "id": "3d-cartoon",
+  "name": "3D Cartoon",
+  "description": "Low-poly cartoon: rounded shapes, saturated palette, soft light, playful motion",
+  "extends": null,
+  "scope": "global",
+  "tokens": {
+    "colors": {
+      "bg": "#0d1020",
+      "fg": "#ffffff",
+      "muted": "#9aa3c7",
+      "accent": "#ff8a5c",
+      "accent2": "#22d3ee",
+      "accent3": "#ffe66d"
+    },
+    "typography": {
+      "display": { "family": "Nunito", "weight": 800 },
+      "body": { "family": "Inter", "weight": 500 },
+      "mono": { "family": "JetBrains Mono", "weight": 500 }
+    },
+    "radius": 24,
+    "spacing": 8,
+    "motion": {
+      "ease": "back.out(1.7)",
+      "fast": 0.2,
+      "normal": 0.4,
+      "slow": 0.7
+    }
+  },
+  "captions": {
+    "mode": "burned",
+    "font": "Nunito",
+    "weight": 800,
+    "size": 46,
+    "color": "#ffffff",
+    "stroke": "#0d1020",
+    "position": "bottom",
+    "maxCharsPerLine": 28
+  },
+  "audio": {
+    "loudnessLufs": -14,
+    "music": "playful",
+    "sfx": "cartoon"
+  },
+  "prompts": {
+    "style": "cute low-poly 3d cartoon, rounded shapes, soft studio lighting, saturated teal and coral palette, simple gradient background",
+    "negative": "realistic skin, photoreal, dark horror, complex textures, clutter"
+  },
+  "engines": {
+    "preferred": "remotion",
+    "supported": ["remotion", "hyperframes"]
+  }
+}
