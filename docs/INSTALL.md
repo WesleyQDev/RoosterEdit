@@ -70,29 +70,38 @@ Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir)
 
 ## Primeiro uso
 
-Depois de instalar, configure o workspace uma vez com o agente:
-- idioma, formato e perfil padrão;
+Depois de instalar, crie o primeiro **canal** com o agente:
+- nome, idioma, formato e perfil padrão;
 - política de assets;
 - engine e autonomia;
 - voz/TTS.
 
-O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults com `config set` e só cria um projeto quando você pedir.
+O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir.
 
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs init
-node .opencode/skills/rooster-edit/scripts/rooster.mjs config set defaults.language pt-BR
-node .opencode/skills/rooster-edit/scripts/rooster.mjs config set defaults.aspect 16:9
-node .opencode/skills/rooster-edit/scripts/rooster.mjs config show
+node .opencode/skills/rooster-edit/scripts/rooster.mjs channel new meu-canal \
+  --language pt-BR \
+  --format 16:9 \
+  --profile minimal \
+  --category talking-head
+node .opencode/skills/rooster-edit/scripts/rooster.mjs channel list
 ```
 
-Coloque o vídeo em `rooster/projects/meu-video/assets/source/` e peça ao agente:
+Crie o projeto dentro do canal:
+
+```bash
+node .opencode/skills/rooster-edit/scripts/rooster.mjs new meu-video --channel meu-canal
+```
+
+Coloque o vídeo em `rooster/channels/meu-canal/projects/meu-video/assets/source/` e peça ao agente:
 
 > Transcreva o vídeo, leia meu `style.md`, monte `edit/plan.json` e me mostre o plano antes de criar qualquer coisa.
 
 Depois da aprovação:
 
 ```bash
-node .opencode/skills/rooster-edit/scripts/rooster.mjs build meu-video --engine hyperframes
+node .opencode/skills/rooster-edit/scripts/rooster.mjs build meu-canal/meu-video --engine hyperframes
 ```
 
 ## Atualizar

@@ -97,9 +97,42 @@ RoosterEdit/
 
 O repositório inteiro é o pacote da skill. Isso simplifica a instalação e a publicação: quem copiar o repo para `~/.config/opencode/skills/rooster-edit` ou `.opencode/skills/rooster-edit` leva tudo junto. A pasta `.opencode/skills/rooster-edit` é apenas uma cópia de desenvolvimento, gerada por `scripts/sync-skill.mjs`, para o OpenCode descobrir a skill enquanto ela é editada.
 
+## 3.1 Modelo de canais
+
+O workspace é dividido em **canais**. Um canal é o grupo estável de marca/audiência/operação e guarda os defaults criativos:
+
+```json
+{
+  "schema": "rooster.channel/v1",
+  "id": "en-tech",
+  "name": "EN Tech",
+  "language": "en",
+  "format": "16:9",
+  "profile": "tech-neon",
+  "category": "faceless-explainer",
+  "voice": "tts",
+  "engine": "auto",
+  "autonomy": "guided",
+  "assets": {
+    "strategy": "mixed",
+    "allowDownload": true,
+    "allowGenerate": false,
+    "licensePolicy": "strict"
+  }
+}
+```
+
+Precedência: **projeto > canal > categoria (sugestão) > workspace/global > built-in**.
+
+- **Canal**: idioma, formato default, perfil, categoria, assets, engine, autonomia, voz.
+- **Categoria**: receita de conteúdo; sugere formato/engine/voz, mas não passa por cima do canal.
+- **Projeto**: herda o canal e registra only os overrides.
+
+Todo projeto novo fica em `channels/<canal>/projects/<slug>/`. O `projects/` na raiz é legado.
+
 ## 4. Workspace do usuário
 
-O workspace é criado no projeto onde o vídeo será produzido, não no repositório da skill.
+O workspace é criado no projeto onde o vídeo será produzido, não no repositório da skill. O desenho abaixo mostra a forma de **um projeto**; ele fica dentro de `channels/<canal>/projects/<slug>/`.
 
 ```text
 rooster/
@@ -333,9 +366,12 @@ O projeto é a instância concreta. Ele combina category + profile + overrides.
   "schema": "rooster.project/v1",
   "slug": "meu-video",
   "name": "Meu Vídeo",
+  "channel": "en-tech",
   "category": "faceless-explainer",
   "profile": "tech-neon",
   "engine": "auto",
+  "language": "en",
+  "overrides": ["format", "voice"],
   "mode": {
     "source": "generated",
     "voice": "tts",

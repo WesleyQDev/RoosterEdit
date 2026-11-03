@@ -9,9 +9,12 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
   "schema": "rooster.project/v1",
   "slug": "meu-video",
   "name": "Meu Vídeo",
+  "channel": "en-tech",
   "category": "faceless-explainer",
   "profile": "tech-neon",
   "engine": "auto",
+  "language": "en",
+  "overrides": ["format", "voice"],
   "mode": {
     "source": "generated",
     "voice": "tts",
@@ -24,6 +27,13 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
     "height": 1080,
     "fps": 30,
     "duration": 60
+  },
+  "assets": {
+    "strategy": "mixed",
+    "allowDownload": true,
+    "allowGenerate": false,
+    "licensePolicy": "strict",
+    "sources": []
   },
   "audio": {
     "loudnessLufs": -14,
@@ -278,6 +288,37 @@ For URL assets, add:
 }
 ```
 
+## channel.json
+
+```json
+{
+  "schema": "rooster.channel/v1",
+  "id": "en-tech",
+  "name": "EN Tech",
+  "language": "en",
+  "format": "16:9",
+  "profile": "tech-neon",
+  "category": "faceless-explainer",
+  "voice": "tts",
+  "engine": "auto",
+  "autonomy": "guided",
+  "assets": {
+    "strategy": "mixed",
+    "allowDownload": true,
+    "allowGenerate": false,
+    "licensePolicy": "strict"
+  },
+  "audio": { "loudnessLufs": -14, "music": true },
+  "captions": { "enabled": true, "mode": "burned" },
+  "brand": { "logo": null, "fonts": [], "colors": [] },
+  "createdAt": "2026-11-03T00:00:00.000Z"
+}
+```
+
+Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `category`, `voice`, `engine`, `autonomy`, `assets`.
+
+`format` can be `16:9`, `9:16`, `1:1`, `4:5`, or `auto`.
+
 ## workspace.json
 
 ```json
@@ -285,13 +326,17 @@ For URL assets, add:
   "schema": "rooster.workspace/v1",
   "version": "0.1.0",
   "createdAt": "2026-11-03T00:00:00.000Z",
+  "defaultChannel": "default",
   "defaults": {
     "profile": "minimal",
     "category": "custom",
     "engine": "auto",
     "aspect": "16:9",
     "fps": 30,
-    "loudnessLufs": -14
+    "loudnessLufs": -14,
+    "language": "pt-BR",
+    "autonomy": "guided",
+    "assets": "mixed"
   }
 }
 ```

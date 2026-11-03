@@ -13,7 +13,7 @@ Assets are the raw material of the project. This reference explains the supporte
 | `none` | No external assets | Yes; text/motion graphics only |
 | `mixed` | All of the above, with permission | Yes, with explicit consent |
 
-The strategy lives in `rooster/config.json`:
+The strategy lives in the channel (`channels/<id>/channel.json`), with a workspace fallback in `rooster/config.json` and a project override in `project.json`:
 
 ```json
 {
@@ -126,15 +126,22 @@ A future adapter can add Pexels/Unsplash/Pixabay search, but it must keep the li
 
 ## Adjusting assets
 
-The user can change the strategy at any time:
+Change the channel default:
+
+```bash
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.strategy user
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.allowDownload false
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.allowGenerate true
+```
+
+Or change the workspace fallback:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" config set assets.strategy user
 node "<skill>/scripts/rooster.mjs" config set assets.allowDownload false
-node "<skill>/scripts/rooster.mjs" config set assets.allowGenerate true
 ```
 
-Or per project, edit `project.json`:
+Or override per project in `project.json`:
 
 ```json
 {

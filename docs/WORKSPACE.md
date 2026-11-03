@@ -4,78 +4,113 @@ O workspace é o estúdio local do usuário. Ele fica no projeto de vídeo, não
 
 > **Caminho do CLI:** os comandos abaixo assumem que você está na raiz do repositório RoosterEdit. Ao usar a skill em um projeto de vídeo, rode a partir do projeto e resolva o script pelo diretório da skill: `node "<skill>/scripts/rooster.mjs" ...`.
 
+## Estrutura
+
 ```text
 rooster/
 ├── workspace.json
 ├── config.json
-├── README.md
-├── projects/
-│   └── <slug>/
-│       ├── project.json
-│       ├── brief.md
-│       ├── script.md
-│       ├── style.md
-│       ├── storyboard/
+├── channels/
+│   └── <canal>/
+│       ├── channel.json
+│       ├── projects/
+│       │   └── <slug>/
+│       │       ├── project.json
+│       │       ├── brief.md
+│       │       ├── script.md
+│       │       ├── style.md
+│       │       ├── storyboard/
+│       │       ├── assets/{source,generated,licensed}/
+│       │       ├── edit/{transcript.json,plan.json,edl.json,timeline.json,captions/,audio/}
+│       │       ├── engine/{hyperframes|remotion}/
+│       │       ├── preview/
+│       │       ├── renders/
+│       │       ├── qa/
+│       │       └── review.md
+│       ├── profiles/
+│       ├── categories/
 │       ├── assets/
-│       ├── edit/
-│       ├── engine/
-│       ├── preview/
-│       ├── renders/
-│       ├── qa/
-│       └── review.md
-├── profiles/
-├── categories/
-├── library/
+│       └── library/
+├── profiles/       # compartilhados
+├── categories/     # compartilhadas
+├── library/{music,sfx,fonts,overlays,luts,broll,images}/
 └── cache/
 ```
 
-## Criar
+O workspace é criado com:
 
 ```bash
 node scripts/rooster.mjs init
 ```
 
-O comando cria a estrutura, o `workspace.json`, o `config.json` e copia os perfis/categorias built-in para o workspace.
+`init` cria um canal `default` para vídeos avulsos. Canais reais são criados depois.
+
+## Canais
+
+Um canal é o grupo estável de marca/audiência/operação. Ele guarda:
+
+- idioma;
+- formato default (`16:9`, `9:16`, `1:1` ou `auto`);
+- perfil visual;
+- categoria default;
+- política de assets;
+- engine;
+- autonomia;
+- voz/TTS;
+- brand kit;
+- biblioteca própria.
+
+```bash
+node scripts/rooster.mjs channel new en-tech \
+  --language en \
+  --format 16:9 \
+  --profile tech-neon \
+  --category faceless-explainer \
+  --voice tts \
+  --assets mixed
+```
+
+```bash
+node scripts/rooster.mjs channel list
+node scripts/rooster.mjs channel show en-tech
+node scripts/rooster.mjs channel set en-tech format 9:16
+node scripts/rooster.mjs channel use en-tech
+```
 
 ## Criar um projeto
 
 ```bash
-node scripts/rooster.mjs new meu-video \
-  --category faceless-explainer \
-  --profile tech-neon \
-  --format 9:16 \
-  --duration 45 \
-  --voice tts
+node scripts/rooster.mjs new video-x --channel en-tech --duration 60
 ```
 
-## Estrutura de um projeto
+O projeto herda o canal e pode sobrescrever:
 
-| Pasta/arquivo | Função |
-|---|---|
-| `project.json` | Configuração do projeto e overrides |
-| `brief.md` | Objetivo, público, restrições |
-| `script.md` | Roteiro, falas e texto na tela |
-| `style.md` | Direção visual e sonora |
-| `storyboard/` | Cenas, frames e durações |
-| `assets/source/` | Material original do usuário |
-| `assets/generated/` | Imagens, áudio e vídeo gerados |
-| `assets/licensed/` | Stock e assets com licença |
-| `assets/manifest.json` | Inventário, hashes, licenças e proveniência |
-| `edit/transcript.json` | Transcrição com timestamps (Whisper) |
-| `edit/plan.json` | Plano de edição: cortes e elementos, aprovado antes do build |
-| `edit/timeline.json` | Timeline engine-agnostic |
-| `edit/edl.json` | Lista de cortes para footage |
-| `edit/captions/` | SRT/VTT |
-| `edit/audio/` | Voiceover, música e SFX |
-| `engine/` | Projeto do motor escolhido |
-| `preview/` | Review page e screenshots |
-| `renders/` | Drafts, final, thumbnail |
-| `qa/` | Relatório e evidências |
-| `review.md` | Decisões, feedback e lições |
+```bash
+node scripts/rooster.mjs new video-special --channel en-tech \
+  --format 9:16 \
+  --profile brutalist \
+  --voice user
+```
+
+`project.json` registra:
+
+- `channel`;
+- `category`;
+- `profile`;
+- `format`;
+- `mode` (source, voice, style, autonomy);
+- `assets` (estratégia, permissões, licença);
+- `overrides` (o que veio do projeto, não do canal).
+
+## Precedência
+
+```text
+projeto > canal > categoria (sugestão) > workspace/global > built-in
+```
+
+O canal ganha da categoria. O projeto ganha de todos.
 
 ## Perfis
-
-Um perfil é a identidade visual/sonora reutilizável.
 
 ```text
 profiles/<id>/
@@ -88,15 +123,18 @@ profiles/<id>/
 
 Perfis podem ser:
 
-- **project** — específico de um projeto;
-- **workspace** — compartilhado entre projetos;
-- **global** — compartilhado entre workspaces, em `~/.rooster/profiles`.
+- **channel** — dentro de `channels/<canal>/profiles`;
+- **workspace** — compartilhado em `rooster/profiles`;
+- **global** — `~/.rooster/profiles`;
+- **built-in** — `templates/profiles`.
 
-Precedência: projeto > workspace > global > built-in.
+```bash
+node scripts/rooster.mjs profile list
+node scripts/rooster.mjs profile show minimal
+node scripts/rooster.mjs profile fork minimal --as minha-marca
+```
 
 ## Categorias
-
-Uma categoria é a receita de conteúdo.
 
 ```text
 categories/<id>/
@@ -107,11 +145,12 @@ categories/<id>/
 └── examples/
 ```
 
-Categorias iniciais: `talking-head`, `faceless-explainer`, `3d-cartoon`.
+```bash
+node scripts/rooster.mjs category list
+node scripts/rooster.mjs category fork faceless-explainer --as meu-explainer
+```
 
 ## Biblioteca
-
-A pasta `library/` guarda assets reutilizáveis:
 
 ```text
 library/
@@ -124,58 +163,26 @@ library/
 └── images/
 ```
 
-Cada asset deve ter licença e proveniência registradas. Não commitar mídia pesada no repositório da skill.
+Cada asset deve ter licença e proveniência. Não commitar mídia pesada no repositório da skill.
 
 ## Links de vídeo
 
-Para usar um link autorizado como material:
-
 ```bash
-node scripts/rooster.mjs ingest meu-video \
+node scripts/rooster.mjs ingest en-tech/video-x \
   --url "https://www.youtube.com/watch?v=..." \
   --confirm-rights
 ```
 
-Leia `references/link-ingest.md` antes de baixar. O comando só funciona com `--confirm-rights`, para deixar explícito que o usuário tem direito de usar o conteúdo.
+Leia `references/link-ingest.md` antes de baixar. O comando só funciona com `--confirm-rights`, e respeita `assets.allowDownload` do canal/workspace.
 
-## Fluxo rápido (inspirado no vídeo)
+## Fluxo rápido
 
-O vídeo de referência usa `bruto/estilo/trabalho/final`; o RoosterEdit usa a estrutura própria acima. O fluxo é:
-
-1. Instalar FFmpeg, Node, Python, Whisper e HyperFrames.
-2. Criar o projeto e colocar o material em `assets/source/`.
-3. Escrever `style.md` (ou resolver um profile).
-4. Transcrever com Whisper ou HyperFrames:
-   ```bash
-   node "<skill>/scripts/rooster.mjs" transcribe meu-video --model small --language pt
-   ```
-   O comando tenta HyperFrames transcribe (Parakeet/whisper.cpp) e, se não estiver disponível, usa o Whisper CLI.
-5. Criar `edit/plan.json` com cortes e elementos e mostrar o plano:
-   ```bash
-   node "<skill>/scripts/rooster.mjs" plan meu-video --show
-   ```
-6. Só depois da aprovação, criar a timeline, os visuais e o render.
-
-O plano é o gate mais importante. Ele fica em `edit/plan.json` e segue o schema `rooster.plan/v1` documentado em `references/edit-plan.md`.
-
-Depois da aprovação, gere o projeto do engine:
-
-```bash
-node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
-# ou
-node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
-```
-
-O `build` aplica os cortes com FFmpeg, remapeia os tempos dos elementos e cria o projeto pronto para preview/render.
-
-## HyperFrames e Remotion
-
-- **HyperFrames**: montagem automática a partir do plano, com HTML/CSS/GSAP e motion graphics.
-  ```bash
-  npx skills add heygen-com/hyperframes
-  ```
-- **Remotion**: React, cenas data-driven, componentes complexos e 3D com `@remotion/three`.
-  ```bash
-  npx create-video@latest
-  ```
-- **FFmpeg**: utilitário para probe, cortes, proxies, legendas e mix de áudio.
+1. `init` — cria workspace + canal `default`.
+2. `channel new` — cria o canal real.
+3. `new --channel` — cria o projeto.
+4. `ingest` — adiciona assets.
+5. `transcribe` — gera `edit/transcript.json`.
+6. `digest` — lê a transcrição em partes.
+7. `plan --show` — aprova o plano.
+8. `build --engine` — gera HyperFrames/Remotion.
+9. `preview`/`render` — revisão e entrega.

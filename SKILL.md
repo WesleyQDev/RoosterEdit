@@ -38,10 +38,13 @@ Do not create a `scripts/` directory in the user's project just to satisfy the c
 
 If the workspace does not exist yet, do a short onboarding before creating any project:
 
-1. Ask where `rooster/` should live.
-2. Ask the default language, format, profile, assets strategy, engine, autonomy, and voice.
-3. Run `init`, then save the answers with `config set`.
-4. Show a plain-language summary and stop.
+1. Use `./rooster` by default. Do not ask "where does the workspace live" unless the user wants a custom path.
+2. Ask whether to create the first **channel**.
+3. If yes, use the harness's question/form tool when available; otherwise ask in chat. Collect the channel name, language, default format (or `auto`), profile, default category, assets strategy, engine, autonomy, voice, and optional brand assets.
+4. Run `init`, then `channel new <id> ...` with the answers.
+5. Show a plain-language summary and stop.
+
+A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, profile, category, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults.
 
 Do not start a video in the same turn unless the user explicitly asks. Read `references/onboarding.md` for the exact questions, defaults, and commands. Read `references/assets.md` before downloading or generating any asset.
 
@@ -68,15 +71,17 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Degrade gracefully.** The harness may not have subagents, a browser, Node, FFmpeg, or TTS. Offer the best path available and say what is missing.
 - **Protect the context.** Video work is token-heavy. Redirect engine logs to files, read only the tail, use `digest` instead of the full transcript, and inspect a few key frames instead of every frame. Read `references/token-discipline.md`.
 
-## Step 0 — Find the workspace
+## Step 0 - Find the workspace
 
-Look for a `rooster/` directory in the current project first, then use `ROOSTER_WORKSPACE` if it is set. If neither exists, ask whether to create one with:
+Look for a `rooster/` directory in the current project first, then use `ROOSTER_WORKSPACE` if it is set. The default is `./rooster`; only ask for a custom path when the user wants one. If neither exists, create it with:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" init
 ```
 
-The workspace is where projects, profiles, categories, and the asset library live. Keep it out of the skill directory; the skill is reusable, the workspace belongs to the user's video project.
+The workspace is where **channels**, projects, profiles, categories, and the asset library live. Keep it out of the skill directory; the skill is reusable, the workspace belongs to the user's video project.
+
+If the workspace exists but has no channel, create one before creating a project. Every project belongs to a channel; a `default` channel covers one-off videos.
 
 If the user is only asking a question or exploring an idea, answer it without creating a workspace. A question is not a request to build.
 
@@ -115,24 +120,29 @@ Ask only the questions that change the output. Read `references/intake.md` for t
 
 Do not interrogate the user with all of them at once. Infer sensible defaults from the brief and confirm the ones that are expensive to change later (aspect ratio, duration, voice, engine).
 
-## Step 3 — Resolve the recipe
+## Step 3 - Resolve the recipe
 
-A project is a combination of a **category** (what the video is) and a **profile** (how it looks and sounds).
+A project belongs to a **channel** and combines a **category** (what the video is) and a **profile** (how it looks and sounds).
 
 ```text
-category = content recipe: beats, pacing, duration, required assets, defaults
+channel  = stable group: brand, audience, language, format, profile, assets, engine, voice
+category = content recipe: beats, pacing, duration, required assets, suggested defaults
 profile  = visual identity: colors, type, motion, captions, audio, components
-project  = category + profile + overrides + assets + timeline + engine
+project  = channel + category + profile + overrides + assets + timeline + engine
 ```
 
 Read `references/profiles-and-categories.md` for the schemas and resolution order. The short version:
 
 1. Project overrides in `project.json`.
-2. Workspace profiles/categories in `rooster/profiles` and `rooster/categories`.
-3. Global profiles/categories in `~/.rooster`.
-4. Built-ins shipped with the skill in `templates/`.
+2. Channel defaults in `channels/<id>/channel.json`.
+3. Category suggestions in `categories/<id>/category.json`.
+4. Workspace profiles/categories in `rooster/profiles` and `rooster/categories`.
+5. Global profiles/categories in `~/.rooster`.
+6. Built-ins shipped with the skill in `templates/`.
 
-If the user has no profile, offer three paths: use a built-in, create one from their brand assets, or derive one from a reference. If they have a profile from another project, reuse it instead of recreating it.
+The channel wins over the category when both define a value, because the channel is the stable brand/audience context. The category still supplies structure, duration, required assets, and suggestions. The project can override anything.
+
+If the user has no channel, create one first. If they have no profile, offer three paths: use a built-in, create one from their brand assets, or derive one from a reference. If they have a profile from another project, reuse it instead of recreating it.
 
 ## Step 4 — Plan before building
 
@@ -284,24 +294,32 @@ The skill expects this shape:
 rooster/
 ├── workspace.json
 ├── config.json
-├── projects/<slug>/
-│   ├── project.json
-│   ├── brief.md
-│   ├── script.md
-│   ├── style.md
-│   ├── storyboard/
-│   ├── assets/{source,generated,licensed}/
-│   ├── edit/{timeline.json,edl.json,captions/,audio/}
-│   ├── engine/{hyperframes|remotion|ffmpeg}/
-│   ├── preview/
-│   ├── renders/
-│   ├── qa/
-│   └── review.md
+├── channels/<channel>/
+│   ├── channel.json
+│   ├── projects/<slug>/
+│   │   ├── project.json
+│   │   ├── brief.md
+│   │   ├── script.md
+│   │   ├── style.md
+│   │   ├── storyboard/
+│   │   ├── assets/{source,generated,licensed}/
+│   │   ├── edit/{timeline.json,edl.json,captions/,audio/}
+│   │   ├── engine/{hyperframes|remotion|ffmpeg}/
+│   │   ├── preview/
+│   │   ├── renders/
+│   │   ├── qa/
+│   │   └── review.md
+│   ├── profiles/<id>/
+│   ├── categories/<id>/
+│   ├── assets/
+│   └── library/
 ├── profiles/<id>/
 ├── categories/<id>/
 ├── library/{music,sfx,fonts,overlays,luts,broll,images}/
 └── cache/
 ```
+
+New projects belong inside `channels/<channel>/projects/`. The root `projects/` folder is legacy; only keep it for old workspaces.
 
 If the user already has a different structure, adapt to it and record the mapping in `project.json` instead of forcing a migration.
 
@@ -345,14 +363,18 @@ node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" doctor --json
 node "<skill>/scripts/rooster.mjs" config show
 
+# Channel
+node "<skill>/scripts/rooster.mjs" channel new en-tech --language en --format 16:9 --profile tech-neon --category faceless-explainer
+node "<skill>/scripts/rooster.mjs" channel list
+
 # Project
-node "<skill>/scripts/rooster.mjs" new meu-video --category faceless-explainer --profile tech-neon --format 9:16
-node "<skill>/scripts/rooster.mjs" ingest meu-video --url "https://www.youtube.com/watch?v=..." --confirm-rights
-node "<skill>/scripts/rooster.mjs" transcribe meu-video --model small --language pt
-node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
-node "<skill>/scripts/rooster.mjs" plan meu-video --show
+node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
+node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.youtube.com/watch?v=..." --confirm-rights
+node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
+node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
+node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
 node "<skill>/scripts/rooster.mjs" list
-node "<skill>/scripts/rooster.mjs" check meu-video
+node "<skill>/scripts/rooster.mjs" check en-tech/video-x
 
 # Review (planned)
 node "<skill>/scripts/rooster.mjs" preview meu-video

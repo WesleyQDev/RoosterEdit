@@ -1,90 +1,131 @@
-# First run and workspace onboarding
+# First run and channel onboarding
 
-Use this after the skill is installed and before the first project. The goal is to configure the workspace once, with a few sensible defaults, so every project starts faster.
+Use this after installation and before the first project. The goal is to configure a **channel** once, with sensible defaults, then create projects inside it.
+
+## Concept
+
+```text
+Workspace → Channel → Project
+```
+
+- **Workspace** = the `rooster/` folder. Infrastructure and shared library.
+- **Channel** = stable group for a brand, audience, or operation. Defaults for language, format, profile, category, assets, engine, autonomy, and voice.
+- **Category** = content recipe. Structure, duration, required assets, suggestions.
+- **Profile** = visual identity. Shared or channel-specific.
+- **Project** = one video inside a channel. Inherits the channel and can override anything.
+
+A channel example: "EN Tech" (English, 16:9, tech-neon, faceless explainer, TTS) and "PT Criador" (pt-BR, 1:1, minimal, talking head, user voice).
 
 ## Rule
 
-If the workspace was just created, **do not start a video project yet**. Ask a short onboarding batch, save the answers, show a summary, and stop. The user can then ask for the first video.
+If the workspace was just created, **do not create a video project yet**. Create the first channel (or confirm the `default` one), show a summary, and stop.
 
-If the user says "just start" or "use the defaults", create the workspace with defaults and tell them what was chosen. Do not block.
+If the user says "just start" or "use the defaults", keep the `default` channel and tell them what it uses.
 
-## The onboarding batch
+## Do not ask where the workspace lives
 
-Ask these in one message, with defaults in parentheses:
+The workspace is `./rooster` in the current project. Only ask for a custom path if the user explicitly wants one. "Where does `rooster/` go?" is not an onboarding question.
 
-1. **Workspace location** — where should `rooster/` live? (default: current project)
-2. **Default language** — `pt-BR`, `en`, or another? (default: `pt-BR`)
-3. **Default format** — `16:9` YouTube, `9:16` Shorts/Reels, `1:1`, or ask per project? (default: `16:9`)
-4. **Default style** — built-in profile (`minimal`, `tech-neon`, `3d-cartoon`), create from your brand, or ask per project? (default: `minimal`)
-5. **Assets policy** — only user files, authorized links, library, generated media, mixed, or none? (default: `mixed`)
-6. **Engine** — `auto`, HyperFrames, or Remotion? (default: `auto`)
-7. **Autonomy** — `guided` (stops at plan/preview), `auto` (no stops), or `manual`? (default: `guided`)
-8. **Voice** — your own voice, TTS, or no voice? (default: none until the project says otherwise)
-9. **Brand assets** — optional logo, fonts, colors, or a folder to use as a profile.
+## Use the harness form when available
 
-Do not ask all nine if the user already gave some. Confirm only the expensive-to-change choices: language, format, assets policy, engine, autonomy.
+If the harness exposes a question/form tool, use it for the onboarding and for channel/project creation. Otherwise ask in chat. Do not build a rigid CLI wizard.
 
-## Saving the answers
+In OpenCode, use the `question` tool. In another harness, use the equivalent form tool; if none exists, ask conversationally.
 
-Create the workspace:
+## First-run batch
+
+Ask in one form/message:
+
+1. **Channel name** — e.g., "EN Tech", "PT Criador", "Cliente X".
+2. **Language** — `pt-BR`, `en`, etc.
+3. **Default format** — `16:9`, `9:16`, `1:1`, or `auto`.
+4. **Visual profile** — `minimal`, `tech-neon`, `3d-cartoon`, or create from brand assets.
+5. **Default category** — `talking-head`, `faceless-explainer`, `3d-cartoon`, or custom.
+6. **Assets policy** — `user`, `link`, `library`, `generated`, `none`, or `mixed`.
+7. **Engine** — `auto`, `hyperframes`, `remotion`.
+8. **Autonomy** — `guided`, `auto`, `manual`.
+9. **Voice** — user, TTS, or none.
+10. **Brand assets** — optional logo, fonts, colors.
+
+Use the channel name as the id in kebab-case.
+
+## Save it
 
 ```bash
 node "<skill>/scripts/rooster.mjs" init
+node "<skill>/scripts/rooster.mjs" channel new en-tech \
+  --name "EN Tech" \
+  --language en \
+  --format 16:9 \
+  --profile tech-neon \
+  --category faceless-explainer \
+  --voice tts \
+  --engine auto \
+  --autonomy guided \
+  --assets mixed
 ```
 
-Then write the defaults with `config set`:
+Show it:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" config set defaults.language pt-BR
-node "<skill>/scripts/rooster.mjs" config set defaults.aspect 16:9
-node "<skill>/scripts/rooster.mjs" config set defaults.profile minimal
-node "<skill>/scripts/rooster.mjs" config set defaults.engine auto
-node "<skill>/scripts/rooster.mjs" config set defaults.autonomy guided
-node "<skill>/scripts/rooster.mjs" config set assets.strategy mixed
-node "<skill>/scripts/rooster.mjs" config set assets.allowDownload true
-node "<skill>/scripts/rooster.mjs" config set assets.allowGenerate false
-node "<skill>/scripts/rooster.mjs" config set assets.licensePolicy strict
-node "<skill>/scripts/rooster.mjs" config set tts.provider auto
-node "<skill>/scripts/rooster.mjs" config set tts.language pt-BR
+node "<skill>/scripts/rooster.mjs" channel show en-tech
 ```
 
-Show the result:
+Change a default later:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" config show
+node "<skill>/scripts/rooster.mjs" channel set en-tech format 9:16
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.strategy user
+node "<skill>/scripts/rooster.mjs" channel use en-tech
 ```
 
-Then summarize in plain language:
+## Creating a project
 
-> Workspace configurado em `./rooster`. Padrão: português, 16:9, perfil minimal, engine auto, autonomia guided, assets mistos (seus arquivos + links autorizados; sem geração automática). Quando quiser, me mande o vídeo ou a ideia.
+Ask:
 
-## Asset strategies
+1. Which channel?
+2. Which category?
+3. Follow the channel defaults, or is this a differentiated video?
 
-| Strategy | Meaning |
-|---|---|
-| `user` | Only files the user provides. No downloads or generation. |
-| `link` | User provides authorized URLs; the agent may download them with `yt-dlp`. |
-| `library` | Use the workspace/global library (music, SFX, fonts, overlays, b-roll). |
-| `generated` | Agent may generate images/TTS through configured providers. |
-| `none` | No external assets; text and motion graphics only. |
-| `mixed` | All of the above, with explicit permission per action. |
+If differentiated, show only the overrides:
 
-Read `references/assets.md` before downloading or generating anything.
+- format;
+- profile;
+- voice;
+- engine;
+- autonomy;
+- assets strategy;
+- language.
 
-## Changing later
-
-The user can change any default at any time:
+Create:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" config set defaults.aspect 9:16
-node "<skill>/scripts/rooster.mjs" config set assets.strategy user
+node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
+# differentiated example
+node "<skill>/scripts/rooster.mjs" new video-special --channel en-tech \
+  --format 9:16 \
+  --profile brutalist \
+  --voice user
 ```
 
-For a single project, put the override in `project.json` instead of changing the workspace default.
+The project JSON records `channel` and `overrides` so the inheritance is traceable.
+
+## Precedence
+
+```text
+project > channel > category (suggestion) > workspace/global > built-in
+```
+
+The channel wins over the category because it is the stable brand/audience context. The category supplies structure, duration, required assets, and suggestions. The project overrides anything.
+
+## Summary to show
+
+> Canal `en-tech` criado. Padrão: inglês, 16:9, perfil tech-neon, categoria faceless-explainer, assets mixed, engine auto, autonomia guided, voz TTS. Os projetos herdam isso e podem sobrescrever. Quer criar o primeiro vídeo?
 
 ## What not to do
 
-- Do not create a project before the onboarding summary.
-- Do not install tools without permission.
-- Do not assume the user wants TTS, music, or downloaded assets.
-- Do not ask the same questions again in the first project; use the saved defaults and confirm only what changed.
+- Do not create a project outside a channel, except for legacy workspaces.
+- Do not ask the workspace location unless the user wants a custom path.
+- Do not repeat channel questions for every project.
+- Do not assume a channel is only YouTube; it can be a client, brand, or show.
+- Do not ignore a project override because it differs from the channel.

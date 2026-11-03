@@ -1,64 +1,93 @@
 # Primeira execução
 
-Depois de instalar a skill, o ideal é configurar o workspace **antes** do primeiro projeto. Hoje isso não está automatizado por um wizard; o agente faz as perguntas e grava os defaults com `config set`.
+Depois de instalar, o ideal é configurar **um canal** — não o workspace inteiro. O workspace é a pasta `rooster/` no diretório atual; você não precisa escolher onde ele fica.
 
-## As perguntas
+## O conceito
 
-O agente deve perguntar em um único bloco, com defaults:
+```text
+Workspace → Canal → Projeto
+```
 
-1. Onde fica o workspace? (padrão: `./rooster`)
-2. Idioma padrão? (padrão: `pt-BR`)
-3. Formato padrão? (16:9, 9:16, 1:1)
-4. Perfil visual padrão? (`minimal`, `tech-neon`, `3d-cartoon`, criar do zero)
-5. Política de assets? (`user`, `link`, `library`, `generated`, `none`, `mixed`)
-6. Engine? (`auto`, `hyperframes`, `remotion`)
-7. Autonomia? (`guided`, `auto`, `manual`)
-8. Voz? (usuário, TTS, sem voz)
-9. Assets de marca? (logo, fontes, cores, pasta)
+- **Workspace** = a pasta `rooster/`. Infraestrutura e biblioteca compartilhada.
+- **Canal** = grupo estável de marca/audiência/operação. Guarda idioma, formato, perfil, categoria, assets, engine, autonomia e voz.
+- **Categoria** = receita de conteúdo (talking-head, faceless, 3D...).
+- **Perfil** = identidade visual.
+- **Projeto** = um vídeo dentro de um canal. Herda os padrões e pode sobrescrever qualquer coisa.
 
-## O que o agente faz
+Exemplo: canal **EN Tech** (inglês, 16:9, tech-neon, faceless, TTS) e canal **PT Criador** (pt-BR, 1:1, minimal, talking-head, voz do usuário).
+
+## O que o agente pergunta
+
+Se o harness tiver uma tool de formulário, use ela. Se não, pergunte no chat. Nada de wizard rígido no CLI.
+
+1. Nome do canal.
+2. Idioma.
+3. Formato padrão (16:9, 9:16, 1:1 ou `auto`).
+4. Perfil visual.
+5. Categoria padrão.
+6. Política de assets.
+7. Engine.
+8. Autonomia.
+9. Voz.
+10. Assets de marca (opcional).
+
+O agente grava com:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" init
-
-node "<skill>/scripts/rooster.mjs" config set defaults.language pt-BR
-node "<skill>/scripts/rooster.mjs" config set defaults.aspect 16:9
-node "<skill>/scripts/rooster.mjs" config set defaults.profile minimal
-node "<skill>/scripts/rooster.mjs" config set defaults.engine auto
-node "<skill>/scripts/rooster.mjs" config set defaults.autonomy guided
-node "<skill>/scripts/rooster.mjs" config set assets.strategy mixed
-node "<skill>/scripts/rooster.mjs" config set assets.allowDownload true
-node "<skill>/scripts/rooster.mjs" config set assets.allowGenerate false
-node "<skill>/scripts/rooster.mjs" config set assets.licensePolicy strict
-node "<skill>/scripts/rooster.mjs" config set tts.provider auto
-node "<skill>/scripts/rooster.mjs" config set tts.language pt-BR
-
-node "<skill>/scripts/rooster.mjs" config show
+node "<skill>/scripts/rooster.mjs" channel new en-tech \
+  --name "EN Tech" \
+  --language en \
+  --format 16:9 \
+  --profile tech-neon \
+  --category faceless-explainer \
+  --voice tts \
+  --engine auto \
+  --autonomy guided \
+  --assets mixed
+node "<skill>/scripts/rooster.mjs" channel show en-tech
 ```
 
-Depois ele resume:
+Depois mostra o resumo e para. Não cria vídeo ainda.
 
-> Workspace em `./rooster`. Padrão: português, 16:9, perfil minimal, engine auto, autonomia guided, assets mistos (arquivos seus + links autorizados; sem geração automática).
+## Criar um projeto dentro do canal
 
-E para. Só cria um projeto quando você pedir.
+```bash
+node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
+```
 
-## Por que isso importa
+Se o projeto for diferente do padrão do canal:
 
-- Evita repetir as mesmas perguntas em todo projeto.
-- Deixa claro o que o agente pode baixar, gerar ou usar.
-- Define o custo e o risco antes de qualquer API paga.
-- Permite trocar defaults depois com um comando.
+```bash
+node "<skill>/scripts/rooster.mjs" new video-special --channel en-tech \
+  --format 9:16 \
+  --profile brutalist \
+  --voice user
+```
 
-## Exemplo de conversa
+O `project.json` registra `channel` e `overrides`, então dá para ver o que veio do canal e o que foi decisão do projeto.
 
-**Você:** “Instale a skill e valide o ambiente.”
+## Precedência
 
-**Agente:** instala, roda `doctor`, mostra o que falta. Depois pergunta os defaults.
+```text
+projeto > canal > categoria (sugestão) > workspace/global > built-in
+```
 
-**Você:** “Português, 16:9, perfil minimal, só meus arquivos e links autorizados, sem TTS, modo guided.”
+O canal ganha da categoria porque é o contexto estável de marca/audiência. A categoria fornece estrutura, duração, assets necessários e sugestões. O projeto manda em tudo.
 
-**Agente:** grava a configuração, mostra o resumo e diz: “Workspace pronto. Me mande o vídeo ou a ideia quando quiser.”
+## O que não perguntar
 
-**Você:** “Quero editar este vídeo...”
+- “Onde fica o rooster?” — o padrão é `./rooster`; só pergunte se o usuário quiser outro caminho.
+- Formato global — o formato é do canal/projeto.
+- Perfil/assets/engine/voz globais — isso é do canal e do projeto.
+- As mesmas perguntas do canal em todo projeto — herde e confirme só o que mudou.
 
-A partir daí começa o fluxo normal: intake → assets → transcrição → plano → aprovação → build → preview → render.
+## Mudar depois
+
+```bash
+node "<skill>/scripts/rooster.mjs" channel set en-tech format 9:16
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.strategy user
+node "<skill>/scripts/rooster.mjs" channel use en-tech
+```
+
+Ou, por projeto, edite `project.json` e os overrides.

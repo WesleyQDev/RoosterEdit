@@ -1,6 +1,6 @@
 # Assets
 
-A skill trabalha com seis estratégias de assets. A escolha fica no workspace e pode ser sobrescrita por projeto.
+A skill trabalha com seis estratégias de assets. A escolha fica no **canal** e pode ser sobrescrita pelo projeto; o workspace serve de fallback técnico.
 
 | Estratégia | O que significa | Suporte atual |
 |---|---|---|
@@ -25,10 +25,19 @@ O agente não deve apagar nem sobrescrever seus originais. Ele copia ou cria har
 
 ## Como ajustar
 
+No canal:
+
+```bash
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.strategy user
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.allowDownload false
+node "<skill>/scripts/rooster.mjs" channel set en-tech assets.allowGenerate true
+```
+
+No workspace, como fallback:
+
 ```bash
 node "<skill>/scripts/rooster.mjs" config set assets.strategy user
 node "<skill>/scripts/rooster.mjs" config set assets.allowDownload false
-node "<skill>/scripts/rooster.mjs" config set assets.allowGenerate true
 ```
 
 Ou, por projeto, edite `project.json`:

@@ -15,8 +15,9 @@
 - [x] Schema e comando de validação do `edit/plan.json`.
 - [x] Fluxo de 6 etapas inspirado no vídeo, adaptado à estrutura do RoosterEdit.
 - [x] Prompt de bootstrap em pt-BR.
-- [x] Onboarding de workspace (`config set`) e estratégias de assets.
-- [x] CLI `profile` e `category` (list/show/fork).
+- [x] Onboarding por canal (`channel new/set`) e projetos com overrides.
+- [x] CLI `channel`, `profile`, `category`, `digest`.
+- [x] Estratégias de assets por canal/projeto.
 - [x] `digest` para transcrição compacta e disciplina de tokens.
 - [ ] Validar a skill com o skill-creator.
 

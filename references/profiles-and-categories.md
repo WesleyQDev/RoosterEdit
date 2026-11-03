@@ -5,11 +5,13 @@ A project is a combination of a **category** (what the video is) and a **profile
 ## Resolution order
 
 1. Project overrides in `project.json`.
-2. Workspace `rooster/profiles` and `rooster/categories`.
-3. Global `~/.rooster/profiles` and `~/.rooster/categories`.
-4. Built-ins in the skill's `templates/profiles` and `templates/categories`.
+2. Channel defaults in `channels/<id>/channel.json` and channel-scoped profiles/categories.
+3. Category suggestions in `categories/<id>/category.json`.
+4. Workspace `rooster/profiles` and `rooster/categories`.
+5. Global `~/.rooster/profiles` and `~/.rooster/categories`.
+6. Built-ins in the skill's `templates/profiles` and `templates/categories`.
 
-If two profiles share an id, the higher-precedence one wins. Record the resolved source in `project.json` or a `resolved.json` artifact so the decision is traceable.
+The channel wins over the category when both define a value. The category still supplies structure, duration, required assets, and suggestions. If two profiles share an id, the higher-precedence one wins. Record the resolved source in `project.json` or a `resolved.json` artifact so the decision is traceable.
 
 ## Profile schema
 

@@ -19,9 +19,11 @@ RoosterEdit é uma skill que planeja, edita e renderiza vídeos completos com ag
 
 ## O que já funciona
 
-- [x] Workspace com projetos, perfis, categorias e biblioteca.
+- [x] Workspace com **canais**, projetos, perfis, categorias e biblioteca.
 - [x] `doctor` detecta Node, FFmpeg, HyperFrames, Whisper, `yt-dlp`, browser e GPU.
-- [x] Onboarding de workspace com `config set` para idioma, formato, perfil, assets, engine e autonomia.
+- [x] Onboarding por **canal** (`channel new/set`) com idioma, formato, perfil, assets, engine e autonomia.
+- [x] Projetos herdam o canal e podem sobrescrever qualquer padrão.
+- [x] `profile` e `category` com `list`, `show` e `fork`.
 - [x] Estratégias de assets: arquivos do usuário, links autorizados, biblioteca, gerado, nenhum ou misto.
 - [x] `digest` para ler a transcrição em partes, sem carregar o JSON inteiro.
 - [x] Transcrição via **HyperFrames/Parakeet** ou **Whisper** → `edit/transcript.json`.
@@ -82,21 +84,22 @@ node .opencode/skills/rooster-edit/scripts/rooster.mjs doctor --json
 
 ## Primeira execução
 
-Depois de instalar, o ideal é configurar o workspace **antes** do primeiro vídeo:
+Depois de instalar, o ideal é configurar **um canal**, não o workspace inteiro. O workspace é `./rooster`; você não precisa escolher onde ele fica.
 
 ```bash
 node "<skill>/scripts/rooster.mjs" init
-node "<skill>/scripts/rooster.mjs" config set defaults.language pt-BR
-node "<skill>/scripts/rooster.mjs" config set defaults.aspect 16:9
-node "<skill>/scripts/rooster.mjs" config set defaults.profile minimal
-node "<skill>/scripts/rooster.mjs" config set defaults.autonomy guided
-node "<skill>/scripts/rooster.mjs" config set assets.strategy mixed
-node "<skill>/scripts/rooster.mjs" config set assets.allowDownload true
-node "<skill>/scripts/rooster.mjs" config set assets.allowGenerate false
-node "<skill>/scripts/rooster.mjs" config show
+node "<skill>/scripts/rooster.mjs" channel new en-tech \
+  --name "EN Tech" \
+  --language en \
+  --format 16:9 \
+  --profile tech-neon \
+  --category faceless-explainer \
+  --voice tts \
+  --assets mixed
+node "<skill>/scripts/rooster.mjs" channel list
 ```
 
-O agente pergunta em um bloco, grava os defaults e para. Só cria um projeto quando você pedir. Guia completo em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
+O agente pergunta em um bloco (usando a tool de formulário do harness quando existir), grava os defaults do canal e para. Só cria um projeto quando você pedir. Guia completo em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
 
 ## Assets
 
@@ -109,7 +112,7 @@ O agente pergunta em um bloco, grava os defaults e para. Só cria um projeto qua
 | `none` | Sem assets externos; só texto e motion graphics |
 | `mixed` | Tudo acima, com consentimento por ação |
 
-Hoje a skill baixa links autorizados, mas **não busca stock automaticamente**. O usuário pode trocar a estratégia a qualquer momento com `config set assets.strategy ...` ou editar `project.json`. Detalhes em [`docs/ASSETS.md`](docs/ASSETS.md).
+Hoje a skill baixa links autorizados, mas **não busca stock automaticamente**. A política pode vir do canal (`channel.json`) ou ser sobrescrita no projeto (`project.json`). Detalhes em [`docs/ASSETS.md`](docs/ASSETS.md).
 
 ## Otimização de tokens
 
@@ -126,36 +129,41 @@ Guia completo em [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md).
 ## Quick start
 
 ```bash
-# 1. workspace e projeto
+# 1. workspace e canal
 node "<skill>/scripts/rooster.mjs" init
-node "<skill>/scripts/rooster.mjs" new meu-video \
-  --category talking-head \
-  --profile minimal
+node "<skill>/scripts/rooster.mjs" channel new en-tech \
+  --language en \
+  --format 16:9 \
+  --profile tech-neon \
+  --category faceless-explainer
 
-# 2. coloque o vídeo em rooster/projects/meu-video/assets/source/
-# 3. transcreva
-node "<skill>/scripts/rooster.mjs" transcribe meu-video --model small --language pt
+# 2. crie o projeto dentro do canal
+node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
 
-# 4. crie edit/plan.json e mostre o plano
-node "<skill>/scripts/rooster.mjs" plan meu-video --show
+# 3. coloque o vídeo em rooster/channels/en-tech/projects/video-x/assets/source/
+# 4. transcreva
+node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
 
-# 5. depois da aprovação, gere o projeto
-node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
+# 5. crie edit/plan.json e mostre o plano
+node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
+
+# 6. depois da aprovação, gere o projeto
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --engine hyperframes
 # ou
-node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --engine remotion
 ```
 
 Depois do build:
 
 ```bash
 # HyperFrames
-cd rooster/projects/meu-video/engine/hyperframes
+cd rooster/channels/en-tech/projects/video-x/engine/hyperframes
 npx hyperframes check
 npx hyperframes preview
 npx hyperframes render --quality draft -o ../../renders/draft.mp4
 
 # Remotion
-cd rooster/projects/meu-video/engine/remotion
+cd rooster/channels/en-tech/projects/video-x/engine/remotion
 npm install
 npx remotion studio
 npx remotion render src/index.ts RoosterVideo ../../renders/final.mp4
@@ -180,7 +188,9 @@ O **plano é o gate**. Nada de timeline, engine ou render antes do OK do usuári
 
 Os dois motores criativos são HyperFrames e Remotion. FFmpeg não é um terceiro motor criativo.
 
-## Perfis e categorias
+## Canais, perfis e categorias
+
+**Channel** = grupo estável de marca/audiência/operação. Guarda idioma, formato, perfil, categoria, assets, engine, autonomia e voz. Todo projeto vive dentro de um canal.
 
 **Profile** = identidade visual/sonora reutilizável: cores, tipografia, motion, legendas, áudio, componentes.
 
@@ -191,7 +201,7 @@ Built-ins:
 - Perfis: `minimal`, `tech-neon`, `3d-cartoon`.
 - Categorias: `talking-head`, `faceless-explainer`, `3d-cartoon`.
 
-Precedência: **projeto > workspace > global (`~/.rooster`) > built-in**.
+Precedência: **projeto > canal > categoria (sugestão) > workspace > global (`~/.rooster`) > built-in**.
 
 ## Estrutura
 
@@ -211,18 +221,24 @@ Workspace do usuário:
 
 ```text
 rooster/
-├── projects/<slug>/
-│   ├── project.json
-│   ├── brief.md
-│   ├── style.md
-│   ├── assets/{source,generated,licensed}/
-│   ├── edit/{transcript.json,plan.json,edl.json,timeline.json,captions/}
-│   ├── engine/{hyperframes|remotion}/
-│   ├── preview/
-│   ├── renders/
-│   └── qa/
-├── profiles/
-├── categories/
+├── channels/<canal>/
+│   ├── channel.json
+│   ├── projects/<slug>/
+│   │   ├── project.json
+│   │   ├── brief.md
+│   │   ├── style.md
+│   │   ├── assets/{source,generated,licensed}/
+│   │   ├── edit/{transcript.json,plan.json,edl.json,timeline.json,captions/}
+│   │   ├── engine/{hyperframes|remotion}/
+│   │   ├── preview/
+│   │   ├── renders/
+│   │   └── qa/
+│   ├── profiles/
+│   ├── categories/
+│   ├── assets/
+│   └── library/
+├── profiles/       # compartilhados
+├── categories/     # compartilhadas
 └── library/{music,sfx,fonts,overlays,luts,broll,images}/
 ```
 
@@ -231,13 +247,17 @@ rooster/
 | Comando | O que faz |
 |---|---|
 | `doctor` | Detecta ambiente, engines, TTS, Whisper, yt-dlp e workspace |
-| `init` | Cria o workspace |
-| `new` | Cria um projeto com categoria, perfil e formato |
+| `init` | Cria o workspace e o canal `default` |
+| `channel` | Cria, lista, mostra e configura canais |
+| `new` | Cria um projeto dentro de um canal, com overrides opcionais |
 | `ingest` | Copia arquivo local ou baixa link autorizado com `yt-dlp` |
-| `transcribe` | Transcreve com HyperFrames/Parakeet ou Whisper |
+| `transcribe` | Transcreve com HyperFrames/Parakeet, faster-whisper ou Whisper |
+| `digest` | Mostra a transcrição em partes, sem carregar o JSON inteiro |
 | `plan` | Valida e mostra `edit/plan.json` |
 | `build` | Gera o projeto HyperFrames ou Remotion a partir do plano |
 | `check` | Valida projeto, timeline, manifest e plano |
+| `profile` | Lista, mostra e cria forks de perfis |
+| `category` | Lista, mostra e cria forks de categorias |
 | `preview` | Mostra o caminho/comando de preview do engine |
 | `render` | Mostra o comando de render do engine |
 
