@@ -103,7 +103,6 @@ O workspace é dividido em **canais**. Um canal é o padrão de produção está
   "content": "English tech explainers",
   "language": "en",
   "format": "16:9",
-  "duration": 60,
   "profile": "tech-neon",
   "source": "generated",
   "voice": "tts",
@@ -120,8 +119,8 @@ O workspace é dividido em **canais**. Um canal é o padrão de produção está
 
 Precedência: **projeto > canal > workspace/global > built-in**.
 
-- **Canal**: conteúdo, idioma, formato default, duração, perfil, assets, engine, autonomia, voz.
-- **Projeto**: herda o canal e registra apenas os overrides.
+- **Canal**: conteúdo, idioma, formato default, perfil, assets, engine, autonomia, voz.
+- **Projeto**: herda o canal, define a própria duração e registra apenas os overrides.
 
 Não existe camada de categoria. O que o canal produz fica em `content`; a estrutura de cada vídeo fica no brief, no script e em `edit/plan.json`.
 
@@ -154,6 +153,9 @@ rooster/
 │       │       │   ├── licensed/
 │       │       │   └── manifest.json
 │       │       ├── edit/
+│       │       │   ├── plan.json
+│       │       │   ├── plan.md
+│       │       │   ├── plan.html
 │       │       │   ├── timeline.json
 │       │       │   ├── edl.json
 │       │       │   ├── captions/

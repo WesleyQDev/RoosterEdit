@@ -9,7 +9,7 @@ Workspace → Channel → Project
 ```
 
 - **Workspace** = the `rooster/` folder. Infrastructure and shared library.
-- **Channel** = stable production standard for a brand, audience, or operation. Defaults for content, language, format, duration, profile, assets, engine, autonomy, and voice.
+- **Channel** = stable production standard for a brand, audience, or operation. Defaults for content, language, format, profile, assets, engine, autonomy, and voice.
 - **Profile** = visual identity. Shared or channel-specific.
 - **Project** = one video inside a channel. Inherits the channel and can override anything.
 
@@ -35,40 +35,48 @@ If the user says "just start" or "use the defaults", keep the `default` channel 
 
 The workspace is `./rooster` in the current project. Only ask for a custom path if the user explicitly wants one. "Where does `rooster/` go?" is not an onboarding question.
 
-## Use the harness form when available
+## Quick setup (default)
 
-If the harness exposes a question/form tool, use it for the onboarding and for channel/project creation. Otherwise ask in chat. Do not build a rigid CLI wizard.
+After the user says yes, ask one question:
 
-In OpenCode, use the `question` tool. In another harness, use the equivalent form tool; if none exists, ask conversationally.
+> "O que esse canal vai produzir? Uma frase basta — por exemplo: 'shorts de tecnologia em português' ou 'entrevistas de 90s para o YouTube'."
 
-## First-run wording
+Use the answer and the conversation to infer the rest. A channel here is a production standard, not a YouTube channel.
 
-Do not ask "Do you want to create a channel?" — that sounds like creating a YouTube channel. Ask about the folder and the production standard:
+| Field | Inference |
+|---|---|
+| name | kebab-case from the content |
+| content | the user's sentence |
+| language | the language of the conversation |
+| format | 9:16 for Shorts/Reels/TikTok, 1:1 for feed/square, 16:9 otherwise |
+| source | live for footage/interview/podcast, generated for faceless/explainer, hybrid if mixed |
+| profile | tech-neon for tech/AI, 3d-cartoon for 3D/cartoon, minimal otherwise |
+| assets | mixed; user for personal footage; generated for faceless |
+| engine | auto |
+| autonomy | guided |
+| voice | tts for faceless, user for footage, none for music-only |
+| brand assets | none for now |
 
-> "Shall we create the folder for your first channel? It holds the default language, format, style, assets, and voice for the videos in this project."
+Show one line and ask for confirmation:
 
-In Portuguese:
+> "Vou criar `pt-tech` com: pt-BR · 9:16 · tech-neon · TTS · assets mixed · engine auto · guided. Está bom ou quer ajustar algo?"
 
-> "Vamos criar a pasta do seu primeiro canal? Ela guarda o idioma, formato, estilo, assets e voz padrão dos vídeos deste projeto."
+If the user confirms, run `init` and `channel new`. If they correct one item, apply it and confirm again. Do not ask the twelve fields.
 
-## First-run batch
+## Duration is per project
 
-Ask in one form/message:
+A channel does not define how many seconds a video has. Duration belongs to each project and can change from video to video. When creating a project, ask for the target duration or infer it from the brief, then pass `--duration`.
 
-1. **Channel name** — e.g., "EN Tech", "PT Criador", "Cliente X".
-2. **What it produces** — one sentence, e.g., "English tech explainers".
-3. **Language** — `pt-BR`, `en`, etc.
-4. **Default format** — `16:9`, `9:16`, `1:1`, or `auto`.
-5. **Default duration** — target seconds per video.
-6. **Source mode** — `live`, `generated`, or `hybrid`.
-7. **Visual profile** — `minimal`, `tech-neon`, `3d-cartoon`, or create from brand assets.
-8. **Assets policy** — `user`, `link`, `library`, `generated`, `none`, or `mixed`.
-9. **Engine** — `auto`, `hyperframes`, `remotion`.
-10. **Autonomy** — `guided`, `auto`, `manual`.
-11. **Voice** — user, TTS, or none.
-12. **Brand assets** — optional logo, fonts, colors.
+## Advanced setup (only if requested)
 
-Use the channel name as the id in kebab-case.
+Only when the user asks for full control, or when the content is too ambiguous to infer a safe default. Ask in groups of at most three:
+
+1. Identity: name, content, language.
+2. Output: format, source.
+3. Look and sound: profile, assets, voice.
+4. Production: engine, autonomy, brand assets.
+
+Never send all fields at once. Duration is asked when creating the project, not here.
 
 ## Save it
 
@@ -79,7 +87,6 @@ node "<skill>/scripts/rooster.mjs" channel new en-tech \
   --content "English tech explainers" \
   --language en \
   --format 16:9 \
-  --duration 60 \
   --profile tech-neon \
   --source generated \
   --voice tts \
@@ -107,18 +114,20 @@ node "<skill>/scripts/rooster.mjs" channel use en-tech
 Ask:
 
 1. Which channel?
-2. Follow the channel defaults, or is this a differentiated video?
+2. What is the target duration for this video?
+3. Follow the channel defaults, or is this a differentiated video?
 
 If differentiated, show only the overrides:
 
 - format;
-- duration;
 - profile;
 - voice;
 - engine;
 - autonomy;
 - assets strategy;
 - language.
+
+Duration is not an override: every video has its own target duration.
 
 Create:
 
@@ -143,12 +152,14 @@ The project can override any channel default. The channel is the stable context;
 
 ## Summary to show
 
-> Canal `en-tech` criado. Padrão: inglês, 16:9, 60s, perfil tech-neon, assets mixed, engine auto, autonomia guided, voz TTS. Os projetos herdam isso e podem sobrescrever. Quer criar o primeiro vídeo?
+> Canal `en-tech` criado. Padrão: inglês, 16:9, perfil tech-neon, assets mixed, engine auto, autonomia guided, voz TTS. Os projetos herdam isso e podem sobrescrever; a duração é definida em cada vídeo. Quer criar o primeiro vídeo?
 
 ## What not to do
 
 - Do not create a project outside a channel, except for legacy workspaces.
 - Do not ask the workspace location unless the user wants a custom path.
+- Do not send the twelve-field form by default; use the one-question quick setup.
+- Do not ask for a channel duration; duration is per project.
 - Do not repeat channel questions for every project.
 - Do not assume a channel is only YouTube; it can be a client, brand, or show.
 - Do not ignore a project override because it differs from the channel.

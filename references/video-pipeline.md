@@ -73,7 +73,7 @@ node "<skill>/scripts/rooster.mjs" new meu-video \
   --voice user
 ```
 
-Put raw media in `channels/meu-canal/projects/meu-video/assets/source/`. If the user already has a project, resolve its channel/profile instead of creating a new one.
+Put raw media in `channels/meu-canal/projects/meu-video/assets/source/`. If the user says they will provide the footage and has not sent a path, create the project and run `open <slug>` so the source folder opens in the file manager. If the user already has a project, resolve its channel/profile instead of creating a new one.
 
 ## Step 3 — Write the style guide
 
@@ -138,7 +138,7 @@ Read `references/edit-plan.md` for the schema and heuristics.
 
 ### Show the plan before building
 
-Always show the user a readable summary of `edit/plan.json` and wait for approval. Do not create the HyperFrames project, the timeline, or the final render before the plan is approved. This is the most important gate in the workflow.
+Always show the user a readable summary of `edit/plan.json` and wait for approval. `plan <slug> --show` also writes `edit/plan.md` and `edit/plan.html`; display the HTML artifact in the harness's preview pane or browser when available. Do not create the HyperFrames project, the timeline, or the final render before the plan is approved. This is the most important gate in the workflow.
 
 ## Step 5 — Create the visual elements
 

@@ -56,6 +56,28 @@ Do not repeat the brief, paste logs, list every command, or explain the whole sk
 
 Installation and workspace setup are separate steps. After installing and running `doctor`, do not start onboarding or write a guide. Summarize the environment in a few lines and ask whether the user wants to configure the workspace now. Wait for a yes before creating `rooster/` or a channel.
 
+### Progress updates
+
+Use a compact step marker in status updates and at every approval gate. Keep one 8-step tracker for the project:
+
+1. Environment and workspace
+2. Brief and intake
+3. Assets and transcript
+4. Edit plan
+5. Storyboard and timeline
+6. Engine build
+7. Preview and QA
+8. Render and delivery
+
+Examples:
+
+- `Etapa 3/8 — Transcrição concluída. 42 trechos, 10:12 de duração.`
+- `Etapa 4/8 — Plano pronto em edit/plan.html. Posso seguir com a timeline?`
+- `Etapa 6/8 — Build concluído. Posso abrir o preview e rodar o QA?`
+- `Etapa 8/8 — Preview aprovado. Posso renderizar o final?`
+
+Skip steps that do not apply and say why. Do not print the full checklist on every message; show the current step, what changed, and the next gate. Do not combine timeline and final render in one approval: preview and QA sit between them.
+
 ## First run after installation
 
 If the workspace does not exist yet, do a short onboarding before creating any project.
@@ -65,11 +87,13 @@ If the workspace does not exist yet, do a short onboarding before creating any p
 If the answer is yes:
 
 1. Use `./rooster` by default. Do not ask "where does the workspace live" unless the user wants a custom path.
-2. Use the harness's question/form tool when available; otherwise ask in chat. Collect the channel name, what it produces, language, default format (or `auto`), default duration, source mode, profile, assets strategy, engine, autonomy, voice, and optional brand assets. Explain that a channel here is a reusable production standard (language, format, style, assets, voice), not a YouTube channel.
-3. Run `init`, then `channel new <id> ...` with the answers.
-4. Show a short summary and stop.
+2. Ask one question: "O que esse canal vai produzir? Uma frase basta." Use the answer and the conversation to infer the channel name, language, format, source, profile, assets, engine, autonomy, and voice. Do not ask all twelve channel fields, and do not ask for a duration.
+3. Show the inferred defaults in one compact line and ask "Está bom ou quer ajustar algo?" Ask a follow-up only when a field is genuinely ambiguous, such as the platform or whether the source is real footage.
+4. On confirmation, run `init`, then `channel new <id> ...` with the answers. Show a short summary and stop.
 
-A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, duration, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults.
+Duration is not a channel default: it belongs to each project and is chosen when the video is created. The full twelve-field setup is an opt-in advanced path. If the user asks to customize everything, ask in groups of at most three, never all at once.
+
+A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults. Duration is per project, not a channel default.
 
 Do not start a video in the same turn unless the user explicitly asks. Read `references/onboarding.md` for the exact questions, defaults, and commands. Read `references/assets.md` before downloading or generating any asset.
 
@@ -155,9 +179,9 @@ Do not interrogate the user with all of them at once. Infer sensible defaults fr
 A project belongs to a **channel** and uses a **profile** (how it looks and sounds).
 
 ```text
-channel  = production standard: content, language, format, duration, profile, assets, engine, voice
+channel  = production standard: content, language, format, profile, assets, engine, voice
 profile  = visual identity: colors, type, motion, captions, audio, components
-project  = channel + profile + overrides + assets + timeline + engine
+project  = channel + profile + overrides + duration + assets + timeline + engine
 ```
 
 Read `references/profiles.md` for the schemas and resolution order. The short version:
@@ -182,7 +206,7 @@ Produce, in order:
 4. `storyboard/storyboard.json` — scenes, frames, durations, transitions, overlays, 3D cues.
 5. `edit/timeline.json` — the edit decision list in timeline form.
 
-Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema, heuristics, and the summary to show the user.
+Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval.
 
 If the user asked for `auto`, log the decisions and keep moving; if they asked for `guided`, stop at the gates that matter (brief, script, style/storyboard, rough cut, final).
 
@@ -196,6 +220,8 @@ A useful plan answers these questions before any engine code is written:
 - What is the exact output format?
 
 ## Step 5 — Ingest assets
+
+When the user says they will provide their own footage, do not ask "where is the file?" first. Create the project if needed, run `open <slug>` to show and open `assets/source/`, and tell them to put the files there. If they give a path instead, ingest it.
 
 Put user files in `assets/source`, generated media in `assets/generated`, and licensed stock in `assets/licensed`. When the user provides a video link (YouTube, Vimeo, etc.) as source material, use `yt-dlp` to fetch it into `assets/source/<slug>/` together with its info JSON, thumbnail, subtitles, and chapters. Read `references/link-ingest.md` before downloading: only fetch content the user owns or is authorized to use, keep cookies out of the repository, and never bypass DRM or paywalls.
 
@@ -331,7 +357,7 @@ rooster/
 │   │   ├── style.md
 │   │   ├── storyboard/
 │   │   ├── assets/{source,generated,licensed}/
-│   │   ├── edit/{timeline.json,edl.json,captions/,audio/}
+│   │   ├── edit/{plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/}
 │   │   ├── engine/{hyperframes|remotion|ffmpeg}/
 │   │   ├── preview/
 │   │   ├── renders/
@@ -394,6 +420,7 @@ node "<skill>/scripts/rooster.mjs" channel list
 
 # Project
 node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
+node "<skill>/scripts/rooster.mjs" open en-tech/video-x
 node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.youtube.com/watch?v=..." --confirm-rights
 node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60

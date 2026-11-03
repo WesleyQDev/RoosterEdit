@@ -21,7 +21,7 @@ rooster/
 │       │       ├── style.md
 │       │       ├── storyboard/
 │       │       ├── assets/{source,generated,licensed}/
-│       │       ├── edit/{transcript.json,plan.json,edl.json,timeline.json,captions/,audio/}
+│       │       ├── edit/{transcript.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/}
 │       │       ├── engine/{hyperframes|remotion}/
 │       │       ├── preview/
 │       │       ├── renders/
@@ -50,7 +50,6 @@ Um canal é o padrão de produção estável de uma marca/audiência/operação.
 - o que produz (`content`);
 - idioma;
 - formato default (`16:9`, `9:16`, `1:1` ou `auto`);
-- duração default;
 - perfil visual;
 - política de assets;
 - engine;
@@ -65,7 +64,6 @@ node scripts/rooster.mjs channel new en-tech \
   --content "English tech explainers" \
   --language en \
   --format 16:9 \
-  --duration 60 \
   --profile tech-neon \
   --voice tts \
   --assets mixed
@@ -80,11 +78,14 @@ node scripts/rooster.mjs channel use en-tech
 
 ## Criar um projeto
 
+A duração é definida por vídeo, não pelo canal:
+
 ```bash
 node scripts/rooster.mjs new video-x --channel en-tech --duration 60
+node scripts/rooster.mjs open en-tech/video-x
 ```
 
-O projeto herda o canal e pode sobrescrever:
+O `open` mostra e abre `assets/source/` para você colocar os arquivos. O projeto herda o canal e pode sobrescrever:
 
 ```bash
 node scripts/rooster.mjs new video-special --channel en-tech \

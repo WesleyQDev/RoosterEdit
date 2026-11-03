@@ -264,7 +264,6 @@ For URL assets, add:
   "content": "English tech explainers",
   "language": "en",
   "format": "16:9",
-  "duration": 60,
   "profile": "tech-neon",
   "source": "generated",
   "voice": "tts",
@@ -285,7 +284,7 @@ For URL assets, add:
 
 Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `voice`, `engine`, `autonomy`, `assets`.
 
-`format` can be `16:9`, `9:16`, `1:1`, `4:5`, or `auto`. `duration` is the default target in seconds. `content` is a short description of what the channel produces.
+`format` can be `16:9`, `9:16`, `1:1`, `4:5`, or `auto`. `content` is a short description of what the channel produces. Duration is not a channel field; each project sets `format.duration`.
 
 ## workspace.json
 

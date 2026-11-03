@@ -36,7 +36,7 @@ node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
 
 - Não cole logs no chat; leia o `Fix:` ou as últimas 30 linhas.
 - Use `digest` em vez de `transcript.json`.
-- Use `plan --show` em vez de `plan.json`.
+- Use `plan --show` em vez de `plan.json`; o comando também gera `edit/plan.html` para revisão.
 - Leia só o reference da fase atual.
 - Inspecione 3–5 frames por revisão.
 - Renderize draft uma vez; final só depois da aprovação.

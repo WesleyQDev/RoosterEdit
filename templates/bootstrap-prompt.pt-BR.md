@@ -16,9 +16,10 @@ Quero editar meus vídeos com IA usando o RoosterEdit. Prepare este computador e
    ```
    node "<skill>/scripts/rooster.mjs" init
    node "<skill>/scripts/rooster.mjs" channel new meu-canal --language pt-BR --format 16:9 --profile minimal
-   node "<skill>/scripts/rooster.mjs" new meu-video --channel meu-canal
+   node "<skill>/scripts/rooster.mjs" new meu-video --channel meu-canal --duration 60
+   node "<skill>/scripts/rooster.mjs" open meu-canal/meu-video
    ```
-   Coloque meu vídeo bruto em `rooster/channels/meu-canal/projects/meu-video/assets/source/`.
+   Abra a pasta `assets/source/` para eu colocar meu vídeo bruto.
 5. Leia meu guia de estilo em `rooster/channels/meu-canal/projects/meu-video/style.md` (se eu não tiver um, crie a partir das minhas referências).
 6. Transcreva o vídeo com Whisper:
    ```

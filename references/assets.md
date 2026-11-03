@@ -66,6 +66,14 @@ If the license is unknown, warn before publishing.
 
 ## User-provided assets
 
+When the user says they will provide their own videos, do not ask for a path first. Create the project, run:
+
+```bash
+node "<skill>/scripts/rooster.mjs" open <slug>
+```
+
+This prints and opens `assets/source/` in the file manager. Tell the user to put the files there and say when they are done. If they prefer, they can pass a file path and you use `ingest --file`.
+
 The user can:
 
 - put files directly in `assets/source/`;

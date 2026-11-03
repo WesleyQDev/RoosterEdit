@@ -80,12 +80,12 @@ Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir)
 
 ## Primeiro uso
 
-Depois de instalar, o agente deve fechar com um resumo curto e perguntar se você quer configurar o workspace agora. Só depois do seu sim ele cria o primeiro **canal**:
-- nome, o que ele produz, idioma, formato e perfil padrão;
-- modo de origem (live, generated ou hybrid);
-- política de assets;
-- engine e autonomia;
-- voz/TTS.
+Depois de instalar, o agente deve fechar com um resumo curto e perguntar se você quer configurar o workspace agora. Se sim, ele faz um setup rápido:
+- pergunta o que o canal vai produzir;
+- infere idioma, formato, perfil, origem, voz e os demais padrões;
+- mostra um resumo curto para você confirmar ou ajustar.
+
+Duração não é padrão do canal: cada vídeo define a sua quando o projeto é criado.
 
 O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir. A pergunta inicial é “Vamos criar a pasta do seu primeiro canal?” — um padrão de produção local, não um canal no YouTube.
 
@@ -98,10 +98,11 @@ node .opencode/skills/rooster-edit/scripts/rooster.mjs channel new meu-canal \
 node .opencode/skills/rooster-edit/scripts/rooster.mjs channel list
 ```
 
-Crie o projeto dentro do canal:
+Crie o projeto dentro do canal e abra a pasta de origem:
 
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs new meu-video --channel meu-canal
+node .opencode/skills/rooster-edit/scripts/rooster.mjs open meu-canal/meu-video
 ```
 
 Coloque o vídeo em `rooster/channels/meu-canal/projects/meu-video/assets/source/` e peça ao agente:

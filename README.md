@@ -46,7 +46,7 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 4. Você lê o plano, ajusta o que quiser e aprova.
 5. Só então o projeto é gerado, pré-visualizado e renderizado.
 
-O plano é o ponto de controle. Se ele estiver errado, o vídeo inteiro sai errado.
+O plano é o ponto de controle. Ele vira um artefato revisável antes do preview e do render. Se ele estiver errado, o vídeo inteiro sai errado.
 
 ## Instalação
 
@@ -57,21 +57,22 @@ Copie o prompt abaixo e cole na conversa com o seu agente:
 ```text
 Instale a skill RoosterEdit neste projeto e valide o ambiente.
 
-1. Antes de clonar, use a ferramenta de perguntas (se existir) para escolher entre instalação local no projeto (recomendado) e global. Use a pasta de skills que este harness já lê; exemplos de local: `.opencode/skills`, `.claude/skills`, `.agents/skills`; exemplos de global: `~/.config/opencode/skills`, `~/.claude/skills`. Não clone nada antes da minha resposta.
+1. Antes de clonar, pergunte se quero instalação local no projeto (recomendado) ou global. Use a pasta de skills que este harness já lê; exemplos de local: `.opencode/skills`, `.claude/skills`, `.agents/skills`; exemplos de global: `~/.config/opencode/skills`, `~/.claude/skills`. Não clone nada antes da minha resposta.
 2. Clone https://github.com/WesleyQDev/RoosterEdit.git na pasta escolhida, com o nome rooster-edit.
 3. Confirme que o arquivo SKILL.md está no lugar.
 4. Rode o doctor da skill e me mostre só o essencial: o que está pronto e o que falta, em no máximo 6 linhas.
 5. Se faltar Node.js, FFmpeg ou FFprobe, me peça permissão antes de instalar qualquer coisa e explique o comando.
 6. Não crie workspace, projeto ou vídeo ainda. Só instale a skill e valide o ambiente.
 7. No fim, responda em no máximo 8 linhas: status da instalação, o que já está pronto, o que falta (se algo) e onde ler os detalhes. Não escreva um guia longo nem liste todos os comandos.
-8. Termine perguntando: "Quer configurar o workspace agora?" Se eu disser sim, faça o onboarding do primeiro canal; se não, pare sem criar nada.
+8. Termine perguntando: "Quer configurar o workspace agora?" Se eu disser não, pare sem criar nada.
+9. Se eu disser sim, faça um setup rápido: pergunte só o que o canal vai produzir, infira os padrões e me mostre um resumo para ajustar. Não faça as 12 perguntas de uma vez e não defina duração no canal.
 ```
 
 Se preferir o caminho manual, o passo a passo completo está em [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Primeiro vídeo
 
-Peça ao agente algo como "quero fazer um vídeo de 60 segundos sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano.
+Peça ao agente algo como "quero fazer um vídeo de 60 segundos sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano. Se você for fornecer os vídeos, ele cria e abre a pasta `assets/source/` para você colocar os arquivos.
 
 Você revisa, aprova e ele segue para o preview e o render. O passo a passo está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
 

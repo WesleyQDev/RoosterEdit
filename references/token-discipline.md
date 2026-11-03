@@ -124,7 +124,7 @@ Give the subagent file paths, not pasted content. Ask for a compact JSON/markdow
 | Onboarding | 1 short message, no file reads |
 | Intake | 1 message, no full assets |
 | Transcript | `digest` only; full JSON only if needed |
-| Plan | `plan --show`; JSON only for edits |
+| Plan | `plan --show` + `edit/plan.html`; JSON only for edits |
 | Build | CLI output only; no generated code unless debugging |
 | Preview | 3–5 frames or a screenshot |
 | QA | probe JSON + summary, not a full log |

@@ -163,6 +163,8 @@ Estilo: style.md
 Aprovar este plano? Só vou criar a timeline e os visuais depois do seu OK.
 ```
 
+`node "<skill>/scripts/rooster.mjs" plan <slug> --show` writes the same summary to `edit/plan.md` and `edit/plan.html`. If the harness can display a file or open a browser, show `edit/plan.html` in the review pane or browser. Otherwise, paste the summary in chat and give the file path. Ask for approval with the progress marker, for example: `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?`
+
 Wait for an explicit approval. If the user changes the plan, update `edit/plan.json` and show it again.
 
 ## Validation

@@ -59,7 +59,8 @@ function exists(p) {
 
 function readJson(file, fallback = null) {
   try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    const text = fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "");
+    return JSON.parse(text);
   } catch {
     return fallback;
   }
@@ -415,7 +416,6 @@ function buildChannel(id, args, workspaceDefaults = {}, config = {}) {
     content: typeof args.content === "string" ? args.content : "",
     language: typeof args.language === "string" ? args.language : workspaceDefaults.language || "pt-BR",
     format: typeof args.format === "string" ? args.format : "16:9",
-    duration: args.duration ? Number(args.duration) || null : null,
     profile: typeof args.profile === "string" ? args.profile : workspaceDefaults.profile || "minimal",
     source: SOURCE_IDS.includes(args.source) ? args.source : "hybrid",
     voice: VOICE_IDS.includes(args.voice) ? args.voice : "none",
@@ -480,6 +480,9 @@ function channelCommand(args) {
   if (action === "new") {
     const id = slugify(args._[1] || args.name || "");
     if (!id || id === "project") fail("Usage: channel new <id> [options]");
+    if (args.duration !== undefined) {
+      fail('Duration belongs to the project. Create the project with: new <slug> --duration <seconds>');
+    }
     const channelPath = path.join(channelsDir(), id, "channel.json");
     if (exists(channelPath) && !args.force) fail(`Channel already exists: ${id}`);
     const workspaceMeta = readJson(path.join(WORKSPACE, "workspace.json"), {});
@@ -505,6 +508,9 @@ function channelCommand(args) {
     }
     if (key === "category" || key.startsWith("category.")) {
       fail("Category was removed. Use \"content\" to describe what the channel produces.");
+    }
+    if (key === "duration" || key.startsWith("duration.")) {
+      fail("Duration belongs to the project. Use: new <slug> --duration <seconds>");
     }
     const channelPath = path.join(channelsDir(), id, "channel.json");
     const channel = readJson(channelPath, null);
@@ -711,8 +717,6 @@ function newProject(args) {
   const format = resolveFormat(aspect);
   if (args.duration) {
     format.duration = Number(args.duration) || format.duration;
-  } else if (channel.duration) {
-    format.duration = Number(channel.duration) || format.duration;
   }
 
   const profile =
@@ -758,7 +762,7 @@ function newProject(args) {
   const licensePolicy =
     channel.assets?.licensePolicy || workspaceConfig.assets?.licensePolicy || "strict";
 
-  const overrides = ["profile", "format", "duration", "source", "voice", "style", "autonomy", "engine", "assets", "language"].filter(
+  const overrides = ["profile", "format", "source", "voice", "style", "autonomy", "engine", "assets", "language"].filter(
     (key) => args[key] !== undefined
   );
 
@@ -943,12 +947,34 @@ Profile: \`${profile}\`
   heading("Project created");
   console.log(`  ${projectDir}`);
   console.log(`  channel: ${channelId}`);
+  console.log(`  source: ${path.join(projectDir, "assets", "source")}`);
   console.log("\nNext:");
   console.log(`  1. Fill brief.md and script.md`);
-  console.log(`  2. Add assets to assets/source or run ingest`);
+  console.log(`  2. Add assets to assets/source, run ingest, or run "open ${slug}"`);
   console.log(`  3. Build storyboard and timeline`);
   console.log(`  4. Choose an engine and implement`);
   console.log(`  5. Preview, QA, render`);
+}
+
+function openProject(args) {
+  if (!exists(WORKSPACE)) {
+    fail(`No workspace at ${WORKSPACE}. Run "node scripts/rooster.mjs init" first.`);
+  }
+  const slug = args._[0];
+  if (!slug) fail("Usage: open <slug> [--project] [--print]");
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const target = args.project ? project.dir : path.join(project.dir, "assets", "source");
+  ensureDir(target);
+  console.log(target);
+
+  if (args.print) return;
+  const command = process.platform === "win32" ? "explorer.exe" : process.platform === "darwin" ? "open" : "xdg-open";
+  const result = spawnSync(command, [target], { stdio: "ignore" });
+  if (result.error) {
+    console.log(`Could not open automatically. Open this folder manually: ${target}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1555,6 +1581,104 @@ function printPlanSummary(plan) {
   }
 }
 
+function planMarkdown(plan) {
+  const lines = ["# Edit plan", ""];
+  if (plan.source) lines.push(`- Source: ${plan.source}`);
+  if (plan.duration) lines.push(`- Duration: ${formatClock(plan.duration)}`);
+  if (plan.style) lines.push(`- Style: ${plan.style}`);
+  if (plan.summary) lines.push(`- Summary: ${plan.summary}`);
+  lines.push("");
+
+  lines.push(`## Cuts (${(plan.cuts || []).length})`, "");
+  for (const cut of plan.cuts || []) {
+    lines.push(`- ${formatClock(cut.start)}-${formatClock(cut.end)} - ${cut.reason || "?"}${cut.note ? ` - ${cut.note}` : ""}`);
+  }
+
+  if ((plan.keeps || []).length) {
+    lines.push("", `## Keeps (${plan.keeps.length})`, "");
+    for (const keep of plan.keeps) {
+      lines.push(`- ${formatClock(keep.start)}-${formatClock(keep.end)} - ${keep.reason || ""}`);
+    }
+  }
+
+  lines.push("", `## Elements (${(plan.elements || []).length})`, "");
+  for (const element of plan.elements || []) {
+    const text = element.text ? ` "${element.text}"` : "";
+    lines.push(`- ${formatClock(element.start)}-${formatClock(element.end)} - ${element.type || "?"}${text} - ${element.description || ""}`);
+  }
+
+  if ((plan.chapters || []).length) {
+    lines.push("", "## Chapters", "");
+    for (const chapter of plan.chapters || []) {
+      lines.push(`- ${formatClock(chapter.start)} - ${chapter.title}`);
+    }
+  }
+
+  lines.push("", "Approve this plan before the timeline and render.");
+  return lines.join("\n") + "\n";
+}
+
+function planHtml(plan, project) {
+  const title = project?.config?.name || project?.slug || "Edit plan";
+  const cuts = (plan.cuts || [])
+    .map(
+      (cut) =>
+        `<tr><td>${formatClock(cut.start)}-${formatClock(cut.end)}</td><td>${htmlEscape(cut.reason || "")}</td><td>${htmlEscape(cut.note || "")}</td></tr>`
+    )
+    .join("");
+  const keeps = (plan.keeps || [])
+    .map((keep) => `<tr><td>${formatClock(keep.start)}-${formatClock(keep.end)}</td><td>${htmlEscape(keep.reason || "")}</td></tr>`)
+    .join("");
+  const elements = (plan.elements || [])
+    .map(
+      (element) =>
+        `<tr><td>${formatClock(element.start)}-${formatClock(element.end)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "")}</td><td>${htmlEscape(element.description || "")}</td></tr>`
+    )
+    .join("");
+  const chapters = (plan.chapters || [])
+    .map((chapter) => `<tr><td>${formatClock(chapter.start)}</td><td>${htmlEscape(chapter.title || "")}</td></tr>`)
+    .join("");
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plano de edição - ${htmlEscape(title)}</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0b0f19; --card:#121826; --line:#263041; --fg:#f8fafc; --muted:#94a3b8; --accent:#22d3ee; }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:32px; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 1000px; margin: 0 auto; }
+    h1 { margin:0 0 8px; font-size: 30px; }
+    .meta { color:var(--muted); margin-bottom:24px; }
+    .summary { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent); padding:16px 18px; border-radius:10px; margin-bottom:24px; }
+    section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:18px; }
+    h2 { margin:0 0 12px; font-size:18px; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+    tr:last-child td { border-bottom:0; }
+    .empty { color:var(--muted); margin:0; }
+    .gate { margin-top:24px; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Plano de edição</h1>
+    <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)}` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
+    ${plan.summary ? `<div class="summary">${htmlEscape(plan.summary)}</div>` : ""}
+    <section><h2>Cortes (${(plan.cuts || []).length})</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="empty">Nenhum corte.</p>`}</section>
+    ${keeps ? `<section><h2>Trechos mantidos (${(plan.keeps || []).length})</h2><table><thead><tr><th>Tempo</th><th>Motivo</th></tr></thead><tbody>${keeps}</tbody></table></section>` : ""}
+    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto</th><th>Descrição</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
+    ${chapters ? `<section><h2>Capítulos</h2><table><thead><tr><th>Tempo</th><th>Título</th></tr></thead><tbody>${chapters}</tbody></table></section>` : ""}
+    <p class="gate">Aprove este plano antes de criar a timeline e renderizar.</p>
+  </main>
+</body>
+</html>
+`;
+}
+
 let hyperframesAvailable = null;
 
 function hasHyperFrames() {
@@ -1814,6 +1938,7 @@ function planCommand(args) {
   }
 
   const plan = readJson(planPath, null);
+  if (!plan) fail(`Invalid plan JSON at ${planPath}. Fix the file and run again.`);
   const { errors, warnings } = validatePlan(plan, project.dir);
 
   if (args.json) {
@@ -1821,7 +1946,15 @@ function planCommand(args) {
     process.exit(errors.length ? 1 : 0);
   }
 
-  if (!args.check) printPlanSummary(plan);
+  if (!args.check) {
+    printPlanSummary(plan);
+    const markdownPath = path.join(project.dir, "edit", "plan.md");
+    const htmlPath = path.join(project.dir, "edit", "plan.html");
+    writeText(markdownPath, planMarkdown(plan));
+    writeText(htmlPath, planHtml(plan, project));
+    console.log(`\n  Artifact: ${htmlPath}`);
+    console.log(`  Markdown: ${markdownPath}`);
+  }
 
   heading("Validation");
   if (!errors.length && !warnings.length) console.log("  ✓ No issues found.");
@@ -2919,6 +3052,7 @@ Commands:
   doctor [--json]                 Detect tools, engines, TTS, and workspace
   init [--dir <path>] [--force]   Create a workspace
   new <slug> [options]            Create a project inside a channel
+  open <slug> [--project] [--print] Open assets/source or the project folder
   list [--json]                   List channels, projects, and profiles
   channel list|show|new|set|use   Manage channels and their defaults
   check <slug> [--json]           Validate project and timeline
@@ -2927,7 +3061,7 @@ Commands:
   profile list|show|fork          Reusable visual identities
   digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
-  plan [slug] [--check|--show]    Validate and show edit/plan.json
+  plan [slug] [--check|--show]    Validate, show, and write edit/plan.html
   build <slug> [options]          Build a HyperFrames or Remotion project from the plan
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
@@ -2964,7 +3098,7 @@ New project options:
   --profile <id>                  Profile (default: channel profile)
   --engine <id>                   auto | hyperframes | remotion | ffmpeg
   --format <aspect>               16:9 | 9:16 | 1:1 | 4:5 (default: channel)
-  --duration <seconds>            Target duration (default: channel)
+  --duration <seconds>            Target duration for this project (default: 60)
   --language <code>               Language (default: channel language)
   --source <id>                   live | generated | hybrid
   --voice <id>                    user | tts | none
@@ -2973,12 +3107,15 @@ New project options:
   --assets <id>                   user | link | library | generated | none | mixed
   --force                         Overwrite an existing project
 
+Open options:
+  --project                       Open the project root instead of assets/source
+  --print                         Print the path without opening it
+
 Channel options:
   --name <name>                   Display name
   --content <text>                What this channel produces
   --language <code>               Default language
   --format <aspect>               Default format (or auto)
-  --duration <seconds>            Default target duration
   --profile <id>                  Default profile
   --source <id>                   live | generated | hybrid
   --voice <id>                    user | tts | none
@@ -3001,6 +3138,7 @@ Examples:
   node scripts/rooster.mjs init
   node scripts/rooster.mjs channel new en-tech --language en --format 16:9 --profile tech-neon --voice tts
   node scripts/rooster.mjs new video-x --channel en-tech --duration 60
+  node scripts/rooster.mjs open en-tech/video-x
   node scripts/rooster.mjs config set assets.strategy user
   node scripts/rooster.mjs profile fork minimal --as my-brand
   node scripts/rooster.mjs digest en-tech/video-x --from 0 --to 60
@@ -3045,6 +3183,9 @@ function main() {
       return;
     case "new":
       newProject(args);
+      return;
+    case "open":
+      openProject(args);
       return;
     case "list":
       listWorkspace(args);

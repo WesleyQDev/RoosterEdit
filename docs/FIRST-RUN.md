@@ -1,6 +1,6 @@
 # Primeira execução
 
-Depois de instalar, o ideal é configurar **um canal** — não o workspace inteiro. O workspace é a pasta `rooster/` no diretório atual; você não precisa escolher onde ele fica.
+Depois de instalar, o ideal é configurar o workspace criando **um canal**. O workspace é a pasta `rooster/` no diretório atual; você não precisa escolher onde ele fica.
 
 A instalação termina com um resumo curto e uma pergunta: **“Quer configurar o workspace agora?”** Só depois do seu sim o agente cria a pasta `rooster/` e o primeiro canal. Se você disser não, nada é criado.
 
@@ -21,26 +21,26 @@ Não existe categoria separada. O campo `content` do canal registra o que ele pr
 
 ## O que o agente pergunta
 
-Se o harness tiver uma tool de formulário, use ela. Se não, pergunte no chat. Nada de wizard rígido no CLI.
+Depois do seu “sim” para configurar o workspace, o agente faz um setup rápido com **uma pergunta**:
 
-A primeira pergunta não deve soar como “criar um canal no YouTube”. Use a pasta como referência:
+> **“O que esse canal vai produzir? Uma frase basta — por exemplo: ‘shorts de tecnologia em português’ ou ‘entrevistas de 90s para o YouTube’.”**
 
-> **“Vamos criar a pasta do seu primeiro canal? Ela guarda o idioma, formato, estilo, assets e voz padrão dos vídeos deste projeto.”**
+Com essa frase, ele infere o resto: nome, idioma, formato, origem, perfil visual, assets, engine, autonomia e voz. Depois mostra um resumo curto:
 
-Depois, em um bloco:
+> **“Vou criar `pt-tech` com: pt-BR · 9:16 · tech-neon · TTS · assets mixed · engine auto · guided. Está bom ou quer ajustar algo?”**
 
-1. Nome do canal.
-2. O que ele produz (uma frase).
-3. Idioma.
-4. Formato padrão (16:9, 9:16, 1:1 ou `auto`).
-5. Duração padrão.
-6. Modo de origem (live, generated ou hybrid).
-7. Perfil visual.
-8. Política de assets.
-9. Engine.
-10. Autonomia.
-11. Voz.
-12. Assets de marca (opcional).
+Se você confirmar, ele cria o canal e para. Se quiser mudar algo, é só dizer. Os campos avançados continuam disponíveis, mas não são perguntados de uma vez.
+
+**Duração não é padrão do canal.** Cada vídeo define a sua quando o projeto é criado.
+
+## Configuração avançada (só se você pedir)
+
+Se quiser controlar tudo, o agente pergunta em grupos de no máximo três:
+
+1. Identidade: nome, conteúdo e idioma.
+2. Saída: formato e origem.
+3. Visual e áudio: perfil, assets e voz.
+4. Produção: engine, autonomia e assets de marca.
 
 O agente grava com:
 
@@ -51,7 +51,6 @@ node "<skill>/scripts/rooster.mjs" channel new en-tech \
   --content "English tech explainers" \
   --language en \
   --format 16:9 \
-  --duration 60 \
   --profile tech-neon \
   --source generated \
   --voice tts \
@@ -65,8 +64,11 @@ Depois mostra o resumo e para. Não cria vídeo ainda.
 
 ## Criar um projeto dentro do canal
 
+A duração é definida aqui, por vídeo. Se você vai fornecer seus próprios arquivos, o agente cria e abre a pasta `assets/source/`:
+
 ```bash
 node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
+node "<skill>/scripts/rooster.mjs" open en-tech/video-x
 ```
 
 Se o projeto for diferente do padrão do canal:
@@ -80,6 +82,12 @@ node "<skill>/scripts/rooster.mjs" new video-special --channel en-tech \
 
 O `project.json` registra `channel` e `overrides`, então dá para ver o que veio do canal e o que foi decisão do projeto.
 
+## Plano e progresso
+
+Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug> --show`, que gera `edit/plan.md` e `edit/plan.html`. Se o harness permitir exibir arquivos, ele abre o HTML no preview; se não, mostra o resumo no chat. O pedido de aprovação vem com o marcador de etapa, por exemplo: **“Etapa 4/8 — Plano pronto. Posso seguir com a timeline?”**
+
+As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta.
+
 ## Precedência
 
 ```text
@@ -91,7 +99,8 @@ O projeto manda em tudo. O canal é o contexto estável; não há camada de cate
 ## O que não perguntar
 
 - “Onde fica o rooster?” — o padrão é `./rooster`; só pergunte se o usuário quiser outro caminho.
-- “Quer criar um canal?” — prefira “Vamos criar a pasta do seu primeiro canal?” e explique que é um padrão de produção.
+- Um questionário com 12 campos — pergunte só o que o canal produz e infira o resto.
+- Duração do canal — a duração é sempre do vídeo, não do canal.
 - Categoria, preset ou receita — esse conceito não existe.
 - As mesmas perguntas do canal em todo projeto — herde e confirme só o que mudou.
 
