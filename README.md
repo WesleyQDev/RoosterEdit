@@ -29,9 +29,7 @@ RoosterEdit é uma skill que ensina agentes de IA a trabalhar com vídeo. Ela ju
 Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e gráficos, monta cenas em 3D e produz conteúdo para redes sociais. Você escolhe o formato, o estilo e a ferramenta de render, HyperFrames ou Remotion. O agente cuida do projeto do começo ao fim.
 
 <p align="center">
-  <img src="docs/assets/opencode-demo.gif" alt="Interação do OpenCode com a skill RoosterEdit" width="860" />
-  <br />
-  <sub>Instalação, setup do canal, plano e render final — sempre com a etapa X/8 e uma pergunta antes de avançar.</sub>
+  <img src="docs/assets/opencode-demo.gif" alt="Demonstração da skill RoosterEdit no chat" width="860" />
 </p>
 
 ## O que já funciona

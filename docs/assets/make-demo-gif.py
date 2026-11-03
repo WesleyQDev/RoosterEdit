@@ -215,21 +215,8 @@ def draw_header(draw: ImageDraw.ImageDraw) -> None:
             fill=(shade, shade, shade, 255),
         )
 
-    draw.text((sc(78), sc(15)), "OpenCode", font=F_BOLD, fill=TEXT)
-    draw.text((sc(168), sc(18)), "RoosterEdit · instalação", font=F_SMALL, fill=MUTED)
-
-    pill_w = sc(66)
-    pill_x = W - 22 - pill_w
-    draw_round_rect(
-        draw,
-        (sc(pill_x), sc(15), sc(pill_x + pill_w), sc(35)),
-        sc(10),
-        fill=(18, 18, 18, 255),
-        outline=BORDER,
-        width=sc(1),
-    )
-    draw.ellipse((sc(pill_x + 12), sc(23), sc(pill_x + 18), sc(29)), fill=WHITE)
-    draw.text((sc(pill_x + 25), sc(19)), "pronto", font=F_TINY_BOLD, fill=MUTED)
+    draw.text((sc(78), sc(15)), "RoosterEdit", font=F_BOLD, fill=TEXT)
+    draw.text((sc(174), sc(18)), "instalação", font=F_SMALL, fill=MUTED)
 
 
 def draw_step_pill(draw: ImageDraw.ImageDraw, x: int, y: int, step: str) -> None:
@@ -318,17 +305,6 @@ def draw_video_card(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
         font=F_MONO,
         fill=GRAY,
     )
-    pill_x, pill_y = x + 98, y + 82
-    pill_w = 58
-    draw_round_rect(
-        draw,
-        (sc(pill_x), sc(pill_y), sc(pill_x + pill_w), sc(pill_y + 20)),
-        sc(10),
-        fill=(19, 19, 19, 255),
-        outline=(70, 70, 70, 255),
-        width=sc(1),
-    )
-    draw.text((sc(pill_x + 10), sc(pill_y + 4)), "pronto", font=F_TINY_BOLD, fill=TEXT)
 
 
 def draw_agent_message(
