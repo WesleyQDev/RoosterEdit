@@ -2447,6 +2447,14 @@ function ingest(args) {
           "Only download content you own or have permission to use. Re-run with --confirm-rights if that is the case."
       );
     }
+
+    const workspaceConfig = readJson(path.join(WORKSPACE, "config.json"), {});
+    if (workspaceConfig.assets?.allowDownload === false && !args.force) {
+      fail(
+        "Downloads are disabled in config. Run \"config set assets.allowDownload true\" or pass --force."
+      );
+    }
+
     if (!versionOf("yt-dlp", ["--version"])) {
       fail(
         "yt-dlp is not installed.\n" +
@@ -2539,13 +2547,18 @@ function ingest(args) {
     const dest = path.join(destDir, base);
     linkOrCopy(source, dest);
     const probe = probeMedia(dest);
+    const license = args.license || "unknown";
+    const workspaceConfig = readJson(path.join(WORKSPACE, "config.json"), {});
+    if (license === "unknown" && workspaceConfig.assets?.licensePolicy === "strict") {
+      console.warn("! License is unknown. Record it before publishing (config: assets.licensePolicy).");
+    }
     const asset = {
       id: `asset-${shortHash(dest)}`,
       path: path.relative(dir, dest).replace(/\\/g, "/"),
       type: probe.width ? (/\.(png|jpe?g|webp|gif|svg)$/i.test(base) ? "image" : "video") : "audio",
       source: "user",
       origin: "file",
-      license: args.license || "unknown",
+      license,
       attribution: "",
       addedAt: now(),
       probe,
@@ -2645,6 +2658,7 @@ Ingest options:
   --cookies-from-browser <name>   Pass browser cookies to yt-dlp
   --cookies <path>                Pass a cookies.txt file to yt-dlp
   --license <id>                  License for local files (default: unknown)
+  --force                         Override a disabled download policy
 
 Transcribe options:
   --input <path>                  Override the media file
