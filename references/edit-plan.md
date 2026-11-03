@@ -175,6 +175,7 @@ Captions are not generated automatically by `build` in this version. If the vide
 ### Music
 
 - Prefer `library/music/` or a track the user provided with a known license.
+- If the user says the music is in a folder, search that folder and the project asset folders before declaring no music.
 - Use `gainDb` around `-18` under voice; `-6` to `-12` for music-only.
 - Use `start`/`end` to trim the track. The build loops and pads it to the video duration.
 - If there is no track, add `notes: ["no music requested"]` and do not claim music in the delivery.

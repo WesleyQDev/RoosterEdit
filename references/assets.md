@@ -127,6 +127,8 @@ Music is part of the edit plan, not an afterthought. Add it to `edit/plan.json`:
 }
 ```
 
+Before declaring no music, look in `assets/source/`, `assets/licensed/music/`, `library/music/`, and any folder the user mentions. If you find candidates, ask which one to use. Do not assume the library is empty.
+
 Use `library/music/` or a user-provided track. The build trims/loops it to the video duration and mixes it under the voice. For a still-image base, add the track in the engine instead. If there is no music, state that in `notes` instead of leaving the plan silent.
 
 ## Generated media
