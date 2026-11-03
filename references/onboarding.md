@@ -17,6 +17,14 @@ A channel example: "EN Tech" (English, 16:9, tech-neon profile, TTS) and "PT Cri
 
 There is no separate category concept. The channel's `content` field records what it produces, and each project defines its own structure in `brief.md`, `script.md`, and `edit/plan.json`.
 
+## Handoff after installation
+
+Installation is not onboarding. After cloning and running `doctor`, report the result in at most about 8 lines and ask:
+
+> "Quer configurar o workspace agora? Eu crio a pasta `rooster/` e o primeiro canal com você."
+
+If the answer is no, stop. Do not create the workspace, a channel, or a project. If the answer is yes, follow the first-run batch below and keep the final summary short.
+
 ## Rule
 
 If the workspace was just created, **do not create a video project yet**. Create the first channel (or confirm the `default` one), show a summary, and stop.

@@ -34,15 +34,31 @@ node "<skill>/scripts/rooster.mjs" doctor --json
 
 Do not create a `scripts/` directory in the user's project just to satisfy the command. The workspace (`rooster/`) belongs to the project; the CLI belongs to the skill. If the shell's working directory is the skill directory, the CLI will create the workspace in the wrong place.
 
+### Reporting
+
+End-of-task replies are short by default: 5-10 lines or one compact table. Include only what the user needs to act:
+
+- what was done or found;
+- the paths or links to the result;
+- what is missing or blocked, if anything;
+- one clear next question.
+
+Do not repeat the brief, paste logs, list every command, or explain the whole skill unless the user asks. Put details in workspace files or link the reference docs. A plan, QA report, or delivery package can be longer only because the user must review its contents.
+
+Installation and workspace setup are separate steps. After installing and running `doctor`, do not start onboarding or write a guide. Summarize the environment in a few lines and ask whether the user wants to configure the workspace now. Wait for a yes before creating `rooster/` or a channel.
+
 ## First run after installation
 
-If the workspace does not exist yet, do a short onboarding before creating any project:
+If the workspace does not exist yet, do a short onboarding before creating any project.
+
+**First ask:** "Quer configurar o workspace agora?" (or "Shall we set up the workspace now?"). Explain in one line that this creates `rooster/` and the first channel. If the answer is no, stop and create nothing.
+
+If the answer is yes:
 
 1. Use `./rooster` by default. Do not ask "where does the workspace live" unless the user wants a custom path.
-2. Ask: "Shall we create the folder for your first channel?" Explain that a channel here is a reusable production standard (language, format, style, assets, voice), not a YouTube channel.
-3. If yes, use the harness's question/form tool when available; otherwise ask in chat. Collect the channel name, what it produces, language, default format (or `auto`), default duration, source mode, profile, assets strategy, engine, autonomy, voice, and optional brand assets.
-4. Run `init`, then `channel new <id> ...` with the answers.
-5. Show a plain-language summary and stop.
+2. Use the harness's question/form tool when available; otherwise ask in chat. Collect the channel name, what it produces, language, default format (or `auto`), default duration, source mode, profile, assets strategy, engine, autonomy, voice, and optional brand assets. Explain that a channel here is a reusable production standard (language, format, style, assets, voice), not a YouTube channel.
+3. Run `init`, then `channel new <id> ...` with the answers.
+4. Show a short summary and stop.
 
 A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, duration, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults.
 
@@ -69,15 +85,20 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Review with eyes.** Use the browser preview, screenshots, or rendered stills to judge composition, pacing, and captions. Code review alone is not enough.
 - **Respect provenance.** Record where every asset came from and its license. A beautiful video with an unlicensed track is a liability.
 - **Degrade gracefully.** The harness may not have subagents, a browser, Node, FFmpeg, or TTS. Offer the best path available and say what is missing.
+- **Report short.** End every task with the result, the paths, and one next question. Do not narrate the whole process or dump commands unless the user asks.
 - **Protect the context.** Video work is token-heavy. Redirect engine logs to files, read only the tail, use `digest` instead of the full transcript, and inspect a few key frames instead of every frame. Read `references/token-discipline.md`.
 
 ## Step 0 - Find the workspace
 
-Look for a `rooster/` directory in the current project first, then use `ROOSTER_WORKSPACE` if it is set. The default is `./rooster`; only ask for a custom path when the user wants one. If neither exists, create it with:
+Look for a `rooster/` directory in the current project first, then use `ROOSTER_WORKSPACE` if it is set. The default is `./rooster`; only ask for a custom path when the user wants one.
+
+If neither exists and the user has already asked to make a video, creating the workspace is implied; run:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" init
 ```
+
+If the user just installed the skill or is only exploring, do not create it silently: follow "First run after installation" and ask first.
 
 The workspace is where **channels**, projects, profiles, and the asset library live. Keep it out of the skill directory; the skill is reusable, the workspace belongs to the user's video project.
 

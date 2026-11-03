@@ -130,6 +130,13 @@ Give the subagent file paths, not pasted content. Ask for a compact JSON/markdow
 | QA | probe JSON + summary, not a full log |
 | Delivery | final path + stats |
 
+## Rule 11 — Close with a short report
+
+- End in 5–10 lines: what is done, the paths, any blocker, and one next question.
+- Do not repeat the brief, dump commands, or paste the full doctor table.
+- Put details in the workspace or link the docs.
+- After installation, the only next question is whether to configure the workspace now.
+
 ## What not to optimize
 
 - Do not skip the plan approval to save tokens.

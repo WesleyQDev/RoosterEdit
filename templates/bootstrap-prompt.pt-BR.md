@@ -37,7 +37,7 @@ Quero editar meus vídeos com IA usando o RoosterEdit. Prepare este computador e
    ```bash
    node "<skill>/scripts/rooster.mjs" build meu-canal/meu-video --engine remotion
    ```
-10. No fim, me explique em linguagem simples o que foi instalado e como eu uso cada parte.
+10. No fim, me dê um resumo curto (até 8 linhas) do que foi instalado e do próximo passo. Não escreva um guia longo.
 
 ---
 

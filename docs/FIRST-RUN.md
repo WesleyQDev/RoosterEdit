@@ -2,6 +2,8 @@
 
 Depois de instalar, o ideal é configurar **um canal** — não o workspace inteiro. O workspace é a pasta `rooster/` no diretório atual; você não precisa escolher onde ele fica.
 
+A instalação termina com um resumo curto e uma pergunta: **“Quer configurar o workspace agora?”** Só depois do seu sim o agente cria a pasta `rooster/` e o primeiro canal. Se você disser não, nada é criado.
+
 ## O conceito
 
 ```text

@@ -42,6 +42,7 @@ node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
 - Renderize draft uma vez; final só depois da aprovação.
 - Reuse transcrição, TTS e projetos; não refaça o que não mudou.
 - Para transcrição longa, peça a um subagent um resumo compacto em JSON.
+- Feche a tarefa em 5–10 linhas: resultado, caminhos e uma próxima pergunta. Detalhes ficam nos arquivos.
 
 ## O que não cortar
 

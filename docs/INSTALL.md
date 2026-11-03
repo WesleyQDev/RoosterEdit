@@ -74,7 +74,7 @@ Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir)
 
 ## Primeiro uso
 
-Depois de instalar, crie o primeiro **canal** com o agente:
+Depois de instalar, o agente deve fechar com um resumo curto e perguntar se você quer configurar o workspace agora. Só depois do seu sim ele cria o primeiro **canal**:
 - nome, o que ele produz, idioma, formato e perfil padrão;
 - modo de origem (live, generated ou hybrid);
 - política de assets;
