@@ -17,7 +17,7 @@ node scripts/rooster.mjs doctor --json
 
 ## Local ou global?
 
-A instalação **local é a recomendada**: a skill fica dentro do projeto, em `.opencode/skills/rooster-edit`, e acompanha aquele trabalho. A **global** fica em `~/.config/opencode/skills/rooster-edit` e vale para todos os projetos da máquina.
+A instalação **local é a recomendada**: a skill fica na pasta de skills do projeto que o seu harness lê, por exemplo `.opencode/skills/rooster-edit`, `.claude/skills/rooster-edit` ou `.agents/skills/rooster-edit`. A **global** fica na pasta global do harness, por exemplo `~/.config/opencode/skills/rooster-edit` ou `~/.claude/skills/rooster-edit`, e vale para todos os projetos da máquina.
 
 O prompt de instalação pergunta qual você prefere antes de clonar. Use a global só se quiser a skill disponível em todos os projetos.
 
@@ -127,7 +127,7 @@ O OpenCode recarrega skills quando os arquivos mudam. Se não aparecer, use `/re
 
 | Problema | Solução |
 |---|---|
-| Skill não aparece | Confirme que o arquivo é `.opencode/skills/rooster-edit/SKILL.md` e que a pasta não está vazia |
+| Skill não aparece | Confirme que o arquivo é `<pasta-de-skills>/rooster-edit/SKILL.md` (por exemplo, `.opencode/skills`, `.claude/skills` ou `.agents/skills`) e que a pasta não está vazia |
 | `node` não encontrado | Instale Node.js LTS e reabra o terminal |
 | `ffmpeg` não encontrado | Instale FFmpeg e adicione ao PATH |
 | HyperFrames lento na primeira execução | `npx hyperframes` baixa o pacote/Chrome na primeira vez; depois usa cache |

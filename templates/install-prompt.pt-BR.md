@@ -6,7 +6,7 @@ Copie o bloco abaixo e cole na conversa com o seu agente. Ele deve usar a pasta 
 
 Instale a skill **RoosterEdit** neste projeto e valide o ambiente.
 
-1. Antes de clonar, use a ferramenta de perguntas (se existir) para escolher entre instalação local no projeto (recomendado, em `.opencode/skills/rooster-edit`) e global (em `~/.config/opencode/skills/rooster-edit`). Não clone nada antes da minha resposta.
+1. Antes de clonar, use a ferramenta de perguntas (se existir) para escolher entre instalação local no projeto (recomendado) e global. Use a pasta de skills que este harness já lê; exemplos de local: `.opencode/skills`, `.claude/skills`, `.agents/skills`; exemplos de global: `~/.config/opencode/skills`, `~/.claude/skills`. Não clone nada antes da minha resposta.
 2. Clone https://github.com/WesleyQDev/RoosterEdit.git na pasta escolhida, com o nome rooster-edit.
 3. Confirme que o arquivo SKILL.md está no lugar.
 4. Rode o doctor da skill e me mostre só o essencial: o que está pronto e o que falta, em no máximo 6 linhas.

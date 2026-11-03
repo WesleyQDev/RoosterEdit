@@ -50,14 +50,14 @@ O plano é o ponto de controle. Se ele estiver errado, o vídeo inteiro sai erra
 
 ## Instalação
 
-A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer configurar o workspace.
+A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, usando a pasta de skills que o seu harness lê, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer configurar o workspace.
 
 Copie o prompt abaixo e cole na conversa com o seu agente:
 
 ```text
 Instale a skill RoosterEdit neste projeto e valide o ambiente.
 
-1. Antes de clonar, use a ferramenta de perguntas (se existir) para escolher entre instalação local no projeto (recomendado, em `.opencode/skills/rooster-edit`) e global (em `~/.config/opencode/skills/rooster-edit`). Não clone nada antes da minha resposta.
+1. Antes de clonar, use a ferramenta de perguntas (se existir) para escolher entre instalação local no projeto (recomendado) e global. Use a pasta de skills que este harness já lê; exemplos de local: `.opencode/skills`, `.claude/skills`, `.agents/skills`; exemplos de global: `~/.config/opencode/skills`, `~/.claude/skills`. Não clone nada antes da minha resposta.
 2. Clone https://github.com/WesleyQDev/RoosterEdit.git na pasta escolhida, com o nome rooster-edit.
 3. Confirme que o arquivo SKILL.md está no lugar.
 4. Rode o doctor da skill e me mostre só o essencial: o que está pronto e o que falta, em no máximo 6 linhas.

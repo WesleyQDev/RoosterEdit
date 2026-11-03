@@ -36,12 +36,12 @@ Do not create a `scripts/` directory in the user's project just to satisfy the c
 
 ## Where to install the skill
 
-When the user asks you to install RoosterEdit, ask first whether the install should be **local to the project (recommended)** or **global**:
+When the user asks you to install RoosterEdit, ask first whether the install should be **local to the project (recommended)** or **global**. Use the skill folder the current harness actually reads; do not assume OpenCode.
 
-- **Local:** `.opencode/skills/rooster-edit` inside the current project (or the harness's equivalent project-level skill folder). Recommended because the version stays with the project and cannot surprise other work.
-- **Global:** `~/.config/opencode/skills/rooster-edit` (or the harness's global skill folder). Use it only when the user wants RoosterEdit in every project on the machine.
+- **Local:** the harness's project-level skill folder plus `rooster-edit` (for example `.opencode/skills`, `.claude/skills`, or `.agents/skills`). Recommended because the version stays with the project and cannot surprise other work.
+- **Global:** the harness's global skill folder plus `rooster-edit` (for example `~/.config/opencode/skills` or `~/.claude/skills`). Use it only when the user wants RoosterEdit in every project on the machine.
 
-Wait for the answer before cloning. This choice is about where the skill lives, not where the video workspace lives (`./rooster`).
+If you cannot determine the harness's folders, inspect its skill discovery paths or ask the user. Wait for the answer before cloning. This choice is about where the skill lives, not where the video workspace lives (`./rooster`).
 
 ### Reporting
 
