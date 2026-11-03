@@ -308,6 +308,7 @@ If the user already has a different structure, adapt to it and record the mappin
 ## Guardrails
 
 - Do not render with missing assets. A placeholder is a bug, not a style.
+- Do not cover the footage with a full-screen panel or card unless the user explicitly asks for it. Prefer lower-thirds, captions, corner labels, and overlays that leave the video visible. A mismatched slide is not an invitation to cover the screen.
 - Do not use unlicensed music, fonts, or footage. If the license is unknown, ask.
 - Do not download third-party video from a link unless the user owns it or has permission; respect platform terms and copyright. Never bypass DRM, paywalls, or access controls.
 - Do not upload, publish, or send files to external services without explicit consent.

@@ -125,6 +125,7 @@ Each element needs `start`, `end`, and `description`. `text` is optional but enc
 - Add a zoom when the speaker lands an insight or a punchline.
 - Add b-roll when the speaker describes a concrete noun or action.
 - Do not add an element to every sentence; the video becomes noise.
+- Do not use a full-screen panel or card to hide a mismatched slide unless the user explicitly asks. Prefer small lower-thirds, corner labels, captions, and overlays. The video must remain visible.
 - Match the element style to `style.md` and the resolved profile.
 
 ### Chapters
