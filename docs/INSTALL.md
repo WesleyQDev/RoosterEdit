@@ -70,9 +70,19 @@ Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir)
 
 ## Primeiro uso
 
+Depois de instalar, configure o workspace uma vez com o agente:
+- idioma, formato e perfil padrão;
+- política de assets;
+- engine e autonomia;
+- voz/TTS.
+
+O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults com `config set` e só cria um projeto quando você pedir.
+
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs init
-node .opencode/skills/rooster-edit/scripts/rooster.mjs new meu-video --category talking-head --profile minimal
+node .opencode/skills/rooster-edit/scripts/rooster.mjs config set defaults.language pt-BR
+node .opencode/skills/rooster-edit/scripts/rooster.mjs config set defaults.aspect 16:9
+node .opencode/skills/rooster-edit/scripts/rooster.mjs config show
 ```
 
 Coloque o vídeo em `rooster/projects/meu-video/assets/source/` e peça ao agente:

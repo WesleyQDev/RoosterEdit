@@ -354,11 +354,20 @@ function initWorkspace(args) {
       aspect: "16:9",
       fps: 30,
       loudnessLufs: -14,
+      language: "pt-BR",
+      autonomy: "guided",
+      assets: "mixed"
     },
   };
 
   const config = {
     schema: "rooster.config/v1",
+    assets: {
+      strategy: "mixed",
+      allowDownload: true,
+      allowGenerate: false,
+      licensePolicy: "strict"
+    },
     tts: {
       provider: process.env.ROOSTER_TTS_PROVIDER || "auto",
       voice: null,
@@ -476,11 +485,16 @@ function newProject(args) {
     fail(`Project already exists at ${projectDir}. Use --force to overwrite.`);
   }
 
-  const category = typeof args.category === "string" ? args.category : "custom";
+  const workspaceMeta = readJson(path.join(WORKSPACE, "workspace.json"), {});
+  const workspaceDefaults = workspaceMeta.defaults || {};
+  const workspaceConfig = readJson(path.join(WORKSPACE, "config.json"), {});
+
+  const category =
+    typeof args.category === "string" ? args.category : workspaceDefaults.category || "custom";
   const categoryData = loadCategoryDefaults(category);
   const defaults = categoryData?.defaults || {};
 
-  const aspect = typeof args.format === "string" ? args.format : defaults.aspect || "16:9";
+  const aspect = typeof args.format === "string" ? args.format : defaults.aspect || workspaceDefaults.aspect || "16:9";
   const format = resolveFormat(aspect);
   if (args.duration) {
     format.duration = Number(args.duration) || format.duration;
@@ -489,16 +503,23 @@ function newProject(args) {
     format.duration = Math.round((min + max) / 2);
   }
 
-  const profile = typeof args.profile === "string" ? args.profile : process.env.ROOSTER_PROFILE || "default";
+  const profile =
+    typeof args.profile === "string"
+      ? args.profile
+      : workspaceDefaults.profile || process.env.ROOSTER_PROFILE || "default";
   const engine = ENGINE_IDS.includes(args.engine)
     ? args.engine
-    : defaults.engine || process.env.ROOSTER_ENGINE || "auto";
+    : defaults.engine || workspaceDefaults.engine || process.env.ROOSTER_ENGINE || "auto";
   const source = SOURCE_IDS.includes(args.source) ? args.source : defaults.source || "hybrid";
   const voice = VOICE_IDS.includes(args.voice) ? args.voice : defaults.voice || "none";
   const style = STYLE_IDS.includes(args.style) ? args.style : typeof args.profile === "string" ? "profile" : "ai";
-  const autonomy = AUTONOMY_IDS.includes(args.autonomy) ? args.autonomy : "guided";
+  const autonomy = AUTONOMY_IDS.includes(args.autonomy) ? args.autonomy : workspaceDefaults.autonomy || "guided";
   const music = defaults.music !== undefined ? Boolean(defaults.music) : true;
   const captionsMode = defaults.captions || "burned";
+  const assetsStrategy =
+    typeof args.assets === "string"
+      ? args.assets
+      : workspaceConfig.assets?.strategy || workspaceDefaults.assets || "mixed";
 
   const dirs = [
     "storyboard/frames",
@@ -523,6 +544,12 @@ function newProject(args) {
     engine,
     mode: { source, voice, style, autonomy },
     format,
+    language: workspaceDefaults.language || "pt-BR",
+    assets: {
+      strategy: assetsStrategy,
+      sources: [],
+      licensePolicy: workspaceConfig.assets?.licensePolicy || "strict"
+    },
     audio: { loudnessLufs: -14, music },
     captions: { enabled: captionsMode !== "none", mode: captionsMode },
     status: "intake",
@@ -730,6 +757,253 @@ function listDirNames(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// config
+// ---------------------------------------------------------------------------
+
+function coerceValue(value) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (value === "null") return null;
+  if (String(value).trim() !== "" && !Number.isNaN(Number(value))) return Number(value);
+  return value;
+}
+
+function getNested(target, key) {
+  return key.split(".").reduce((current, part) => (current == null ? undefined : current[part]), target);
+}
+
+function setNested(target, key, value) {
+  const parts = key.split(".");
+  let current = target;
+  for (let index = 0; index < parts.length - 1; index++) {
+    const part = parts[index];
+    if (!current[part] || typeof current[part] !== "object") current[part] = {};
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = value;
+}
+
+function configCommand(args) {
+  if (!exists(WORKSPACE)) fail(`No workspace at ${WORKSPACE}. Run "init" first.`);
+
+  const configPath = path.join(WORKSPACE, "config.json");
+  const workspacePath = path.join(WORKSPACE, "workspace.json");
+  const config = readJson(configPath, { schema: "rooster.config/v1" });
+  const workspace = readJson(workspacePath, { schema: "rooster.workspace/v1", defaults: {} });
+  workspace.defaults = {
+    language: "pt-BR",
+    autonomy: "guided",
+    assets: "mixed",
+    ...(workspace.defaults || {}),
+  };
+  config.assets = {
+    strategy: "mixed",
+    allowDownload: true,
+    allowGenerate: false,
+    licensePolicy: "strict",
+    ...(config.assets || {}),
+  };
+  config.tts = {
+    provider: "auto",
+    voice: null,
+    language: "pt-BR",
+    ...(config.tts || {}),
+  };
+
+  const action = args._[0] || "show";
+  if (action === "show") {
+    console.log(JSON.stringify({ config, defaults: workspace.defaults }, null, 2));
+    return;
+  }
+  if (action === "path") {
+    console.log(configPath);
+    console.log(workspacePath);
+    return;
+  }
+  if (action === "get") {
+    const key = args._[1];
+    if (!key) fail("Usage: config get <key>");
+    const target = key.startsWith("defaults.") ? workspace.defaults : config;
+    const value = getNested(target, key);
+    console.log(JSON.stringify(value, null, 2));
+    return;
+  }
+  if (action === "set") {
+    const key = args._[1];
+    const rawValue = args._[2];
+    if (!key || rawValue === undefined) fail("Usage: config set <key> <value>");
+    const value = coerceValue(rawValue);
+    if (key.startsWith("defaults.")) setNested(workspace, key, value);
+    else setNested(config, key, value);
+    writeJson(configPath, config);
+    writeJson(workspacePath, workspace);
+    console.log(`Set ${key} = ${JSON.stringify(value)}`);
+    if (key === "assets.strategy") {
+      console.log("Asset strategy updated. Read references/assets.md for the allowed modes.");
+    }
+    return;
+  }
+
+  fail("Usage: config show | path | get <key> | set <key> <value>");
+}
+
+// ---------------------------------------------------------------------------
+// digest
+// ---------------------------------------------------------------------------
+
+function digestCommand(args) {
+  const project = resolveProject(args._[0]);
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  if (!exists(transcriptPath)) {
+    fail(`No transcript at ${transcriptPath}. Run "transcribe" first.`);
+  }
+
+  const transcript = readJson(transcriptPath, null);
+  if (!transcript) fail("transcript.json is invalid");
+
+  const from = Number(args.from) || 0;
+  const to = args.to !== undefined ? Number(args.to) : Number.POSITIVE_INFINITY;
+  const segments = (transcript.segments || []).filter(
+    (segment) => Number(segment.end) > from && Number(segment.start) < to
+  );
+
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          project: project.slug,
+          source: transcript.source,
+          language: transcript.language,
+          duration: transcript.duration || segments[segments.length - 1]?.end || null,
+          from,
+          to: Number.isFinite(to) ? to : null,
+          segments,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  heading(`Transcript digest — ${project.slug}`);
+  console.log(`  ${segments.length} segment(s) · ${formatClock(from)} to ${Number.isFinite(to) ? formatClock(to) : "end"}`);
+  for (const segment of segments) {
+    console.log(`  ${formatClock(segment.start)}–${formatClock(segment.end)}  ${segment.text}`);
+  }
+  console.log("\n  Tip: use --from/--to to read only the section you are planning.");
+}
+
+// ---------------------------------------------------------------------------
+// profiles and categories
+// ---------------------------------------------------------------------------
+
+function catalogKind(kind) {
+  if (kind === "profile") return { dirName: "profiles", fileName: "profile.json" };
+  if (kind === "category") return { dirName: "categories", fileName: "category.json" };
+  fail(`Unknown catalog kind: ${kind}`);
+}
+
+function resolveCatalogEntry(kind, id) {
+  const { dirName, fileName } = catalogKind(kind);
+  const candidates = [
+    { scope: "workspace", dir: path.join(WORKSPACE, dirName, id) },
+    { scope: "global", dir: path.join(ROOSTER_HOME, dirName, id) },
+    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", dirName, id) },
+  ];
+  for (const candidate of candidates) {
+    if (exists(path.join(candidate.dir, fileName))) return candidate;
+  }
+  return null;
+}
+
+function listCatalog(kind) {
+  const { dirName, fileName } = catalogKind(kind);
+  const sources = [
+    { scope: "workspace", dir: path.join(WORKSPACE, dirName) },
+    { scope: "global", dir: path.join(ROOSTER_HOME, dirName) },
+    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", dirName) },
+  ];
+  const seen = new Map();
+  for (const source of sources) {
+    if (!exists(source.dir)) continue;
+    for (const entry of fs.readdirSync(source.dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const configPath = path.join(source.dir, entry.name, fileName);
+      if (!exists(configPath)) continue;
+      if (seen.has(entry.name)) continue;
+      const data = readJson(configPath, {});
+      seen.set(entry.name, {
+        id: entry.name,
+        name: data.name || entry.name,
+        scope: source.scope,
+        path: configPath,
+      });
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function catalogCommand(kind, args) {
+  const { dirName, fileName } = catalogKind(kind);
+  const action = args._[0] || "list";
+
+  if (action === "list") {
+    const entries = listCatalog(kind);
+    heading(`${kind === "profile" ? "Profiles" : "Categories"}`);
+    if (!entries.length) {
+      console.log("  (none)");
+      return;
+    }
+    for (const entry of entries) {
+      console.log(`  ${entry.id.padEnd(24)} ${entry.scope.padEnd(10)} ${entry.name}`);
+    }
+    return;
+  }
+
+  if (action === "show") {
+    const id = args._[1];
+    if (!id) fail(`Usage: ${kind} show <id>`);
+    const entry = resolveCatalogEntry(kind, id);
+    if (!entry) fail(`${kind} not found: ${id}`);
+    const configPath = path.join(entry.dir, fileName);
+    console.log(`# ${kind}: ${id} (${entry.scope})`);
+    console.log(configPath);
+    console.log(JSON.stringify(readJson(configPath, {}), null, 2));
+    return;
+  }
+
+  if (action === "fork") {
+    const id = args._[1];
+    const target = typeof args.as === "string" ? slugify(args.as) : null;
+    if (!id || !target) fail(`Usage: ${kind} fork <id> --as <new-id>`);
+    const entry = resolveCatalogEntry(kind, id);
+    if (!entry) fail(`${kind} not found: ${id}`);
+
+    const destination = path.join(WORKSPACE, dirName, target);
+    if (exists(destination) && !args.force) {
+      fail(`${kind} already exists at ${destination}. Use --force to overwrite.`);
+    }
+    if (exists(destination)) removeDirRobust(destination);
+    copyDir(entry.dir, destination);
+
+    const configPath = path.join(destination, fileName);
+    const data = readJson(configPath, {});
+    data.id = target;
+    data.name = typeof args.name === "string" ? args.name : `${data.name || target} (fork)`;
+    data.scope = "workspace";
+    writeJson(configPath, data);
+
+    heading(`${kind} forked`);
+    console.log(`  ${destination}`);
+    console.log(`  edit ${configPath} to customize it.`);
+    return;
+  }
+
+  fail(`Usage: ${kind} list | ${kind} show <id> | ${kind} fork <id> --as <new-id>`);
+}
+
+// ---------------------------------------------------------------------------
 // check
 // ---------------------------------------------------------------------------
 
@@ -780,6 +1054,15 @@ function checkProject(args) {
         }
       }
     }
+  }
+
+  const planPath = path.join(dir, "edit", "plan.json");
+  if (exists(planPath)) {
+    const result = validatePlan(readJson(planPath, null), dir);
+    errors.push(...result.errors);
+    warnings.push(...result.warnings);
+  } else {
+    warnings.push("edit/plan.json not found");
   }
 
   const manifestPath = path.join(dir, "assets", "manifest.json");
@@ -1164,6 +1447,7 @@ function transcribeCommand(args) {
         "--output", fasterOut,
         "--language", language,
         "--model", model,
+        ...(args.verbose ? ["--verbose"] : []),
       ],
       { cwd: project.dir, timeout: 2 * 60 * 60 * 1000 }
     );
@@ -2258,7 +2542,7 @@ function ingest(args) {
     const asset = {
       id: `asset-${shortHash(dest)}`,
       path: path.relative(dir, dest).replace(/\\/g, "/"),
-      type: probe.width ? "video" : "audio",
+      type: probe.width ? (/\.(png|jpe?g|webp|gif|svg)$/i.test(base) ? "image" : "video") : "audio",
       source: "user",
       origin: "file",
       license: args.license || "unknown",
@@ -2344,6 +2628,10 @@ Commands:
   list [--json]                   List projects, profiles, categories
   check <slug> [--json]           Validate project and timeline
   check [--json]                  Validate the root project (no slug)
+  config [show|path|get|set]      Workspace defaults and asset/TTS policy
+  profile list|show|fork         Reusable visual identities
+  category list|show|fork        Reusable content recipes
+  digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check|--show]    Validate and show edit/plan.json
   build <slug> [options]          Build a HyperFrames or Remotion project from the plan
@@ -2363,6 +2651,7 @@ Transcribe options:
   --engine <id>                   auto | hyperframes | whisper | faster-whisper (default: auto)
   --model <name>                  Whisper model (default: small)
   --language <code>               Language (default: pt)
+  --verbose                       Print every transcript segment
 
 Plan options:
   --check                         Validate only
@@ -2385,6 +2674,7 @@ New project options:
   --voice <id>                    user | tts | none
   --style <id>                    user | profile | ai | reference
   --autonomy <id>                 auto | guided | manual
+  --assets <id>                   user | link | library | generated | none | mixed
   --force                         Overwrite an existing project
 
 Environment:
@@ -2398,6 +2688,10 @@ Environment:
 Examples:
   node scripts/rooster.mjs init
   node scripts/rooster.mjs new meu-video --category faceless-explainer --profile tech-neon --format 9:16
+  node scripts/rooster.mjs config set assets.strategy user
+  node scripts/rooster.mjs profile fork minimal --as my-brand
+  node scripts/rooster.mjs category fork faceless-explainer --as my-explainer
+  node scripts/rooster.mjs digest meu-video --from 0 --to 60
   node scripts/rooster.mjs ingest meu-video --url "https://youtu.be/..." --confirm-rights
   node scripts/rooster.mjs transcribe meu-video --model small --language pt
   node scripts/rooster.mjs plan meu-video --show
@@ -2439,6 +2733,18 @@ function main() {
       return;
     case "list":
       listWorkspace(args);
+      return;
+    case "config":
+      configCommand(args);
+      return;
+    case "profile":
+      catalogCommand("profile", args);
+      return;
+    case "category":
+      catalogCommand("category", args);
+      return;
+    case "digest":
+      digestCommand(args);
       return;
     case "check":
       if (args._[0]) checkProject(args);

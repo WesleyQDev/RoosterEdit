@@ -21,6 +21,9 @@ RoosterEdit é uma skill que planeja, edita e renderiza vídeos completos com ag
 
 - [x] Workspace com projetos, perfis, categorias e biblioteca.
 - [x] `doctor` detecta Node, FFmpeg, HyperFrames, Whisper, `yt-dlp`, browser e GPU.
+- [x] Onboarding de workspace com `config set` para idioma, formato, perfil, assets, engine e autonomia.
+- [x] Estratégias de assets: arquivos do usuário, links autorizados, biblioteca, gerado, nenhum ou misto.
+- [x] `digest` para ler a transcrição em partes, sem carregar o JSON inteiro.
 - [x] Transcrição via **HyperFrames/Parakeet** ou **Whisper** → `edit/transcript.json`.
 - [x] Plano de edição `edit/plan.json` com cortes, elementos, capítulos e **gate de aprovação**.
 - [x] `build` para **HyperFrames** e **Remotion**, aplicando cortes e remapeando os tempos.
@@ -76,6 +79,49 @@ Verifique:
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs doctor --json
 ```
+
+## Primeira execução
+
+Depois de instalar, o ideal é configurar o workspace **antes** do primeiro vídeo:
+
+```bash
+node "<skill>/scripts/rooster.mjs" init
+node "<skill>/scripts/rooster.mjs" config set defaults.language pt-BR
+node "<skill>/scripts/rooster.mjs" config set defaults.aspect 16:9
+node "<skill>/scripts/rooster.mjs" config set defaults.profile minimal
+node "<skill>/scripts/rooster.mjs" config set defaults.autonomy guided
+node "<skill>/scripts/rooster.mjs" config set assets.strategy mixed
+node "<skill>/scripts/rooster.mjs" config set assets.allowDownload true
+node "<skill>/scripts/rooster.mjs" config set assets.allowGenerate false
+node "<skill>/scripts/rooster.mjs" config show
+```
+
+O agente pergunta em um bloco, grava os defaults e para. Só cria um projeto quando você pedir. Guia completo em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
+
+## Assets
+
+| Estratégia | O que faz |
+|---|---|
+| `user` | Só arquivos que você fornece |
+| `link` | Links autorizados baixados via `yt-dlp` |
+| `library` | Música, SFX, fontes, overlays e b-roll do workspace/global |
+| `generated` | Imagens/TTS/vídeo gerados por IA, com permissão |
+| `none` | Sem assets externos; só texto e motion graphics |
+| `mixed` | Tudo acima, com consentimento por ação |
+
+Hoje a skill baixa links autorizados, mas **não busca stock automaticamente**. O usuário pode trocar a estratégia a qualquer momento com `config set assets.strategy ...` ou editar `project.json`. Detalhes em [`docs/ASSETS.md`](docs/ASSETS.md).
+
+## Otimização de tokens
+
+O trabalho de vídeo gasta tokens naturalmente. Para manter a qualidade sem inflar o contexto:
+
+- redirecione logs de render/check para arquivo e leia só o final;
+- use `digest` em vez do `transcript.json` completo;
+- use `plan --show` em vez do JSON cru;
+- inspecione 3–5 frames, não todos;
+- renderize draft uma vez e o final só depois da aprovação.
+
+Guia completo em [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md).
 
 ## Quick start
 
@@ -222,6 +268,9 @@ Detalhes e limites em [`docs/TESTING.md`](docs/TESTING.md).
 ## Documentação
 
 - [`docs/INSTALL.md`](docs/INSTALL.md) — instalação e troubleshooting.
+- [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md) — configuração inicial do workspace.
+- [`docs/ASSETS.md`](docs/ASSETS.md) — estratégias de assets e direitos.
+- [`docs/TOKEN-OPTIMIZATION.md`](docs/TOKEN-OPTIMIZATION.md) — como gastar menos contexto sem perder qualidade.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arquitetura, fluxo e decisões.
 - [`docs/WORKSPACE.md`](docs/WORKSPACE.md) — organização do workspace.
 - [`docs/TESTING.md`](docs/TESTING.md) — resultados dos testes.

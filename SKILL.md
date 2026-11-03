@@ -34,6 +34,17 @@ node "<skill>/scripts/rooster.mjs" doctor --json
 
 Do not create a `scripts/` directory in the user's project just to satisfy the command. The workspace (`rooster/`) belongs to the project; the CLI belongs to the skill. If the shell's working directory is the skill directory, the CLI will create the workspace in the wrong place.
 
+## First run after installation
+
+If the workspace does not exist yet, do a short onboarding before creating any project:
+
+1. Ask where `rooster/` should live.
+2. Ask the default language, format, profile, assets strategy, engine, autonomy, and voice.
+3. Run `init`, then save the answers with `config set`.
+4. Show a plain-language summary and stop.
+
+Do not start a video in the same turn unless the user explicitly asks. Read `references/onboarding.md` for the exact questions, defaults, and commands. Read `references/assets.md` before downloading or generating any asset.
+
 ## Fast path: the 6-step video workflow
 
 When the user wants the simplest route from raw footage to a finished video, follow the same six steps as the reference workflow, adapted to the RoosterEdit workspace:
@@ -55,6 +66,7 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Review with eyes.** Use the browser preview, screenshots, or rendered stills to judge composition, pacing, and captions. Code review alone is not enough.
 - **Respect provenance.** Record where every asset came from and its license. A beautiful video with an unlicensed track is a liability.
 - **Degrade gracefully.** The harness may not have subagents, a browser, Node, FFmpeg, or TTS. Offer the best path available and say what is missing.
+- **Protect the context.** Video work is token-heavy. Redirect engine logs to files, read only the tail, use `digest` instead of the full transcript, and inspect a few key frames instead of every frame. Read `references/token-discipline.md`.
 
 ## Step 0 — Find the workspace
 
@@ -309,6 +321,9 @@ If the user already has a different structure, adapt to it and record the mappin
 | Read this | When |
 |---|---|
 | `references/workflow.md` | Full pipeline, gates, and artifact list |
+| `references/onboarding.md` | First-run workspace setup and defaults |
+| `references/assets.md` | Asset strategies, sources, licensing, and adjustment |
+| `references/token-discipline.md` | Log suppression, transcript digest, and context budget |
 | `references/video-pipeline.md` | The 6-step workflow inspired by the reference video, adapted to our workspace |
 | `references/edit-plan.md` | `edit/plan.json` schema, cuts, elements, approval gate |
 | `references/intake.md` | Questions, defaults, and mode detection |
@@ -327,10 +342,14 @@ If the user already has a different structure, adapt to it and record the mappin
 # Workspace
 node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" doctor --json
+node "<skill>/scripts/rooster.mjs" config show
 
 # Project
 node "<skill>/scripts/rooster.mjs" new meu-video --category faceless-explainer --profile tech-neon --format 9:16
 node "<skill>/scripts/rooster.mjs" ingest meu-video --url "https://www.youtube.com/watch?v=..." --confirm-rights
+node "<skill>/scripts/rooster.mjs" transcribe meu-video --model small --language pt
+node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
+node "<skill>/scripts/rooster.mjs" plan meu-video --show
 node "<skill>/scripts/rooster.mjs" list
 node "<skill>/scripts/rooster.mjs" check meu-video
 

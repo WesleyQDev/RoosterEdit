@@ -15,6 +15,9 @@
 - [x] Schema e comando de validação do `edit/plan.json`.
 - [x] Fluxo de 6 etapas inspirado no vídeo, adaptado à estrutura do RoosterEdit.
 - [x] Prompt de bootstrap em pt-BR.
+- [x] Onboarding de workspace (`config set`) e estratégias de assets.
+- [x] CLI `profile` e `category` (list/show/fork).
+- [x] `digest` para transcrição compacta e disciplina de tokens.
 - [ ] Validar a skill com o skill-creator.
 
 ## Fase 2 — Pipeline de mídia

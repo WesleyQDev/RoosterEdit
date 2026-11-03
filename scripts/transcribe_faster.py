@@ -78,6 +78,7 @@ def main() -> int:
     parser.add_argument("--device", default="cpu", help="cpu or cuda")
     parser.add_argument("--compute-type", default="int8", help="int8, float16, float32")
     parser.add_argument("--beam-size", type=int, default=5, help="Beam size (default: 5)")
+    parser.add_argument("--verbose", action="store_true", help="Print every segment")
     args = parser.parse_args()
 
     try:
@@ -143,10 +144,11 @@ def main() -> int:
                     "end": round(float(word.end), 3),
                 }
             )
-        print(
-            f"[{segment.start:7.2f} -> {segment.end:7.2f}] {text}",
-            file=sys.stderr,
-        )
+        if args.verbose:
+            print(
+                f"[{segment.start:7.2f} -> {segment.end:7.2f}] {text}",
+                file=sys.stderr,
+            )
 
     text = " ".join(row["text"] for row in segment_rows).strip()
     payload = {
@@ -160,7 +162,11 @@ def main() -> int:
     }
 
     output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote {output} ({len(segment_rows)} segments, {len(word_rows)} words)", file=sys.stderr)
+    duration = segment_rows[-1]["end"] if segment_rows else 0
+    print(
+        f"Wrote {output} ({len(segment_rows)} segments, {len(word_rows)} words, {duration:.2f}s)",
+        file=sys.stderr,
+    )
     return 0
 
 
