@@ -15,6 +15,12 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | TTS | `features/tts.md` | Script to voiceover |
 | Multicam | `features/multicam.md` | Camera selection, J/L cuts, speed ramps |
 
+## Status
+
+- Wired into `build`: music/SFX ducking, zoom/transitions, charts.
+- CLI layer: captions, delivery, reframe, b-roll, color, TTS, multicam.
+- Still manual: caption burn-in, two-pass stabilization, TTS voice track assembly, and speed/J-L application in the final timeline.
+
 ## CLI commands
 
 ```bash
