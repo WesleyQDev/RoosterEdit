@@ -531,6 +531,7 @@ Checklist técnico e editorial em `references/qa.md`:
 - Salvar perfil/componente reutilizável.
 - Registrar decisões e feedback no `review.md`.
 - Promover perfil local para global se o usuário quiser.
+- Se um comando falhou, o render teve avisos ou o usuário teve dificuldade, perguntar uma vez se pode abrir uma issue no repositório. Rascunhar com `feedback <slug> --json`, mostrar o texto e só criar com `feedback <slug> --create --yes`. Nunca incluir mídia, transcrição, cookies, tokens ou chaves; o comando remove caminhos e segredos comuns, mas o usuário revisa o rascunho. Repositório: <https://github.com/WesleyQDev/RoosterEdit/issues>.
 
 ## 8. Engines
 

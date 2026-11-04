@@ -144,6 +144,26 @@ O que conferir:
 
 Se o FilmCraft não estiver instalado, use `filmcraft status --json` para ver o prompt de onboarding. Não instale nem grave config de MCP sem permissão.
 
+## 10. Feedback issue (smoke test manual)
+
+Teste sem criar issue de verdade:
+
+```bash
+node "<skill>/scripts/rooster.mjs" feedback demo --title "Teste de feedback" --notes "Descrição do usuário" --json
+```
+
+O que conferir:
+
+- o JSON traz `title`, `body`, `repo`, `gh`, `draftPath` e `issueUrl: null`;
+- o corpo tem Summary, What happened, Environment, Project, Validation e Privacy;
+- caminhos locais viram `~`, `<workspace>` e `<project>`; tokens e chaves comuns são removidos;
+- o rascunho é gravado em `work/notes/feedback-<timestamp>.md`;
+- `--no-diagnostics` remove ambiente, projeto, validação e logs;
+- `--create` sem `--yes` falha de propósito e não envia nada;
+- não rode `--create --yes` em teste automatizado; a criação real exige aprovação do usuário.
+
+Se `gh` não estiver instalado ou autenticado, o comando falha com instruções e mantém o rascunho local. O usuário pode abrir a issue manualmente em <https://github.com/WesleyQDev/RoosterEdit/issues>.
+
 ## O que funcionou
 
 - `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).

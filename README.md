@@ -43,6 +43,7 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 - Listar todos os textos em tela e avisar sobre cortes no meio de palavras.
 - Exportar EDL/FCPXML para finalizar no DaVinci Resolve ou Premiere.
 - Montar uma timeline editável no FilmCraft (opcional), com clipes de elemento separados.
++- Gerar um rascunho de issue de feedback com dados sensíveis removidos quando algo falha no caminho.
 - Baixar links autorizados com `yt-dlp`.
 - Usar perfis prontos ou criar os seus.
 - Revisar no preview e renderizar o arquivo final.

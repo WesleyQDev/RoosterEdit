@@ -53,6 +53,7 @@ import {
   ticksToSeconds,
 } from "./lib/filmcraft.mjs";
 import { elementSpecs, summarizeTimeline, timelineFromPlan, timelineMarkers } from "./features/timeline.mjs";
+import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./features/feedback.mjs";
 import { getBrollIndex } from "./lib/broll-index.mjs";
 import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
 import { generateVoiceover } from "./lib/tts-runner.mjs";
@@ -6950,6 +6951,7 @@ Commands:
   build <slug> [options]          Build a HyperFrames, Remotion, or FilmCraft timeline from the plan
   timeline <slug> [--open]        Show or open the FilmCraft project
   filmcraft status|setup|open     Detect FilmCraft, connect MCP, open a timeline
+  feedback [slug] [options]       Draft or create a redacted GitHub issue
   export <slug> [options]         Export cuts to EDL/FCPXML for DaVinci or Premiere
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
@@ -7101,6 +7103,24 @@ Style proof options:
 Preview options:
   --open                          Open preview/index.html after writing
 
+Feedback options:
+  --title <text>                  Summary / issue title
+  --notes <text>                  What happened, in the user's words
+  --command <text>                Command that failed
+  --error <text>                  Error message
+  --expected <text>               Expected behavior
+  --actual <text>                 Actual behavior
+  --steps <text>                  Reproduction steps
+  --log <path>                    Log to include (default: latest in work/logs)
+  --no-logs                       Omit the log tail
+  --no-diagnostics                Omit environment, project, validation and render data
+  --out <path>                    Write the Markdown draft to this path
+  --create                        Create the issue with gh (requires --yes)
+  --yes                           Confirm issue creation after user approval
+  --repo <owner/repo>             Target repository (default: WesleyQDev/RoosterEdit)
+  --label <list>                  Comma-separated labels
+  --json                          Machine-readable draft
+
 New project options:
   --channel <id>                  Channel (default: workspace default)
   --name <name>                   Display name
@@ -7161,6 +7181,8 @@ Examples:
   node scripts/rooster.mjs filmcraft status
   node scripts/rooster.mjs build en-tech/video-x --target filmcraft
   node scripts/rooster.mjs timeline en-tech/video-x --open
+  node scripts/rooster.mjs feedback en-tech/video-x --title "Build falhou no FilmCraft"
+  node scripts/rooster.mjs feedback en-tech/video-x --create --yes
 `);
 }
 
@@ -7319,6 +7341,251 @@ function filmcraftCommand(args) {
   fail(`Unknown filmcraft subcommand "${sub}". Use status, setup, mcp-config, or open.`);
 }
 
+// ---------------------------------------------------------------------------
+// feedback
+// ---------------------------------------------------------------------------
+
+function ghStatus() {
+  const version = run("gh", ["--version"], { timeout: 30000 });
+  if (!version.ok) {
+    return {
+      installed: false,
+      version: null,
+      authenticated: false,
+      error: version.error || version.stderr || null,
+    };
+  }
+  const auth = run("gh", ["auth", "status"], { timeout: 30000 });
+  return {
+    installed: true,
+    version: (version.stdout.split(/\r?\n/)[0] || "detected").trim(),
+    authenticated: auth.ok,
+    error: auth.ok ? null : auth.stderr || auth.stdout || "not authenticated",
+  };
+}
+
+function latestLogFile(project) {
+  const dir = path.join(project.dir, "work", "logs");
+  if (!exists(dir)) return null;
+  const files = fs
+    .readdirSync(dir)
+    .filter((file) => /\.log$/i.test(file))
+    .map((file) => {
+      const full = path.join(dir, file);
+      return { file: full, mtime: fs.statSync(full).mtimeMs };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+  return files[0]?.file || null;
+}
+
+function readLogTail(file, maxLines = 120, maxChars = 12000) {
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    const tail = text.split(/\r?\n/).slice(-maxLines).join("\n");
+    return tail.length > maxChars ? tail.slice(-maxChars) : tail;
+  } catch {
+    return null;
+  }
+}
+
+async function feedbackCommand(args) {
+  const slug = args._[0] ? String(args._[0]) : null;
+  const project = slug ? resolveProject(slug) : null;
+  if (project && !exists(path.join(project.dir, "project.json"))) {
+    fail(`Project not found: ${project.slug}`);
+  }
+
+  const capabilities = await doctor({});
+  const gh = ghStatus();
+  const environment = {
+    rooster: VERSION,
+    os: `${capabilities.os || process.platform} ${capabilities.arch || process.arch}`,
+    node: capabilities.node || process.version.replace(/^v/, ""),
+    ffmpeg: capabilities.ffmpeg || "not found",
+    hyperframes: capabilities.hyperframesCli || "not found",
+    remotion: capabilities.engines?.remotion || "not detected",
+    filmcraft: capabilities.filmcraft?.version
+      ? capabilities.filmcraft.version
+      : capabilities.filmcraft?.installed
+        ? "app only"
+        : "not found",
+    git: capabilities.git || "not found",
+    gh: gh.installed
+      ? `${gh.version}${gh.authenticated ? " (authenticated)" : " (not authenticated)"}`
+      : "not found",
+  };
+
+  let projectInfo = null;
+  const validation = { errors: [], warnings: [] };
+  let render = null;
+  let logs = null;
+
+  if (project) {
+    const config = project.config || {};
+    projectInfo = {
+      slug: project.slug,
+      engine: config.engine || "unknown",
+      timeline: config.timeline || "none",
+      format: config.format
+        ? `${config.format.width}x${config.format.height} @ ${config.format.fps}fps`
+        : "unknown",
+      duration: config.format?.duration ?? null,
+      status: config.status || "unknown",
+      profile: config.profile || "unknown",
+      channel: config.channel || "unknown",
+    };
+
+    const plan = readJson(path.join(project.dir, "edit", "plan.json"), null);
+    if (plan) {
+      const result = validatePlan(plan, project.dir);
+      validation.errors.push(...result.errors);
+      validation.warnings.push(...result.warnings);
+    }
+    const timeline = readJson(path.join(project.dir, "edit", "timeline.json"), null);
+    if (timeline) {
+      const result = validateTimeline(timeline, project.dir);
+      validation.errors.push(...result.errors);
+      validation.warnings.push(...result.warnings);
+    }
+
+    const renderMeta =
+      readJson(path.join(project.dir, "renders", "render-final.json"), null) ||
+      readJson(path.join(project.dir, "renders", "render-draft.json"), null);
+    if (renderMeta) {
+      render = {
+        quality: renderMeta.quality,
+        engine: renderMeta.engine,
+        issues: Array.isArray(renderMeta.validation?.issues)
+          ? renderMeta.validation.issues
+          : [],
+        duration: renderMeta.duration,
+        resolution: renderMeta.probe
+          ? `${renderMeta.probe.width}x${renderMeta.probe.height}`
+          : null,
+        createdAt: renderMeta.createdAt,
+      };
+    }
+
+    if (!args["no-logs"]) {
+      const logFile =
+        typeof args.log === "string" ? path.resolve(CWD, String(args.log)) : latestLogFile(project);
+      if (logFile && exists(logFile)) logs = readLogTail(logFile);
+    }
+  }
+
+  const summary =
+    typeof args.title === "string"
+      ? args.title
+      : typeof args.notes === "string"
+        ? args.notes.split(/\r?\n/)[0].slice(0, 120)
+        : undefined;
+
+  const issue = buildFeedbackIssue({
+    summary,
+    notes: typeof args.notes === "string" ? args.notes : typeof args.body === "string" ? args.body : undefined,
+    command: typeof args.command === "string" ? args.command : undefined,
+    error: typeof args.error === "string" ? args.error : undefined,
+    expected: typeof args.expected === "string" ? args.expected : undefined,
+    actual: typeof args.actual === "string" ? args.actual : undefined,
+    steps: typeof args.steps === "string" ? args.steps : undefined,
+    project: projectInfo,
+    environment,
+    validation,
+    render,
+    logs,
+    repo: typeof args.repo === "string" ? args.repo : FEEDBACK_REPO,
+    labels:
+      typeof args.label === "string"
+        ? args.label.split(",").map((label) => label.trim()).filter(Boolean)
+        : [],
+    includeDiagnostics: !args["no-diagnostics"],
+    home: os.homedir(),
+    workspace: WORKSPACE,
+    projectPath: project?.dir,
+    extraPaths: [SKILL_ROOT, ROOSTER_HOME].filter(Boolean),
+  });
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outPath =
+    typeof args.out === "string"
+      ? path.resolve(CWD, String(args.out))
+      : project
+        ? path.join(project.dir, "work", "notes", `feedback-${timestamp}.md`)
+        : null;
+
+  if (outPath) {
+    ensureDir(path.dirname(outPath));
+    writeText(outPath, `${issue.body}\n`);
+  }
+
+  let issueUrl = null;
+  let created = false;
+  if (args.create) {
+    if (!args.yes) {
+      fail(
+        `Review the draft first: ${outPath || "(not written)"}.\n` +
+          "Re-run with --create --yes after the user approves the issue."
+      );
+    }
+    if (!gh.installed) {
+      fail(
+        "GitHub CLI (gh) not found. Install it from https://cli.github.com/ and run `gh auth login`.\n" +
+          "The draft was not sent."
+      );
+    }
+    if (!gh.authenticated) {
+      fail("GitHub CLI is not authenticated. Run `gh auth login` and try again.\nThe draft was not sent.");
+    }
+    const temp = path.join(os.tmpdir(), `rooster-feedback-${process.pid}-${Date.now()}.md`);
+    fs.writeFileSync(temp, issue.body, "utf8");
+    try {
+      const ghArgs = ["issue", "create", "--repo", issue.repo, "--title", issue.title, "--body-file", temp];
+      for (const label of issue.labels) ghArgs.push("--label", label);
+      const result = run("gh", ghArgs, { timeout: 120000 });
+      if (!result.ok) {
+        fail(
+          `Could not create the issue:\n${result.stderr || result.stdout || result.error || "unknown error"}\n` +
+            `Draft: ${outPath || "(not written)"}`
+        );
+      }
+      const match = (result.stdout || "").match(/https:\/\/github\.com\/[^\s]+\/issues\/\d+/);
+      issueUrl = match ? match[0] : null;
+      created = true;
+    } finally {
+      try {
+        fs.rmSync(temp, { force: true });
+      } catch {
+        // A leftover temp file is harmless.
+      }
+    }
+  }
+
+  if (outPath && issueUrl) {
+    writeText(outPath, `${issue.body}\n\nIssue: ${issueUrl}\n`);
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify({ ...issue, gh, created, issueUrl, draftPath: outPath }, null, 2));
+    return;
+  }
+
+  heading("RoosterEdit feedback");
+  console.log(`  title:  ${issue.title}`);
+  console.log(`  repo:   ${FEEDBACK_ISSUES_URL}`);
+  if (outPath) console.log(`  draft:  ${outPath}`);
+  console.log(`  gh:     ${gh.installed ? gh.version : "not found"}${gh.authenticated ? " (authenticated)" : ""}`);
+  console.log("\n--- draft ---\n");
+  console.log(issue.body);
+  if (created) {
+    console.log(issueUrl ? `\nIssue created: ${issueUrl}` : "\nIssue created (gh returned no URL).");
+  } else {
+    console.log("\nReview the draft with the user. To create the issue:");
+    console.log(
+      `  node "<skill>/scripts/rooster.mjs" feedback ${project ? project.slug : ""} --create --yes`.replace(/\s+/g, " ")
+    );
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._.shift();
@@ -7415,6 +7682,9 @@ async function main() {
       return;
     case "filmcraft":
       filmcraftCommand(args);
+      return;
+    case "feedback":
+      await feedbackCommand(args);
       return;
     case "export":
       exportCommand(args);

@@ -142,6 +142,7 @@ work/
 ├── logs/       # saída bruta de build, render, FFmpeg, transcrição
 ├── scratch/    # rascunhos e arquivos intermediários
 └── notes/      # detalhe produzido pelos subagents para o próximo estágio
+    └── feedback-<timestamp>.md  # rascunho de issue revisado
 ```
 
 O principal lê os handoffs, vê o `plan.html` e 3–5 frames. A transcrição completa, o código gerado e os logs ficam fora do contexto principal. O protocolo está em [`references/subagents.md`](../references/subagents.md) e o contrato de retorno em [`agents/_handoff.md`](../agents/_handoff.md).

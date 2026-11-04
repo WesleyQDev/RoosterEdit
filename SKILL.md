@@ -388,6 +388,16 @@ If the user liked a look or a component, offer to save it:
 
 Reuse is the point of the workspace. A project that cannot inform the next one is a missed opportunity.
 
+## Step 11 - Feedback
+
+After delivery, if a command failed, a render had validation warnings, or the user hit friction, ask once:
+
+> "How did the process go? Did you hit any difficulty (build, render, captions, FilmCraft, audio)? May I open an issue in the RoosterEdit repository with the technical details for the developer? You review the draft before anything is sent."
+
+If the user says yes, draft the issue with `feedback <slug> --json`, show the title and body, and ask for explicit confirmation. Then create it with `feedback <slug> --create --yes`. If `gh` is missing or not authenticated, print the draft and the repository URL so the user can open it manually. Never create an issue without `--yes`.
+
+Never include media, frames, transcripts, cookies, tokens, or API keys. The command redacts home/workspace/project paths and common secret patterns, but the user must review the draft. Read `references/feedback.md`.
+
 ## Modes
 
 | Mode | Behavior |
@@ -454,6 +464,7 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/workflow.md` | Full pipeline, gates, and artifact list |
 | `references/subagents.md` | When and how to delegate, the handoff contract, and the stage playbook |
 | `references/onboarding.md` | First-run workspace setup and defaults |
+| `references/feedback.md` | Post-run issue drafts, privacy, and GitHub CLI |
 | `references/assets.md` | Asset strategies, sources, licensing, and adjustment |
 | `references/token-discipline.md` | Log suppression, transcript digest, and context budget |
 | `references/video-pipeline.md` | The 6-step workflow inspired by the reference video, adapted to our workspace |
@@ -504,6 +515,10 @@ node "<skill>/scripts/rooster.mjs" export en-tech/video-x --format both
 node "<skill>/scripts/rooster.mjs" render en-tech/video-x --draft
 node "<skill>/scripts/rooster.mjs" render en-tech/video-x --final
 node "<skill>/scripts/rooster.mjs" cache gc --max-size 20GB
+
+# Feedback (only after the user approves the draft)
+node "<skill>/scripts/rooster.mjs" feedback en-tech/video-x --title "Build failed in FilmCraft" --json
+node "<skill>/scripts/rooster.mjs" feedback en-tech/video-x --create --yes
 ```
 
 If a command is not implemented yet, do the equivalent manually and tell the user what you did. Do not pretend the CLI succeeded.
