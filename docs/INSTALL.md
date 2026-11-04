@@ -82,14 +82,13 @@ Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir)
 
 ## Primeiro uso
 
-Depois de instalar, o agente deve fechar com um resumo curto e perguntar se você quer configurar o workspace agora. Se sim, ele faz um setup rápido:
-- pergunta o que o canal vai produzir;
-- infere idioma, formato, perfil, origem, voz e os demais padrões;
-- mostra um resumo curto para você confirmar ou ajustar.
+Depois de instalar, o agente deve fechar com um resumo curto e perguntar se você quer criar o primeiro canal agora. A pergunta é simples: ele explica que o canal é como a pasta daquele projeto e pede o nome e o que ele vai produzir. Se você confirmar, ele infere o resto e mostra um resumo curto para ajustar.
 
-Duração não é padrão do canal: cada vídeo define a sua quando o projeto é criado.
+Depois de criar o canal, ele pergunta paleta, tipografia e motion/áudio e roda `channel design <id>` para gravar a identidade do canal.
 
-O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir. A pergunta inicial é “Vamos criar a pasta do seu primeiro canal?” — um padrão de produção local, não um canal no YouTube.
+Duração não é padrão do canal nem do projeto: a duração é o resultado da edição. A flag `--duration` só entra quando você declara um alvo explícito.
+
+O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir. A pergunta inicial é “Qual o nome do canal e o que ele vai produzir?” — um padrão de produção local, não um canal no YouTube.
 
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs init
@@ -97,6 +96,10 @@ node .opencode/skills/rooster-edit/scripts/rooster.mjs channel new meu-canal \
   --language pt-BR \
   --format 16:9 \
   --profile minimal
+node .opencode/skills/rooster-edit/scripts/rooster.mjs channel design meu-canal \
+  --from minimal \
+  --accent "#22d3ee" \
+  --motion calm
 node .opencode/skills/rooster-edit/scripts/rooster.mjs channel list
 ```
 

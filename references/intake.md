@@ -44,7 +44,7 @@ Then confirm:
 - What is the subject: character, product, abstract scene, environment?
 - What style: low-poly, clay, realistic, toy, sci-fi?
 - Is there dialogue or narration, or only music and captions?
-- Does it need a specific aspect ratio and duration?
+- Does it need a specific aspect ratio or a declared duration?
 - Is there a reference video or image?
 
 ### The user sends a link
@@ -61,7 +61,7 @@ Read `references/link-ingest.md` before downloading.
 Ask at most three questions:
 
 1. What is the video about, and who is it for?
-2. Where will it be published, and how long should it be?
+2. Where will it be published? If you have a declared length, tell me; otherwise the edit defines it.
 3. Do you have footage/assets, or should everything be generated?
 
 Then propose a default plan and ask for correction.
@@ -83,7 +83,8 @@ Then propose a default plan and ask for correction.
 
 Do not infer format, voice, or engine from a content label. Read the project's channel and use its defaults:
 
-- format and duration;
+- format;
+- declared duration, when the user set one;
 - profile;
 - source and voice;
 - engine and autonomy;

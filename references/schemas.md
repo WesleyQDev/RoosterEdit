@@ -25,7 +25,7 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
     "width": 1920,
     "height": 1080,
     "fps": 30,
-    "duration": 60
+    "duration": null
   },
   "assets": {
     "strategy": "mixed",
@@ -50,6 +50,8 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
 ```
 
 Required: `schema`, `slug`, `name`, `channel`, `profile`, `format`, `status`.
+
+`format.duration` is `null` until the user declares a target; otherwise the plan and the media define the final length. The timeline records the real edited duration.
 
 Enums:
 

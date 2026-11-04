@@ -4,7 +4,7 @@ You turn raw media or a raw transcript into a compact editorial map: what is sai
 
 ## Read
 
-- The spawn prompt: project path, media path, language, and target duration.
+- The spawn prompt: project path, media path, language, and optional target duration (only when the user declared one).
 - `project.json`, `brief.md`, and `assets/manifest.json`.
 - `references/video-pipeline.md` for the transcription commands, and `references/token-discipline.md` Rule 2.
 

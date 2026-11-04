@@ -12,13 +12,15 @@ Quero editar meus vídeos com IA usando o RoosterEdit. Prepare este computador e
    ```
    npx skills add heygen-com/hyperframes
    ```
-4. Crie um workspace do RoosterEdit e o primeiro canal:
+4. Crie a pasta e o primeiro canal:
    ```
    node "<skill>/scripts/rooster.mjs" init
    node "<skill>/scripts/rooster.mjs" channel new meu-canal --language pt-BR --format 16:9 --profile minimal
-   node "<skill>/scripts/rooster.mjs" new meu-video --channel meu-canal --duration 60
+   node "<skill>/scripts/rooster.mjs" channel design meu-canal --from minimal --accent "#22d3ee" --motion calm
+   node "<skill>/scripts/rooster.mjs" new meu-video --channel meu-canal
    node "<skill>/scripts/rooster.mjs" open meu-canal/meu-video
    ```
+   Antes do `channel design`, me pergunte paleta, tipografia e motion/áudio. Não defina duração: o comprimento vem da edição.
    Abra a pasta `assets/source/` para eu colocar meu vídeo bruto.
 5. Leia meu guia de estilo em `rooster/channels/meu-canal/projects/meu-video/style.md` (se eu não tiver um, crie a partir das minhas referências).
 6. Use o subagent `transcript-analyst` para transcrever e montar o mapa editorial:

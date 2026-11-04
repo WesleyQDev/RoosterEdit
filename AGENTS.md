@@ -141,7 +141,8 @@ node scripts/rooster.mjs doctor --json
 $env:ROOSTER_WORKSPACE = "$env:TEMP\rooster-test"
 node scripts/rooster.mjs init
 node scripts/rooster.mjs channel new demo --language pt-BR --format 16:9 --profile minimal
-node scripts/rooster.mjs new teste --channel demo --duration 10
+node scripts/rooster.mjs channel design demo --from minimal --accent "#22d3ee"
+node scripts/rooster.mjs new teste --channel demo
 ```
 
 - Não existe suíte de testes formal. `docs/TESTING.md` é um registro de testes manuais, não uma suíte automatizada.

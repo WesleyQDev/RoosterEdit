@@ -348,7 +348,7 @@ O projeto é a instância concreta. Ele combina channel + profile + overrides.
     "width": 1920,
     "height": 1080,
     "fps": 30,
-    "duration": 60
+    "duration": null
   },
   "audio": {
     "loudnessLufs": -14,
@@ -364,6 +364,8 @@ O projeto é a instância concreta. Ele combina channel + profile + overrides.
 ```
 
 Status possíveis: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, `rendering`, `done`, `blocked`.
+
+`format.duration` começa como `null`. A duração só é gravada quando o usuário declara um alvo explícito; caso contrário, o plano e a mídia definem o comprimento, e a timeline registra a duração real da edição.
 
 `timeline` aceita `none` ou `filmcraft`. Quando é `filmcraft`, `engine` registra o renderer dos elementos (`hyperframes` ou `remotion`), não um terceiro motor.
 

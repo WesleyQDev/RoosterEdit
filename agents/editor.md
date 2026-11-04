@@ -4,7 +4,7 @@ You turn the approved story into an edit decision list: cuts, keeps, visual elem
 
 ## Read
 
-- The spawn prompt: project path, project slug, target duration, and the language.
+- The spawn prompt: project path, project slug, optional target duration (only when the user declared one), and the language.
 - `brief.md`, `script.md`, `style.md`, and `edit/analysis.json`.
 - `assets/manifest.json` for real file paths, durations, and licenses.
 - `references/edit-plan.md` for the schema and heuristics, and `references/timeline.md` for the timeline contract.
@@ -24,7 +24,7 @@ Do not read the raw transcript, engine code, or render logs. The analysis alread
    - If the line is conceptual, prefer a `diagram`, `counter`, `emphasis`, or `custom` motion graphic over a b-roll cutaway. B-roll is for real evidence, not for filling the screen.
    - For captions and graphics that are not an obvious quote, add `covers` too.
 4. Make the music decision explicit. Use a licensed track from the library or a user-provided file; set `gainDb` around -18 under voice. If there is no music, record why in `notes`.
-5. Check duration math: cuts, keeps, and elements must add up to the target within a sensible tolerance.
+5. Check duration math: keeps and elements must add up to the edited duration the story produces. When the user declared a target, compare against it within a sensible tolerance; otherwise report the resulting duration instead of forcing a number.
 6. Check every path in the plan against `assets/manifest.json`. A missing asset is a blocker, not a placeholder.
 7. Write `edit/plan.json`, then run `plan <slug>` from the directory that contains `rooster/` to write `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`. Validate with `plan <slug> --check` and read `qa/plan-review.md`. The HTML includes transcript context, final timecodes, and the text-review table; review it before asking for approval.
 8. Run `textcheck <slug>` and fix any placeholder, duplicate, truncated, or ungrounded on-screen text before returning.
@@ -52,4 +52,4 @@ Do not read the raw transcript, engine code, or render logs. The analysis alread
 
 ## Return
 
-Follow the handoff contract in `_handoff.md` (same directory as this role). In `summary`, give duration against target, cut count, element count, music decision, the hook, and the top risks. Point to `edit/plan.html` for review.
+Follow the handoff contract in `_handoff.md` (same directory as this role). In `summary`, give the edited duration (against the target when one was declared), cut count, element count, music decision, the hook, and the top risks. Point to `edit/plan.html` for review.

@@ -65,7 +65,7 @@ Use a compact step marker in status updates and at every approval gate. Keep one
 3. Assets and transcript
 4. Edit plan
 5. Storyboard and timeline
-6. Engine build
+6. Engine choice and build
 7. Preview and QA
 8. Render and delivery
 
@@ -73,10 +73,11 @@ Examples:
 
 - `Etapa 3/8 — Transcrição concluída. 42 trechos, 10:12 de duração.`
 - `Etapa 4/8 — Plano pronto em edit/plan.html. Posso seguir com a timeline?`
+- `Etapa 6/8 — Plano aprovado. Quer HyperFrames, Remotion (instalar) ou FilmCraft (conectar o MCP)?`
 - `Etapa 6/8 — Build concluído. Posso abrir o preview e rodar o QA?`
 - `Etapa 8/8 — Preview aprovado. Posso renderizar o final?`
 
-Skip steps that do not apply and say why. Do not print the full checklist on every message; show the current step, what changed, and the next gate. Do not combine timeline and final render in one approval: preview and QA sit between them.
+Skip steps that do not apply and say why. Do not print the full checklist on every message; show the current step, what changed, and the next gate. Do not combine timeline and final render in one approval: preview and QA sit between them. Step 6 starts with the engine/timeline question; do not build before the user answers or explicitly delegates the choice.
 
 ## Subagent-first execution
 
@@ -119,16 +120,19 @@ Approval gates never move to a subagent. The subagent proposes; the user and the
 
 ## First run after installation
 
-If the workspace does not exist yet, do a short onboarding before creating any project.
+If the workspace does not exist yet, do a short onboarding before creating any project. The workspace is created as part of the channel step; do not ask where it lives.
 
-**First ask:** "Quer configurar o workspace agora?" (or "Shall we set up the workspace now?"). Explain in one line that this creates `rooster/` and the first channel. If the answer is no, stop and create nothing.
+**First ask (one message):** "Quer criar o primeiro canal agora? Pensa nele como a pasta daquele projeto: dentro dela ficam os vídeos, o estilo e os arquivos da marca ou cliente. Se sim, me diga o nome do canal e o que ele vai produzir?"
+
+If the answer is no, stop and create nothing. If they answer only one part, ask for the missing name or content.
 
 If the answer is yes:
 
-1. Use `./rooster` by default. Do not ask "where does the workspace live" unless the user wants a custom path.
-2. Ask one question: "O que esse canal vai produzir? Uma frase basta." Use the answer and the conversation to infer the channel name, language, format, source, profile, assets, engine, autonomy, and voice. Do not ask all twelve channel fields, and do not ask for a duration.
+1. Use the name the user gave (slugified) as the channel id. If they described the content but gave no name, propose a short kebab-case name and confirm it.
+2. Use the content sentence verbatim and infer language, format, source, assets, engine, autonomy, and voice. Keep the profile at `minimal` for now; the identity step defines it. Do not infer a visual style from the topic. Do not ask for a duration.
 3. Show the inferred defaults in one compact line and ask "Está bom ou quer ajustar algo?" Ask a follow-up only when a field is genuinely ambiguous, such as the platform or whether the source is real footage.
-4. On confirmation, run `init`, then `channel new <id> ...` with the answers. Show a short summary and stop.
+4. On confirmation, run `init`, then `channel new <id> ...` with the answers.
+5. Create the channel identity: ask three questions (palette, typography, motion/audio) and run `channel design <id> ...`. This writes `channels/<id>/profiles/<id>/profile.json` + `STYLE.md` and sets `channel.profile`. Show a short summary and stop.
 
 During first-run, run `filmcraft status --json` once. If `prompt.kind` is `connect-mcp` or `install`, ask the question in `prompt` before creating the first project:
 
@@ -137,9 +141,9 @@ During first-run, run `filmcraft status --json` once. If `prompt.kind` is `conne
 
 If the user declines, continue with HyperFrames/Remotion and do not ask again for that project. If the MCP is already registered, mention that a restart may still be needed if the tools are not visible. Never install FilmCraft or write MCP config without explicit permission. Read `references/onboarding.md` for the CLI-missing and already-registered cases.
 
-Duration is not a channel default: it belongs to each project and is chosen when the video is created. The full twelve-field setup is an opt-in advanced path. If the user asks to customize everything, ask in groups of at most three, never all at once.
+Duration is an outcome of the edit, not a channel default and not a project default. Trimming silence and cuts change the length. `--duration` exists only for a target the user explicitly declares; otherwise the plan and the media define the final length. The full twelve-field setup is an opt-in advanced path. If the user asks to customize everything, ask in groups of at most three, never all at once.
 
-A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults. Duration is per project, not a channel default.
+A channel is the stable group for a brand, audience, or operation (for example "Studio A" or "Client B"). It owns the creative defaults: language, format, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults. Duration comes from the edit; a channel or project only carries a target when the user declares one.
 
 Do not start a video in the same turn unless the user explicitly asks. Read `references/onboarding.md` for the exact questions, defaults, and commands. Read `references/assets.md` before downloading or generating any asset.
 
@@ -198,6 +202,8 @@ node "<skill>/scripts/rooster.mjs" doctor --json
 
 This reports Node, npm, Python, FFmpeg, FFprobe, Git, GPU, detected engines, TTS providers, `yt-dlp`, Whisper, the HyperFrames CLI, and the optional FilmCraft CLI and MCP status. The harness itself knows whether subagents and a browser are available; combine that knowledge with the CLI output. For costs, read `docs/COSTS.md`; never call a paid provider without explicit permission.
 
+If Remotion is not installed or the FilmCraft MCP is not configured, say so in one line and defer the install/connect question to the build gate (Step 6). Do not install packages or write MCP config during discovery.
+
 Read `references/harness.md` when something is missing. The short version:
 
 - No Node: use FFmpeg directly for cuts and audio, but you cannot run HyperFrames or Remotion.
@@ -221,7 +227,7 @@ Ask only the questions that change the output. Read `references/intake.md` for t
 | Length | Short (<60s), mid (1–5 min), long (>5 min) |
 | Engine | `auto`, `hyperframes`, `remotion`, `ffmpeg` |
 
-Do not interrogate the user with all of them at once. Infer sensible defaults from the brief and confirm the ones that are expensive to change later (aspect ratio, duration, voice, engine).
+Do not interrogate the user with all of them at once. Infer sensible defaults from the brief and confirm the ones that are expensive to change later (aspect ratio, profile, voice, engine). Do not ask for a duration unless the user declares a target.
 
 ## Step 3 - Resolve the channel and profile
 
@@ -243,7 +249,7 @@ Read `references/profiles.md` for the schemas and resolution order. The short ve
 
 The project can override anything it inherits from the channel. There is no separate category concept: the channel's `content` field describes what it produces, and the project's brief and plan define the structure of each video.
 
-If the user has no channel, create one first. If they have no profile, offer three paths: use a built-in, create one from their brand assets, or derive one from a reference. If they have a profile from another project, reuse it instead of recreating it.
+If the user has no channel, create one first. If they have no profile, offer three paths: use a built-in, create one from their brand assets, or derive one from a reference. A channel should get its own profile with `channel design <id>`, which writes it under `channels/<id>/profiles/<id>/` and points `channel.profile` at it. If they have a profile from another project, reuse it instead of recreating it.
 
 After the profile resolves, run `styleproof <slug>` and show the three frames. Do not plan or build until the look is approved.
 
@@ -286,6 +292,20 @@ Never delete or overwrite the user's originals. Prefer copying or linking into t
 For footage-driven projects, run transcription and analysis through `transcript-analyst` (HyperFrames/Parakeet, whisper.cpp, or the Whisper CLI). It writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`, and returns duration, topics, beats, and flags. Then have `editor` write `edit/plan.json` from the analysis, `style.md`, and the brief; get approval before opening the engine. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
 
 ## Step 6 — Choose and drive the engine
+
+### Engine and timeline gate (ask before building)
+
+Before creating any engine project, ask once per project:
+
+> "Como você quer montar este vídeo? HyperFrames é o padrão e já está pronto. Remotion é melhor para React/3D, mas não está instalado. FilmCraft abre a timeline para edição manual, mas o MCP ainda não está configurado. Qual prefere?"
+
+Adapt the sentence to what `doctor --json` and `filmcraft status --json` reported. Only mention a limitation that is actually true.
+
+- If the channel or project already has an explicit engine chosen by the user, skip the question and confirm the choice in one line.
+- If the user says "auto", "use the default", or "you decide", do not ask; choose from the matrix below and state the choice.
+- **Remotion:** if selected and missing, ask permission before `npm install` inside `engine/remotion`. Never install silently. If the user declines, fall back to HyperFrames and say so.
+- **FilmCraft:** if selected, run `filmcraft status --json` and ask the matching question before writing MCP config (`connect-mcp`, `install`, or `install-cli`). The user must restart the agent before the MCP tools appear. FilmCraft is a timeline target, not an engine: still pick HyperFrames or Remotion for the element clips.
+- Record the choice in `project.json` (`engine`, `timeline`) and in `review.md`.
 
 Read `references/engines.md` for the full decision matrix. The default is `auto`. HyperFrames and Remotion are the two creative engines; FFmpeg is a media utility for probing, cutting, captions, and audio, not a third creative engine.
 
@@ -495,17 +515,20 @@ node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" doctor --json
 
 # Channel
-node "<skill>/scripts/rooster.mjs" channel new en-tech --language en --format 16:9 --profile tech-neon --voice tts
+node "<skill>/scripts/rooster.mjs" channel new studio-a --language pt-BR --format 16:9 --profile minimal --voice tts
+node "<skill>/scripts/rooster.mjs" channel design studio-a --from minimal --accent "#22d3ee" --motion calm
 
 # Project
-node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
-node "<skill>/scripts/rooster.mjs" open en-tech/video-x
+node "<skill>/scripts/rooster.mjs" new video-x --channel studio-a
+node "<skill>/scripts/rooster.mjs" new video-x --channel studio-a --duration 30  # only with a declared target
+node "<skill>/scripts/rooster.mjs" open studio-a/video-x
 node "<skill>/scripts/rooster.mjs" paths en-tech/video-x
 node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.youtube.com/watch?v=..." --confirm-rights
 node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --quality fast --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" styleproof en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x
+node "<skill>/scripts/rooster.mjs" motions en-tech/video-x
 node "<skill>/scripts/rooster.mjs" textcheck en-tech/video-x
 # Advanced layers: see references/professional-elements.md
 node "<skill>/scripts/rooster.mjs" check en-tech/video-x

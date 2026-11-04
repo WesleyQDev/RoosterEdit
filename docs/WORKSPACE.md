@@ -75,36 +75,58 @@ Um canal é o padrão de produção estável de uma marca/audiência/operação.
 - biblioteca própria.
 
 ```bash
-node scripts/rooster.mjs channel new en-tech \
-  --name "EN Tech" \
-  --content "English tech explainers" \
-  --language en \
+node scripts/rooster.mjs channel new studio-a \
+  --name "Studio A" \
+  --content "<o que o canal produz>" \
+  --language pt-BR \
   --format 16:9 \
-  --profile tech-neon \
+  --profile minimal \
   --voice tts \
   --assets mixed
 ```
 
+O canal nasce com um perfil base. Depois de criá-lo, defina a identidade visual e sonora dele:
+
+```bash
+node scripts/rooster.mjs channel design studio-a \
+  --from minimal \
+  --bg "#0b0f19" \
+  --fg "#f8fafc" \
+  --accent "#22d3ee" \
+  --display Inter \
+  --body Inter \
+  --motion calm \
+  --music ambient \
+  --sfx subtle \
+  --style "clean editorial, generous negative space" \
+  --negative "clutter, heavy gradients"
+```
+
+O comando grava `channels/studio-a/profiles/studio-a/profile.json` e `STYLE.md`, e aponta `channel.profile` para o novo perfil. Use `--force` para refazer depois.
+
 ```bash
 node scripts/rooster.mjs channel list
-node scripts/rooster.mjs channel show en-tech
-node scripts/rooster.mjs channel set en-tech format 9:16
-node scripts/rooster.mjs channel use en-tech
+node scripts/rooster.mjs channel show studio-a
+node scripts/rooster.mjs channel set studio-a format 9:16
+node scripts/rooster.mjs channel use studio-a
+node scripts/rooster.mjs profile show studio-a --channel studio-a
 ```
 
 ## Criar um projeto
 
-A duração é definida por vídeo, não pelo canal:
+A duração é resultado da edição, não um valor padrão do canal ou do projeto. Só passe `--duration` quando você tiver declarado um alvo explícito:
 
 ```bash
-node scripts/rooster.mjs new video-x --channel en-tech --duration 60
-node scripts/rooster.mjs open en-tech/video-x
+node scripts/rooster.mjs new video-x --channel studio-a
+# opcional, apenas com alvo declarado
+node scripts/rooster.mjs new video-x --channel studio-a --duration 30
+node scripts/rooster.mjs open studio-a/video-x
 ```
 
 O `open` mostra e abre `assets/source/` para você colocar os arquivos. O projeto herda o canal e pode sobrescrever:
 
 ```bash
-node scripts/rooster.mjs new video-special --channel en-tech \
+node scripts/rooster.mjs new video-special --channel studio-a \
   --format 9:16 \
   --profile brutalist \
   --voice user
@@ -254,7 +276,7 @@ Cada asset deve ter licença e proveniência. Não commitar mídia pesada no rep
 ## Links de vídeo
 
 ```bash
-node scripts/rooster.mjs ingest en-tech/video-x \
+node scripts/rooster.mjs ingest studio-a/video-x \
   --url "https://www.youtube.com/watch?v=..." \
   --confirm-rights
 ```

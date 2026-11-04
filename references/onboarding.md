@@ -8,51 +8,68 @@ Use this after installation and before the first project. The goal is to configu
 Workspace → Channel → Project
 ```
 
-- **Workspace** = the `rooster/` folder. Infrastructure and shared library.
+- **Workspace** = the `rooster/` folder. Infrastructure and shared library. It is created implicitly; do not ask where it lives.
 - **Channel** = stable production standard for a brand, audience, or operation. Defaults for content, language, format, profile, assets, engine, autonomy, and voice.
 - **Profile** = visual identity. Shared or channel-specific.
 - **Project** = one video inside a channel. Inherits the channel and can override anything.
 
-A channel example: "EN Tech" (English, 16:9, tech-neon profile, TTS) and "PT Criador" (pt-BR, 1:1, minimal profile, user voice).
+A channel example: "Studio A" (pt-BR, 16:9, its own profile, TTS) and "Client B" (en, 1:1, minimal profile, user voice).
 
 There is no separate category concept. The channel's `content` field records what it produces, and each project defines its own structure in `brief.md`, `script.md`, and `edit/plan.json`.
 
+The folder layout makes the channel concrete:
+
+```text
+rooster/                      workspace (everything)
+└── channels/
+    └── <channel>/            a brand, client, or project
+        ├── channel.json
+        ├── projects/
+        │   └── <video>/      one video
+        ├── profiles/
+        │   └── <channel>/    visual and audio identity
+        ├── assets/
+        └── library/
+```
+
+A channel is not a YouTube channel. It is the folder that groups the videos of a brand, a client, a show, or an operation.
+
 ## Handoff after installation
 
-Installation is not onboarding. After cloning and running `doctor`, report the result in at most about 8 lines and ask:
+Installation is not onboarding. After cloning and running `doctor`, report the result in at most about 8 lines and ask in one message:
 
-> "Quer configurar o workspace agora? Eu crio a pasta `rooster/` e o primeiro canal com você."
+> "Quer criar o primeiro canal agora? Pensa nele como a pasta daquele projeto: dentro dela ficam os vídeos, o estilo e os arquivos da marca ou cliente. Se sim, me diga o nome do canal e o que ele vai produzir?"
+
+Do not ask "Quer configurar o workspace agora?". The workspace is an implementation detail; the channel is the decision, and the folder explanation above is part of the question.
 
 If the answer is no, stop. Do not create the workspace, a channel, or a project. If the answer is yes, follow the first-run batch below and keep the final summary short.
 
 ## Rule
 
-If the workspace was just created, **do not create a video project yet**. Create the first channel (or confirm the `default` one), show a summary, and stop.
+If the workspace was just created, **do not create a video project yet**. Create the first channel, create its identity, show a summary, and stop.
 
-If the user says "just start" or "use the defaults", keep the `default` channel and tell them what it uses.
+If the user says "just start" or "use the defaults", create the `default` channel, tell them what it uses, and still offer the identity step.
 
-## Do not ask where the workspace lives
+## Name and content
 
-The workspace is `./rooster` in the current project. Only ask for a custom path if the user explicitly wants one. "Where does `rooster/` go?" is not an onboarding question.
+The same message already asks for the two things the channel needs: **name** and **content**. Do not ask them again in a second turn. If the user gave only the content, propose a short kebab-case name and confirm it; if they gave only a name, ask what it produces.
 
-## Quick setup (default)
+> "Qual o nome do canal e o que ele vai produzir?"
 
-After the user says yes, ask one question:
-
-> "O que esse canal vai produzir? Uma frase basta — por exemplo: 'shorts de tecnologia em português' ou 'entrevistas de 90s para o YouTube'."
+Do not seed the topic with examples such as "shorts de tecnologia", "entrevistas" or "promos de produto". The user owns the topic; the agent only infers production defaults from what they wrote.
 
 Use the answer and the conversation to infer the rest. A channel here is a production standard, not a YouTube channel.
 
-Audio identity includes both music and SFX. If the style is tech, ads, motion graphics, or high-energy, plan SFX for transitions, UI, impacts, and emphasis. If it is documentary or minimal, use them sparingly. If you cannot tell, ask before planning the audio layer.
+Audio identity includes both music and SFX. If the style is ads, motion graphics, or high-energy, plan SFX for transitions, UI, impacts, and emphasis. If it is documentary or minimal, use them sparingly. If you cannot tell, ask in the identity step.
 
 | Field | Inference |
 |---|---|
-| name | kebab-case from the content |
-| content | the user's sentence |
+| name | the name the user gave, slugified. Propose one only if they gave none |
+| content | the user's sentence, verbatim |
 | language | the language of the conversation |
 | format | 9:16 for Shorts/Reels/TikTok, 1:1 for feed/square, 16:9 otherwise |
 | source | live for footage/interview/podcast, generated for faceless/explainer, hybrid if mixed |
-| profile | tech-neon for tech/AI, 3d-cartoon for 3D/cartoon, minimal otherwise |
+| profile | keep `minimal` for now; the identity step defines the real one. Do not infer a visual style from the topic |
 | assets | mixed; user for personal footage; generated for faceless |
 | engine | auto |
 | autonomy | guided |
@@ -61,17 +78,48 @@ Audio identity includes both music and SFX. If the style is tech, ads, motion gr
 
 Show one line and ask for confirmation:
 
-> "Vou criar `pt-tech` com: pt-BR · 9:16 · tech-neon · TTS · assets mixed · engine auto · guided. Está bom ou quer ajustar algo?"
+> "Vou criar `studio-a`: português, 16:9, visual minimal e voz TTS. Está bom ou quer ajustar algo?"
 
 If the user confirms, run `init` and `channel new`. If they correct one item, apply it and confirm again. Do not ask the twelve fields.
 
 Start with `guided` for the first one to three videos. When the style is stable and the user trusts the preview, offer `channel set <id> autonomy auto`; do not switch silently.
 
+## Identity step (after `channel new`)
+
+A channel is not ready until it has an identity. After creating the channel, ask three questions in one block — not twelve:
+
+1. **Palette:** "Tem cores de marca? Se não, descreva o clima visual."
+2. **Typography:** "Tem fonte ou estilo de tipografia em mente?"
+3. **Motion and audio:** "Como devem ser o motion, a música e os SFX?"
+
+Then create a channel-scoped profile:
+
+```bash
+node "<skill>/scripts/rooster.mjs" channel design <id> \
+  --from minimal \
+  --bg "#0b0f19" \
+  --fg "#f8fafc" \
+  --accent "#22d3ee" \
+  --display Inter \
+  --body Inter \
+  --motion calm \
+  --music ambient \
+  --sfx subtle \
+  --style "clean editorial, generous negative space" \
+  --negative "clutter, heavy gradients"
+```
+
+This writes `channels/<id>/profiles/<id>/profile.json` and `STYLE.md`, and sets `channel.profile = <id>`. Show the path and one line with the palette and fonts.
+
+If the user has no preference, keep the base profile and say it can be changed later with `channel design <id> --force`. Do not invent brand colors.
+
 Before the first plan, run `styleproof <slug>` and approve the three frames. The look is cheaper to change there than after the build.
 
-## Duration is per project
+## Duration is an outcome, not an input
 
-A channel does not define how many seconds a video has. Duration belongs to each project and can change from video to video. When creating a project, ask for the target duration or infer it from the brief, then pass `--duration`.
+A channel does not define how many seconds a video has, and a project does not get a default duration. Trimming silence, removing filler, and cutting dead air change the length; the final duration is whatever the edit produces.
+
+`--duration` exists only for a target the user **explicitly declares**, for example "quero exatamente 30 segundos" or "preciso de 15s para o anúncio". When creating a project, do not ask for a target by default. If the user volunteers one, pass it; otherwise omit the flag and let the plan and the media define the length.
 
 ## Advanced setup (only if requested)
 
@@ -82,18 +130,18 @@ Only when the user asks for full control, or when the content is too ambiguous t
 3. Look and sound: profile, assets, voice.
 4. Production: engine, autonomy, brand assets.
 
-Never send all fields at once. Duration is asked when creating the project, not here.
+Never send all fields at once. Duration is not part of this form.
 
 ## Save it
 
 ```bash
 node "<skill>/scripts/rooster.mjs" init
-node "<skill>/scripts/rooster.mjs" channel new en-tech \
-  --name "EN Tech" \
-  --content "English tech explainers" \
-  --language en \
+node "<skill>/scripts/rooster.mjs" channel new studio-a \
+  --name "Studio A" \
+  --content "<the user's sentence>" \
+  --language pt-BR \
   --format 16:9 \
-  --profile tech-neon \
+  --profile minimal \
   --source generated \
   --voice tts \
   --engine auto \
@@ -101,18 +149,26 @@ node "<skill>/scripts/rooster.mjs" channel new en-tech \
   --assets mixed
 ```
 
+Then create the identity:
+
+```bash
+node "<skill>/scripts/rooster.mjs" channel design studio-a --from minimal --accent "#22d3ee"
+```
+
 Show it:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" channel show en-tech
+node "<skill>/scripts/rooster.mjs" channel show studio-a
+node "<skill>/scripts/rooster.mjs" profile show studio-a --channel studio-a
 ```
 
 Change a default later:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" channel set en-tech format 9:16
-node "<skill>/scripts/rooster.mjs" channel set en-tech assets.strategy user
-node "<skill>/scripts/rooster.mjs" channel use en-tech
+node "<skill>/scripts/rooster.mjs" channel set studio-a format 9:16
+node "<skill>/scripts/rooster.mjs" channel set studio-a assets.strategy user
+node "<skill>/scripts/rooster.mjs" channel design studio-a --force --accent "#e4572e"
+node "<skill>/scripts/rooster.mjs" channel use studio-a
 ```
 
 ## Optional: FilmCraft
@@ -143,13 +199,16 @@ Rules:
 - If the MCP is already registered but the tools are not visible, tell them to restart; do not rewrite the config.
 - FilmCraft is optional. The build target stays `--target filmcraft`; HyperFrames/Remotion remain the default.
 
+The same FilmCraft check runs again at the build gate (Step 6) when the user chooses FilmCraft or changes their mind. Never write MCP config without explicit permission, and remind the user that the agent must be restarted before the MCP tools appear.
+
 ## Creating a project
 
-Ask:
+Ask only:
 
 1. Which channel?
-2. What is the target duration for this video?
-3. Follow the channel defaults, or is this a differentiated video?
+2. Follow the channel defaults, or is this a differentiated video?
+
+Do not ask for a duration. If the user declares a target, add `--duration`. If the video comes from existing footage, the source length and the cuts define the final length.
 
 If differentiated, show only the overrides:
 
@@ -161,20 +220,20 @@ If differentiated, show only the overrides:
 - assets strategy;
 - language.
 
-Duration is not an override: every video has its own target duration.
-
 Create:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
+node "<skill>/scripts/rooster.mjs" new video-x --channel studio-a
+# only when the user declared a target
+node "<skill>/scripts/rooster.mjs" new video-x --channel studio-a --duration 30
 # differentiated example
-node "<skill>/scripts/rooster.mjs" new video-special --channel en-tech \
+node "<skill>/scripts/rooster.mjs" new video-special --channel studio-a \
   --format 9:16 \
-  --profile brutalist \
+  --profile studio-a \
   --voice user
 ```
 
-The project JSON records `channel` and `overrides` so the inheritance is traceable.
+The project JSON records `channel` and `overrides` so the inheritance is traceable. `format.duration` stays `null` until the user declares a target or the plan/media defines it.
 
 ## Precedence
 
@@ -186,14 +245,17 @@ The project can override any channel default. The channel is the stable context;
 
 ## Summary to show
 
-> Canal `en-tech` criado. Padrão: inglês, 16:9, perfil tech-neon, assets mixed, engine auto, autonomia guided, voz TTS. Os projetos herdam isso e podem sobrescrever; a duração é definida em cada vídeo. Quer criar o primeiro vídeo?
+> Canal `studio-a` criado, com perfil próprio `studio-a`. Padrão: pt-BR, 16:9, assets mixed, engine auto, autonomia guided, voz TTS. Os projetos herdam isso e podem sobrescrever; a duração vem da edição, não de um default. Quer criar o primeiro vídeo?
 
 ## What not to do
 
+- Do not ask "where does the workspace live" or "shall we set up the workspace"; create it as part of the channel step.
+- Do not ask only what the channel produces; the first message asks for the name and the content together, with the folder explanation.
 - Do not create a project outside a channel, except for legacy workspaces.
-- Do not ask the workspace location unless the user wants a custom path.
-- Do not send the twelve-field form by default; use the one-question quick setup.
-- Do not ask for a channel duration; duration is per project.
+- Do not seed the channel question with topic examples or preset options.
+- Do not infer a visual profile from the topic (for example, tech → tech-neon). Ask for the identity.
+- Do not send the twelve-field form by default; ask for the name and the content in one message, then run the identity step.
+- Do not ask for or set a default duration; duration is an outcome of the edit.
 - Do not repeat channel questions for every project.
 - Do not assume a channel is only YouTube; it can be a client, brand, or show.
 - Do not ignore a project override because it differs from the channel.

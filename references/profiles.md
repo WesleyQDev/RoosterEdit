@@ -159,6 +159,33 @@ node "<skill>/scripts/rooster.mjs" styleproof <slug> --open
 
 It writes `style/proof/index.html` and `style/proof/proof.json` with a hook frame, a data/graphic frame, and a caption/lower-third frame, using the resolved profile tokens. Approve the look before the plan or the build. Change colors, type, density, and motion here, not after the full render.
 
+## Channel identity
+
+A channel should own its look. Create a channel-scoped profile after `channel new`:
+
+```bash
+node "<skill>/scripts/rooster.mjs" channel design studio-a \
+  --from minimal \
+  --bg "#0b0f19" \
+  --fg "#f8fafc" \
+  --accent "#22d3ee" \
+  --display Inter \
+  --body Inter \
+  --motion calm \
+  --music ambient \
+  --sfx subtle \
+  --style "clean editorial, generous negative space" \
+  --negative "clutter, heavy gradients"
+```
+
+`channel design` copies the base profile into `channels/<id>/profiles/<id>/`, rewrites the id and scope, applies the token overrides, writes `STYLE.md`, and sets `channel.profile` to the new id. It keeps the channel identity next to the channel, so a second channel can look completely different without touching workspace profiles.
+
+Use `--force` to rebuild an existing channel profile. To inspect it without changing the channel:
+
+```bash
+node "<skill>/scripts/rooster.mjs" profile show studio-a --channel studio-a
+```
+
 ## Forking
 
 ```bash

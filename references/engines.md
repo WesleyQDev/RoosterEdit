@@ -31,6 +31,18 @@ Did the user explicitly choose an engine?
 
 The default is `auto`. Respect the user's preference when they have one.
 
+## Ask before building
+
+`auto` is a safe default, not a silent decision. Before the first build, ask once per project:
+
+> "Como você quer montar este vídeo? HyperFrames é o padrão e já está pronto. Remotion é melhor para React/3D, mas não está instalado. FilmCraft abre a timeline para edição manual, mas o MCP ainda não está configurado. Qual prefere?"
+
+- Match the question to `doctor --json` and `filmcraft status --json`. Do not claim something is missing when it is installed.
+- Skip the question when the user already chose an engine or explicitly asked for `auto`.
+- **Remotion:** after the scaffold, it needs `npm install` inside `engine/remotion`. Ask before installing; never install silently. If the user declines, fall back to HyperFrames and say so.
+- **FilmCraft:** it needs the CLI and the MCP. Ask before writing MCP config; the user must restart the agent for the tools to appear. FilmCraft is a timeline target, not an engine: still choose HyperFrames or Remotion for the element clips.
+- Record the decision in `project.json` (`engine`, `timeline`) and in `review.md`.
+
 ## Build from plan
 
 Once the plan is approved, generate the engine project:
@@ -69,7 +81,7 @@ FilmCraft is opt-in with `--target filmcraft` on `build` or `new`; the default t
 2. HyperFrames or Remotion renders each visual element as its own transparent clip:
    - HyperFrames: MOV ProRes 4444 with alpha, one composition per element.
    - Remotion: ProRes 4444 with PNG frames and `yuva444p10le`, one composition per element.
-   Remotion needs a one-time `npm install` in `engine/filmcraft/remotion`; the build reports that path when the CLI is missing.
+   Remotion needs a one-time `npm install` in `engine/filmcraft/remotion`; ask before installing. The build reports that path when the CLI is missing.
 3. FilmCraft assembles an editable `.fcproj`: source on V1 (video only), the mixed audio on A1, element clips on V2+ (greedy non-overlapping lanes), markers for chapters/elements/cuts, and captions when an SRT or VTT exists.
 
 ```bash

@@ -4,7 +4,7 @@ You write the spine of the video: the spoken lines, the on-screen text, and the 
 
 ## Read
 
-- The spawn prompt: project path, duration, language, voice mode, and the number of variants wanted.
+- The spawn prompt: project path, optional target duration (only when the user declared one), language, voice mode, and the number of variants wanted.
 - `brief.md`, `edit/analysis.json`, and `edit/digest.md` when it exists.
 - `style.md` and the channel profile if they already exist.
 - `references/workflow.md` Phase 4 for the script shape.
@@ -26,7 +26,7 @@ Do not read the raw transcript, engine code, or render logs.
 - The first line makes someone stop scrolling.
 - Every line is speakable in one breath.
 - The CTA is specific and earned by the content before it.
-- The word count fits the target duration at a natural pace (roughly 140–160 words per minute in English, 130–150 in Portuguese).
+- When a target duration was declared, the word count fits it at a natural pace (roughly 140–160 words per minute in English, 130–150 in Portuguese). Otherwise, write the length the story needs and report the resulting spoken length; do not pad or cut to hit a default.
 - Facts match the analysis; no invented numbers, names, or quotes.
 
 ## Do not
@@ -39,4 +39,4 @@ Do not read the raw transcript, engine code, or render logs.
 
 ## Return
 
-Follow the handoff contract in `_handoff.md` (same directory as this role). In `summary`, give the hook, the beat list as `timecode — label`, the word count against the target, and the main risk.
+Follow the handoff contract in `_handoff.md` (same directory as this role). In `summary`, give the hook, the beat list as `timecode — label`, the word count and resulting spoken length (or the gap against a declared target), and the main risk.

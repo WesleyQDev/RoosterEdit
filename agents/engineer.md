@@ -22,11 +22,12 @@ Do not read the raw transcript, and do not load the whole reference library.
    - `render <slug> --draft` and `render <slug> --final` print the engine render command; run it and capture the log;
    - `export <slug> --format both` for EDL/FCPXML when the user wants an NLE;
    - `deliver <slug>` for thumbnail and metadata.
-4. Redirect noisy output to `work/logs/<stage>.log`. Read the last 20–30 lines or the JSON summary, not the full log. On Windows use `*> file`; on POSIX use `> file 2>&1`.
-5. Run the engine's check after structural changes: `npx hyperframes check --json` or the Remotion equivalent. Fix errors before returning.
-6. Keep the project reproducible: no hardcoded colors, fonts, durations, or paths that belong in the profile, plan, or manifest.
-7. For a render, probe the output with FFprobe: duration, resolution, fps, codecs, audio channels, file size. Compare against the plan.
-8. Write `work/notes/engineer-<mode>.md` with the details: commands run, errors fixed, remaining risks.
+4. If the selected engine is missing (Remotion not installed, FilmCraft CLI or MCP not configured), do not install anything. Return `needs-decision` with the exact missing piece and the install/connect command, so the main agent can ask the user.
+5. Redirect noisy output to `work/logs/<stage>.log`. Read the last 20–30 lines or the JSON summary, not the full log. On Windows use `*> file`; on POSIX use `> file 2>&1`.
+6. Run the engine's check after structural changes: `npx hyperframes check --json` or the Remotion equivalent. Fix errors before returning.
+7. Keep the project reproducible: no hardcoded colors, fonts, durations, or paths that belong in the profile, plan, or manifest.
+8. For a render, probe the output with FFprobe: duration, resolution, fps, codecs, audio channels, file size. Compare against the plan.
+9. Write `work/notes/engineer-<mode>.md` with the details: commands run, errors fixed, remaining risks.
 
 ## Quality bar
 
@@ -41,6 +42,7 @@ Do not read the raw transcript, and do not load the whole reference library.
 - Do not change the story, the style, or the license. Return `needs-decision` instead.
 - Do not delete or overwrite the user's source media.
 - Do not use `--force`, `--allow-cut-only`, or `--allow-no-music` without explicit permission in the prompt.
+- Do not run `npm install`, install HyperFrames/Remotion/FilmCraft, or write MCP config without explicit permission in the prompt.
 - Do not paste build logs, stack traces, generated code, or HTML into the handoff.
 - Do not claim a render succeeded without probing the file.
 - Do not upload or publish anything.

@@ -13,9 +13,10 @@ Instale e prepare o **RoosterEdit** neste projeto.
 5. Se o HyperFrames não estiver disponível, pergunte se quero instalar agora. Não instale nada sem meu OK.
 6. Não crie workspace, projeto ou vídeo ainda. Nesta etapa, só instale, valide o ambiente e deixe claro que eu não preciso rodar comandos: você executa e me mostra o resultado.
 7. No fim, responda em no máximo 8 linhas: status da instalação, o que já está pronto, o que falta (se algo) e onde ler os detalhes. Não escreva um guia longo nem liste todos os comandos.
-8. Termine com uma pergunta: **"Quer configurar o workspace agora?"** Se eu disser não, pare sem criar nada.
-9. Se eu disser sim, faça um setup rápido: pergunte só o que o canal vai produzir, infira idioma, formato, perfil, voz e política de assets, mostre um resumo curto para eu ajustar e só então crie o workspace com `init` + `channel new`. Não faça as 12 perguntas de uma vez e não defina duração no canal.
-10. Depois do setup, me diga em uma linha como começar o primeiro vídeo e ofereça o prompt de bootstrap.
+8. Termine com uma pergunta simples, sem jargão: **"Quer criar o primeiro canal agora? Pensa nele como a pasta daquele projeto: dentro dela ficam os vídeos, o estilo e os arquivos da marca ou cliente. Se sim, me diga o nome do canal e o que ele vai produzir?"** Se eu disser não, pare sem criar nada.
+9. Se eu disser sim, use o nome que eu der (ou proponha um curto em kebab-case se eu não der), infira idioma, formato, voz e política de assets, mostre um resumo curto para eu ajustar e só então crie a pasta `rooster/` com `init` + `channel new`. Não faça as 12 perguntas de uma vez e não defina duração.
+10. Depois do canal, crie a identidade: pergunte em um bloco só sobre paleta, tipografia e motion/áudio e rode `channel design <id>`. Se eu não tiver preferência, mantenha o perfil base e diga que dá para mudar depois.
+11. Depois do setup, me diga em uma linha como começar o primeiro vídeo e ofereça o prompt de bootstrap.
 
 ---
 

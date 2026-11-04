@@ -2,6 +2,25 @@
 
 `scripts/features/motion.mjs` turns the `zoom` and `transition` element types into real motion. It is pure and dependency-free: helpers return CSS, HTML, GSAP, or interpolation values, and never write files or import `rooster.mjs`. Wire them into `renderHyperFramesHtml`, `renderHyperFramesElement`, or `renderRemotionTsx` after the module is reviewed.
 
+## See what is planned
+
+`plan.html` and `plan.md` include a **Motions** section: each resolved template, how many elements use it, the timecodes, a sample, and a small visual preview. The elements table also has a `Motion` column. This is the fastest way to review the motion language before the build.
+
+To list it from the CLI:
+
+```bash
+node "<skill>/scripts/rooster.mjs" motions <slug>
+node "<skill>/scripts/rooster.mjs" motions <slug> --json
+```
+
+It shows:
+
+- **Planned motions** grouped by resolved template (`title`, `chapter`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `terminal`, `end-card`, `callout`, `broll`, `zoom`, `transition`, `custom`);
+- **Reusable components** found under `style/components/` (project, channel, or profile scope), with their paths;
+- the **built-in template catalog**, including what each one does.
+
+`custom` means the element references a reusable component folder with `element.html`, `element.css`, and `element.js`. If the plan says `custom` but the components list is empty, the plan is pointing at a motion that does not exist yet.
+
 ## Plan shapes
 
 ### Zoom

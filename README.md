@@ -65,19 +65,21 @@ O agente acompanha o projeto com um marcador `Etapa X/8` e só avança nos gates
 | Etapa | O que acontece | Você aprova |
 |---|---|---|
 | 1. Ambiente e workspace | doctor, workspace e canal | — |
-| 2. Brief e intake | objetivo, público, formato, duração e restrições | brief |
+| 2. Brief e intake | objetivo, público, formato, duração (só se você declarar) e restrições | brief |
 | 3. Assets e transcrição | material, probe, transcrição e mapa editorial | — |
 | 4. Plano de edição | cortes, elementos, música e capítulos | plano |
 | 5. Storyboard e timeline | cenas, tempos, legendas e áudio | storyboard/timeline |
-| 6. Engine build | projeto HyperFrames ou Remotion | — |
+| 6. Escolha do engine e build | HyperFrames, Remotion ou FilmCraft; depois o projeto | engine/timeline e sample |
 | 7. Preview e QA | preview no browser, frames e checklist | preview |
 | 8. Render e entrega | draft, final, thumbnail e metadata | render final |
+
+Na etapa 6, o agente pergunta como montar: **HyperFrames** (padrão, já pronto), **Remotion** (React/3D; precisa de `npm install` com a sua permissão) ou **FilmCraft** (timeline editável; precisa conectar o MCP e reiniciar o agente). Nada é instalado nem configurado sem você autorizar.
 
 As etapas pesadas podem rodar em subagents para economizar contexto, mas o fluxo é o mesmo sem eles: os artefatos e os gates não mudam. Antes do plano, peça 3 frames de amostra do estilo (`styleproof`); antes do build completo, peça 3 elementos de amostra (`build --sample 3`). Isso evita refazer o vídeo inteiro por causa do look.
 
 ## Instalação
 
-A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, usando a pasta de skills que o seu harness lê, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer configurar o workspace.
+A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, usando a pasta de skills que o seu harness lê, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer criar o primeiro canal.
 
 Você não precisa rodar comandos no terminal: o agente executa e mostra o resultado. Se quiser o prompt único de instalação + dependências + workspace, use [`templates/install-prompt.pt-BR.md`](templates/install-prompt.pt-BR.md). Custos esperados estão em [`docs/COSTS.md`](docs/COSTS.md).
 
@@ -93,15 +95,16 @@ Instale a skill RoosterEdit neste projeto e valide o ambiente.
 5. Se faltar Node.js, FFmpeg ou FFprobe, me peça permissão antes de instalar qualquer coisa e explique o comando.
 6. Não crie workspace, projeto ou vídeo ainda. Só instale a skill e valide o ambiente.
 7. No fim, responda em no máximo 8 linhas: status da instalação, o que já está pronto, o que falta (se algo) e onde ler os detalhes. Não escreva um guia longo nem liste todos os comandos.
-8. Termine perguntando: "Quer configurar o workspace agora?" Se eu disser não, pare sem criar nada.
-9. Se eu disser sim, faça um setup rápido: pergunte só o que o canal vai produzir, infira os padrões e me mostre um resumo para ajustar. Não faça as 12 perguntas de uma vez e não defina duração no canal.
+8. Termine com uma pergunta simples: "Quer criar o primeiro canal agora? Pensa nele como a pasta daquele projeto: dentro dela ficam os vídeos, o estilo e os arquivos da marca ou cliente. Se sim, me diga o nome do canal e o que ele vai produzir?" Se eu disser não, pare sem criar nada.
+9. Se eu disser sim, use o nome que eu der (ou proponha um), infira os padrões e me mostre um resumo para ajustar. Não faça as 12 perguntas de uma vez e não defina duração.
+10. Depois do canal, pergunte paleta, tipografia e motion/áudio e crie a identidade com `channel design <id>`. Se eu não tiver preferência, mantenha o perfil base.
 ```
 
 Se preferir o caminho manual, o passo a passo completo está em [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Primeiro vídeo
 
-Peça ao agente algo como "quero fazer um vídeo de 60 segundos sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano. Se você for fornecer os vídeos, ele cria e abre a pasta `assets/source/` para você colocar os arquivos.
+Peça ao agente algo como "quero fazer um vídeo sobre tal assunto". Ele cria o workspace, configura o canal, transcreve o material e monta o plano. Se você for fornecer os vídeos, ele cria e abre a pasta `assets/source/` para você colocar os arquivos. Só declare uma duração se você tiver um alvo explícito, por exemplo "quero exatamente 60 segundos".
 
 Você revisa, aprova e ele segue para o preview e o render. Comece com autonomia `guided` nos primeiros vídeos: o agente mostra o style proof, o plano e o preview antes de seguir. Quando o estilo estiver estável, mude o canal para `auto`. O passo a passo está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
 
@@ -115,9 +118,11 @@ O FilmCraft é opcional e também não é um terceiro motor criativo: ele é um 
 
 ## Canais e perfis
 
-Um canal guarda o que é estável na sua marca: o que ele produz, idioma, formato, duração, estilo, voz e política de assets. Todo projeto nasce dentro de um canal e pode sobrescrever os padrões.
+Um canal guarda o que é estável na sua marca: o que ele produz, idioma, formato, estilo, voz e política de assets. Todo projeto nasce dentro de um canal e pode sobrescrever os padrões. A duração não é um padrão: ela é o resultado da edição, a menos que você declare um alvo.
 
-Perfis cuidam da identidade visual e sonora, como cores, tipografia, motion e legendas. Existem três perfis prontos (`minimal`, `tech-neon` e `3d-cartoon`), e você também pode criar os seus. Não existe categoria separada: o conteúdo de cada vídeo fica no brief, no roteiro e no plano de edição.
+Na prática, cada canal é uma pasta em `rooster/channels/<canal>/` com `projects/` (um por vídeo), `profiles/` (identidade visual e sonora), `assets/` e `library/`.
+
+Perfis cuidam da identidade visual e sonora, como cores, tipografia, motion e legendas. Depois de criar um canal, use `channel design <id>` para gerar o perfil daquele canal. Existem três perfis prontos (`minimal`, `tech-neon` e `3d-cartoon`) que servem de base, e você também pode criar os seus. Não existe categoria separada: o conteúdo de cada vídeo fica no brief, no roteiro e no plano de edição.
 
 ## Assets
 

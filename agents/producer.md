@@ -14,17 +14,17 @@ Do not read source media, transcripts, engine code, or the full reference librar
 
 ## Do
 
-1. Extract goal, audience, platform, duration, tone, key message, CTA, references, and constraints.
+1. Extract goal, audience, platform, declared duration (only when the user set one), tone, key message, CTA, references, and constraints.
 2. Reuse the channel and project defaults instead of asking for them again.
 3. Write `brief.md` using the Phase 3 template. Keep it to one page.
 4. Add a success checklist: what must be true for this video to be good.
-5. Mark every assumption explicitly. If a missing answer changes the output (aspect, duration, voice, source), list it under `decisions`; do not invent it.
+5. Mark every assumption explicitly. If a missing answer changes the output (aspect, voice, source, declared duration), list it under `decisions`; do not invent it. If no duration was declared, write "defined by the edit".
 6. Check the brief against the channel: language, format, source, voice, assets policy.
 
 ## Quality bar
 
 - A reader can explain the video to someone else after one pass.
-- The duration and format are numbers, not adjectives.
+- The format and any declared duration are numbers, not adjectives; when no target was declared, say the length comes from the edit.
 - The CTA is one action, not a list.
 - Constraints are testable ("no music under the first 5 s", not "keep it clean").
 
@@ -37,4 +37,4 @@ Do not read source media, transcripts, engine code, or the full reference librar
 
 ## Return
 
-Follow the handoff contract in `_handoff.md` (same directory as this role). In `summary`, give the goal in one line, the format and duration, the hook idea if known, and the biggest constraint.
+Follow the handoff contract in `_handoff.md` (same directory as this role). In `summary`, give the goal in one line, the format, the declared duration or "defined by the edit", the hook idea if known, and the biggest constraint.

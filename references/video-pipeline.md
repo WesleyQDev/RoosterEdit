@@ -173,6 +173,8 @@ Choose the engine:
 - Remotion for React, data-driven scenes, and 3D;
 - FFmpeg for simple cuts, captions, and audio.
 
+Ask the user before building (see the gate in `references/engines.md`): HyperFrames is the default; Remotion needs `npm install` with permission; FilmCraft needs the MCP connected with permission and an agent restart. Do not choose silently when the engine is missing.
+
 ## Step 6 — Assemble, review, export
 
 ### Option 1 — Automatic assembly
@@ -193,7 +195,7 @@ Build a Remotion project from the approved plan when the video needs React compo
 node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 ```
 
-Preview in Remotion Studio, then render to `renders/final.mp4`.
+After the scaffold, ask before running `npm install` in `engine/remotion`; if the user declines, fall back to HyperFrames. Preview in Remotion Studio, then render to `renders/final.mp4`.
 
 ### Review and export
 

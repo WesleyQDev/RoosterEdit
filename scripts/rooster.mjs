@@ -100,6 +100,23 @@ const STYLE_IDS = ["user", "profile", "ai", "reference"];
 const AUTONOMY_IDS = ["auto", "guided", "manual"];
 const STATUS_IDS = ["intake", "planning", "assets", "building", "preview", "qa", "rendering", "done", "blocked"];
 
+const MOTION_TEMPLATES = [
+  { id: "title", label: "Título", description: "Título grande; abre o vídeo ou um bloco." },
+  { id: "chapter", label: "Capítulo", description: "Kicker + título + linha; separa seções." },
+  { id: "diagram", label: "Diagrama", description: "Nós e setas para relações e fluxos." },
+  { id: "counter", label: "Contador", description: "Números grandes com rótulo; comparações." },
+  { id: "list", label: "Lista", description: "Itens numerados entrando em sequência." },
+  { id: "lower-third", label: "Lower third", description: "Nome e cargo no canto inferior." },
+  { id: "emphasis", label: "Ênfase", description: "Frase-âncora com destaque ou risco." },
+  { id: "terminal", label: "Terminal", description: "Comando em uma janela de terminal." },
+  { id: "end-card", label: "End card", description: "Fechamento com CTA." },
+  { id: "callout", label: "Callout", description: "Etiqueta curta de canto." },
+  { id: "broll", label: "B-roll", description: "Clipe ou imagem de apoio em PIP, split ou full." },
+  { id: "zoom", label: "Zoom", description: "Punch-in no rosto, produto ou detalhe." },
+  { id: "transition", label: "Transição", description: "Wipe ou flash entre blocos." },
+  { id: "custom", label: "Custom", description: "HTML/CSS/GSAP próprio ou componente reutilizável." },
+];
+
 const ASPECTS = {
   "16:9": { width: 1920, height: 1080 },
   "9:16": { width: 1080, height: 1920 },
@@ -519,6 +536,161 @@ function buildChannel(id, args, workspaceDefaults = {}, config = {}) {
   };
 }
 
+function resolveChannelProfileBase(requested, channel) {
+  if (typeof requested === "string" && requested.trim()) {
+    const id = slugify(requested);
+    const entry = resolveProfileEntry(id);
+    if (!entry) fail(`Base profile not found: ${requested}. Run "profile list" to see the available profiles.`);
+    return { id, entry };
+  }
+  const inherited = channel?.profile ? slugify(channel.profile) : null;
+  if (inherited && inherited !== channel.id) {
+    const entry = resolveProfileEntry(inherited);
+    if (entry) return { id: inherited, entry };
+  }
+  const fallback = resolveProfileEntry("minimal");
+  if (!fallback) fail("Base profile not found: minimal. Reinstall the skill templates.");
+  return { id: "minimal", entry: fallback };
+}
+
+function profileStyleMarkdown(profile) {
+  const colors = profile.tokens?.colors || {};
+  const typography = profile.tokens?.typography || {};
+  const motion = profile.tokens?.motion || {};
+  const audio = profile.audio || {};
+  return `# Style — ${profile.name || profile.id}
+
+Channel: \`${profile.channel || "?"}\`
+Profile: \`${profile.id}\`
+
+${profile.description || ""}
+
+## Palette
+
+- bg \`${colors.bg || "?"}\`
+- fg \`${colors.fg || "?"}\`
+- muted \`${colors.muted || "?"}\`
+- accent \`${colors.accent || "?"}\`
+- accent2 \`${colors.accent2 || "?"}\`
+
+## Typography
+
+- display: ${typography.display?.family || "?"} ${typography.display?.weight || ""}
+- body: ${typography.body?.family || "?"} ${typography.body?.weight || ""}
+- mono: ${typography.mono?.family || "?"} ${typography.mono?.weight || ""}
+
+## Motion
+
+- feel: ${motion.feel || "?"}
+- ease: ${motion.ease || "?"}
+- fast / normal / slow: ${motion.fast ?? "?"} / ${motion.normal ?? "?"} / ${motion.slow ?? "?"}
+
+## Audio
+
+- music: ${audio.music || "?"}
+- sfx: ${audio.sfx || "?"}
+
+## Prompt
+
+${profile.prompts?.style || ""}
+
+## Avoid
+
+${profile.prompts?.negative || ""}
+`;
+}
+
+function channelDesign(args) {
+  const id = slugify(args._[1] || "");
+  if (!id) fail("Usage: channel design <id> [options]");
+  const channelPath = path.join(channelsDir(), id, "channel.json");
+  const channel = readJson(channelPath, null);
+  if (!channel) fail(`Channel not found: ${id}`);
+
+  const base = resolveChannelProfileBase(args.from, channel);
+  for (const key of ["bg", "fg", "muted", "accent", "accent2"]) {
+    if (typeof args[key] === "string" && !/^#[0-9a-f]{6}$/i.test(args[key].trim())) {
+      fail(`--${key} must be a 6-digit hex color, e.g. #0b0f19.`);
+    }
+  }
+  const destination = path.join(channelsDir(), id, "profiles", id);
+  const profilePath = path.join(destination, PROFILE_FILE);
+  const existing = readJson(profilePath, null);
+  if (existing && !args.force) {
+    fail(`Channel profile already exists at ${destination}. Use --force to update it.`);
+  }
+
+  let profile;
+  if (existing && typeof args.from !== "string") {
+    profile = existing;
+  } else {
+    if (exists(destination)) removeDirRobust(destination);
+    copyDir(base.entry.dir, destination);
+    profile = readJson(profilePath, {});
+    profile.extends = base.id;
+  }
+
+  profile.id = id;
+  profile.name = typeof args.name === "string" ? args.name : channel.name || id;
+  profile.description =
+    typeof args.description === "string"
+      ? args.description
+      : typeof args.style === "string"
+        ? args.style
+        : profile.description || `Visual identity for channel ${id}`;
+  profile.scope = "channel";
+  profile.channel = id;
+
+  profile.tokens = profile.tokens || {};
+  profile.tokens.colors = profile.tokens.colors || {};
+  for (const key of ["bg", "fg", "muted", "accent", "accent2"]) {
+    if (typeof args[key] === "string") {
+      const value = args[key].trim();
+      if (!/^#[0-9a-f]{6}$/i.test(value)) fail(`--${key} must be a 6-digit hex color, e.g. #0b0f19.`);
+      profile.tokens.colors[key] = value;
+    }
+  }
+
+  profile.tokens.typography = profile.tokens.typography || {};
+  for (const key of ["display", "body", "mono"]) {
+    if (typeof args[key] === "string") {
+      profile.tokens.typography[key] = {
+        ...(profile.tokens.typography[key] || {}),
+        family: args[key],
+      };
+    }
+  }
+
+  profile.tokens.motion = profile.tokens.motion || {};
+  if (typeof args.motion === "string") profile.tokens.motion.feel = args.motion;
+
+  profile.captions = profile.captions || {};
+  if (typeof args.fg === "string") profile.captions.color = profile.tokens.colors.fg;
+  if (typeof args.bg === "string") profile.captions.stroke = profile.tokens.colors.bg;
+  if (typeof args.display === "string") profile.captions.font = profile.tokens.typography.display.family;
+
+  profile.audio = profile.audio || {};
+  if (typeof args.music === "string") profile.audio.music = args.music;
+  if (typeof args.sfx === "string") profile.audio.sfx = args.sfx;
+
+  profile.prompts = profile.prompts || {};
+  if (typeof args.style === "string") profile.prompts.style = args.style;
+  if (typeof args.negative === "string") profile.prompts.negative = args.negative;
+
+  writeJson(profilePath, profile);
+  writeText(path.join(destination, "STYLE.md"), profileStyleMarkdown(profile));
+
+  channel.profile = id;
+  writeJson(channelPath, channel);
+
+  heading("Channel identity created");
+  console.log(`  ${destination}`);
+  console.log(
+    `  ${profile.name} · ${profile.tokens.colors.bg || "?"} · ${profile.tokens.colors.accent || "?"} · ${profile.tokens.typography.display?.family || "?"}`
+  );
+  console.log(`  channel.profile = ${id}`);
+}
+
 function channelCommand(args) {
   if (!exists(WORKSPACE)) fail(`No workspace at ${WORKSPACE}. Run "init" first.`);
   if (args.category !== undefined) {
@@ -574,6 +746,11 @@ function channelCommand(args) {
     return;
   }
 
+  if (action === "design") {
+    channelDesign(args);
+    return;
+  }
+
   if (action === "set") {
     const id = slugify(args._[1] || "");
     const key = args._[2];
@@ -607,7 +784,7 @@ function channelCommand(args) {
     return;
   }
 
-  fail("Usage: channel list | show <id> | new <id> [options] | set <id> <key> <value> | use <id>");
+  fail("Usage: channel list | show <id> | new <id> [options] | design <id> [options] | set <id> <key> <value> | use <id>");
 }
 
 // ---------------------------------------------------------------------------
@@ -752,7 +929,7 @@ function resolveFormat(aspect, width, height) {
     width: Number(width) || base.width,
     height: Number(height) || base.height,
     fps: 30,
-    duration: 60,
+    duration: null,
   };
 }
 
@@ -790,8 +967,12 @@ function newProject(args) {
         ? channel.format
         : workspaceDefaults.aspect || "16:9";
   const format = resolveFormat(aspect);
-  if (args.duration) {
-    format.duration = Number(args.duration) || format.duration;
+  if (args.duration !== undefined) {
+    const target = Number(args.duration);
+    if (!Number.isFinite(target) || target <= 0) {
+      fail("Invalid --duration. Pass seconds, or omit it to let the edit define the length.");
+    }
+    format.duration = target;
   }
 
   const profile =
@@ -903,7 +1084,9 @@ Channel: \`${channelId}\`
 
 ## Platform and format
 
-${format.aspect} — ${format.width}x${format.height} — ${format.fps} fps — ${format.duration}s
+${format.aspect} — ${format.width}x${format.height} — ${format.fps} fps — ${
+  format.duration ? `${format.duration}s (declared target)` : "length defined by the edit"
+}
 
 ## Tone
 
@@ -1308,12 +1491,16 @@ function digestCommand(args) {
 
 const PROFILE_FILE = "profile.json";
 
-function resolveProfileEntry(id) {
-  const candidates = [
+function resolveProfileEntry(id, channelId) {
+  const candidates = [];
+  if (channelId) {
+    candidates.push({ scope: "channel", dir: path.join(channelsDir(), channelId, "profiles", id) });
+  }
+  candidates.push(
     { scope: "workspace", dir: path.join(WORKSPACE, "profiles", id) },
     { scope: "global", dir: path.join(ROOSTER_HOME, "profiles", id) },
-    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", "profiles", id) },
-  ];
+    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", "profiles", id) }
+  );
   for (const candidate of candidates) {
     if (exists(path.join(candidate.dir, PROFILE_FILE))) return candidate;
   }
@@ -1321,11 +1508,17 @@ function resolveProfileEntry(id) {
 }
 
 function listProfiles() {
-  const sources = [
+  const sources = [];
+  if (exists(WORKSPACE)) {
+    for (const channelId of listChannelIds()) {
+      sources.push({ scope: `channel:${channelId}`, dir: path.join(channelsDir(), channelId, "profiles") });
+    }
+  }
+  sources.push(
     { scope: "workspace", dir: path.join(WORKSPACE, "profiles") },
     { scope: "global", dir: path.join(ROOSTER_HOME, "profiles") },
-    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", "profiles") },
-  ];
+    { scope: "builtin", dir: path.join(SKILL_ROOT, "templates", "profiles") }
+  );
   const seen = new Map();
   for (const source of sources) {
     if (!exists(source.dir)) continue;
@@ -1364,8 +1557,9 @@ function profileCommand(args) {
 
   if (action === "show") {
     const id = args._[1];
-    if (!id) fail("Usage: profile show <id>");
-    const entry = resolveProfileEntry(id);
+    if (!id) fail("Usage: profile show <id> [--channel <id>]");
+    const channelId = typeof args.channel === "string" ? slugify(args.channel) : null;
+    const entry = resolveProfileEntry(id, channelId);
     if (!entry) fail(`profile not found: ${id}`);
     const configPath = path.join(entry.dir, PROFILE_FILE);
     console.log(`# profile: ${id} (${entry.scope})`);
@@ -1377,8 +1571,9 @@ function profileCommand(args) {
   if (action === "fork") {
     const id = args._[1];
     const target = typeof args.as === "string" ? slugify(args.as) : null;
-    if (!id || !target) fail("Usage: profile fork <id> --as <new-id>");
-    const entry = resolveProfileEntry(id);
+    if (!id || !target) fail("Usage: profile fork <id> --as <new-id> [--channel <id>]");
+    const channelId = typeof args.channel === "string" ? slugify(args.channel) : null;
+    const entry = resolveProfileEntry(id, channelId);
     if (!entry) fail(`profile not found: ${id}`);
 
     const destination = path.join(WORKSPACE, "profiles", target);
@@ -1401,7 +1596,7 @@ function profileCommand(args) {
     return;
   }
 
-  fail("Usage: profile list | profile show <id> | profile fork <id> --as <new-id>");
+  fail("Usage: profile list | profile show <id> [--channel <id>] | profile fork <id> --as <new-id> [--channel <id>]");
 }
 
 // ---------------------------------------------------------------------------
@@ -1425,7 +1620,12 @@ function checkProject(args) {
       errors.push(`project.json: channel not found "${config.channel}"`);
     }
     if (!config.profile) errors.push("project.json: missing profile");
-    if (!config.format || !(config.format.duration > 0)) errors.push("project.json: invalid format.duration");
+    if (!config.format) errors.push("project.json: missing format");
+    else if (config.format.duration != null && !(Number(config.format.duration) > 0)) {
+      errors.push("project.json: invalid format.duration");
+    } else if (config.format.duration == null) {
+      warnings.push("project.json: format.duration unset; the edit will define the final length");
+    }
     if (config.engine && !ENGINE_IDS.includes(config.engine)) errors.push(`project.json: unknown engine "${config.engine}"`);
     if (config.timeline && !TIMELINE_IDS.includes(config.timeline)) {
       errors.push(`project.json: unknown timeline "${config.timeline}"`);
@@ -1438,7 +1638,12 @@ function checkProject(args) {
   if (!timeline) {
     errors.push("edit/timeline.json missing or invalid");
   } else {
-    if (!timeline.format || !(timeline.format.duration > 0)) errors.push("timeline: invalid format.duration");
+    if (!timeline.format) errors.push("timeline: missing format");
+    else if (timeline.format.duration != null && !(Number(timeline.format.duration) > 0)) {
+      errors.push("timeline: invalid format.duration");
+    } else if (timeline.format.duration == null) {
+      warnings.push("timeline: format.duration unset; it will follow the plan");
+    }
     if (!Array.isArray(timeline.tracks)) errors.push("timeline: tracks must be an array");
     const trackIds = new Set();
     for (const track of timeline.tracks || []) {
@@ -1566,7 +1771,12 @@ function validateTimeline(timeline, dir) {
     errors.push("edit/timeline.json missing or invalid");
     return { errors, warnings };
   }
-  if (!timeline.format || !(timeline.format.duration > 0)) errors.push("timeline: invalid format.duration");
+  if (!timeline.format) errors.push("timeline: missing format");
+  else if (timeline.format.duration != null && !(Number(timeline.format.duration) > 0)) {
+    errors.push("timeline: invalid format.duration");
+  } else if (timeline.format.duration == null) {
+    warnings.push("timeline: format.duration unset; it will follow the plan");
+  }
   if (!Array.isArray(timeline.tracks)) errors.push("timeline: tracks must be an array");
   const trackIds = new Set();
   for (const track of timeline.tracks || []) {
@@ -1966,6 +2176,21 @@ function planMarkdown(plan) {
   lines.push("> Source times are the raw recording. The value in parentheses is where the beat lands after the cuts.");
   lines.push("");
 
+  const groups = plannedMotions(plan);
+  if (groups.length) {
+    lines.push(`## Motions (${groups.length} types)`, "");
+    for (const group of groups) {
+      const info = motionTemplateInfo(group.template);
+      const label = group.component ? `custom:${group.component}` : info?.label || group.template;
+      const shown = group.items.slice(0, 4);
+      const where = `${shown.map((item) => `${formatClock(item.start)}-${formatClock(item.end)}`).join(", ")}${
+        group.items.length > shown.length ? ` +${group.items.length - shown.length}` : ""
+      }`;
+      lines.push(`- **${label}** (${group.count}): ${where}`);
+    }
+    lines.push("");
+  }
+
   const mix = motionMix(plan);
   if (mix.length) {
     lines.push("## Motion mix (source)", "");
@@ -1983,9 +2208,18 @@ function planMarkdown(plan) {
     lines.push("");
   }
 
-  lines.push(`## Cuts (${(plan.cuts || []).length})`, "");
-  for (const cut of plan.cuts || []) {
-    lines.push(`- ${formatClock(cut.start)}-${formatClock(cut.end)} - ${cut.reason || "?"}${cut.note ? ` - ${cut.note}` : ""}`);
+  const cutsCount = (plan.cuts || []).length;
+  const keepsCount = (plan.keeps || []).length;
+  if (cutsCount) {
+    lines.push(`## Cuts (${cutsCount})`, "");
+    for (const cut of plan.cuts || []) {
+      lines.push(`- ${formatClock(cut.start)}-${formatClock(cut.end)} - ${cut.reason || "?"}${cut.note ? ` - ${cut.note}` : ""}`);
+    }
+  } else if (keepsCount) {
+    lines.push(`## Selection (${keepsCount} keeps)`, "");
+    lines.push("- No explicit cuts. The edit keeps these spans and discards the rest; the final duration is their sum.");
+  } else {
+    lines.push("## Cuts (0)", "");
   }
 
   if ((plan.keeps || []).length) {
@@ -1998,11 +2232,14 @@ function planMarkdown(plan) {
   lines.push("", `## Elements (${elements.length})`, "");
   for (const element of elements) {
     const text = elementText(element) ? ` "${elementText(element)}"` : "";
+    const motion = isCustomElement(element)
+      ? `custom:${String(element.component || "").trim() || "inline"}`
+      : elementTemplate(element, elementText(element), element.data || element);
     const output =
       element.outputStart !== undefined
         ? ` (final ${formatClock(element.outputStart)}-${formatClock(element.outputEnd)})`
         : "";
-    lines.push(`- ${formatClock(element.start)}-${formatClock(element.end)}${output} - ${element.type || "?"}${text}${brollSummary(element)} - ${element.description || ""}`);
+    lines.push(`- ${formatClock(element.start)}-${formatClock(element.end)}${output} - ${element.type || "?"} [${motion}]${text}${brollSummary(element)} - ${element.description || ""}`);
   }
 
   if ((plan.chapters || []).length) {
@@ -2016,6 +2253,103 @@ function planMarkdown(plan) {
 
   lines.push("", "Approve this plan before the timeline and render.");
   return lines.join("\n") + "\n";
+}
+
+function motionTemplateInfo(id) {
+  return MOTION_TEMPLATES.find((template) => template.id === id) || null;
+}
+
+function motionPreviewHtml(template, text = "") {
+  const label = htmlEscape(String(text || "").trim());
+  switch (template) {
+    case "title":
+      return `<div class="mp mp-title"><strong>${label || "Título"}</strong><i></i></div>`;
+    case "chapter":
+      return `<div class="mp mp-chapter"><span>capítulo</span><strong>${label || "Título"}</strong><i></i></div>`;
+    case "diagram":
+      return `<div class="mp mp-diagram"><b>1</b><i></i><b>2</b><i></i><b>3</b></div>`;
+    case "counter":
+      return `<div class="mp mp-counter"><strong>${label || "5 anos"}</strong><span>número</span></div>`;
+    case "list":
+      return `<div class="mp mp-list"><span>01</span>${label || "Item"}</div>`;
+    case "lower-third":
+      return `<div class="mp mp-lt"><i></i><div><strong>${label || "Nome"}</strong><span>cargo</span></div></div>`;
+    case "emphasis":
+      return `<div class="mp mp-emphasis"><strong>${label || "Ênfase"}</strong></div>`;
+    case "terminal":
+      return `<div class="mp mp-terminal"><span>›</span>${label || "comando"}</div>`;
+    case "end-card":
+      return `<div class="mp mp-end"><strong>${label || "Até a próxima"}</strong><i></i></div>`;
+    case "callout":
+      return `<div class="mp mp-callout"><b>◆</b>${label || "label"}</div>`;
+    case "broll":
+      return `<div class="mp mp-broll"><span>▶</span>b-roll</div>`;
+    case "zoom":
+      return `<div class="mp mp-zoom"><span>+</span></div>`;
+    case "transition":
+      return `<div class="mp mp-transition"><i></i></div>`;
+    case "custom":
+      return `<div class="mp mp-custom">&lt;/&gt;</div>`;
+    default:
+      return `<div class="mp">${htmlEscape(template)}</div>`;
+  }
+}
+
+function plannedMotions(plan) {
+  const groups = new Map();
+  for (const element of plan.elements || []) {
+    const text = elementText(element) || "";
+    const template = isCustomElement(element)
+      ? "custom"
+      : elementTemplate(element, text, element.data || element);
+    const component = isCustomElement(element) ? String(element.component || "").trim() : "";
+    const key = component ? `custom:${component}` : template;
+    if (!groups.has(key)) {
+      groups.set(key, { template, component, count: 0, items: [] });
+    }
+    const group = groups.get(key);
+    group.count += 1;
+    group.items.push(element);
+  }
+  return Array.from(groups.values()).sort(
+    (a, b) => b.count - a.count || a.template.localeCompare(b.template) || String(a.component).localeCompare(String(b.component))
+  );
+}
+
+function reusableComponentRoots(project) {
+  const roots = [];
+  const add = (scope, dir) => {
+    if (dir && exists(dir)) roots.push({ scope, dir });
+  };
+  add("project", path.join(project.dir, "style", "components"));
+  if (project.channel) {
+    add("channel", path.join(WORKSPACE, "channels", project.channel, "style", "components"));
+  }
+  const profile = project.config?.profile;
+  if (profile) {
+    if (project.channel) {
+      add("channel-profile", path.join(WORKSPACE, "channels", project.channel, "profiles", profile, "components"));
+    }
+    add("workspace-profile", path.join(WORKSPACE, "profiles", profile, "components"));
+    add("global-profile", path.join(ROOSTER_HOME, "profiles", profile, "components"));
+    add("builtin-profile", path.join(SKILL_ROOT, "templates", "profiles", profile, "components"));
+  }
+  add("builtin", path.join(SKILL_ROOT, "templates", "components"));
+  return roots;
+}
+
+function listReusableComponents(project) {
+  const found = new Map();
+  for (const { scope, dir } of reusableComponentRoots(project)) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const componentDir = path.join(dir, entry.name);
+      if (!exists(path.join(componentDir, "element.html")) && !exists(path.join(componentDir, "index.html"))) continue;
+      if (found.has(entry.name)) continue;
+      found.set(entry.name, { name: entry.name, scope, dir: componentDir });
+    }
+  }
+  return Array.from(found.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function planHtml(plan, project, transcript = null) {
@@ -2084,7 +2418,7 @@ function planHtml(plan, project, transcript = null) {
   const elements = elementsList
     .map(
       (element) =>
-        `<tr><td>${timeCell(element.start)}–${formatClock(element.end)}</td><td>${finalCell(element.outputStart, element.outputEnd)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(elementText(element))}</td><td>${htmlEscape(element.description || "")}</td><td class="ctx">${htmlEscape(contextFor(element.start, element.end))}</td></tr>`
+        `<tr><td>${timeCell(element.start)}–${formatClock(element.end)}</td><td>${finalCell(element.outputStart, element.outputEnd)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(elementMotion(element))}</td><td>${htmlEscape(elementText(element))}</td><td>${htmlEscape(element.description || "")}</td><td class="ctx">${htmlEscape(contextFor(element.start, element.end))}</td></tr>`
     )
     .join("");
   const chapters = (plan.chapters || [])
@@ -2113,6 +2447,50 @@ function planHtml(plan, project, transcript = null) {
     })
     .join("");
 
+  function elementMotion(element) {
+    if (isCustomElement(element)) {
+      const component = String(element.component || "").trim();
+      return component ? `custom:${component}` : "custom";
+    }
+    return elementTemplate(element, elementText(element), element.data || element);
+  }
+  const motionGroups = plannedMotions(plan);
+  const motionRows = motionGroups
+    .map((group) => {
+      const info = motionTemplateInfo(group.template);
+      const label = group.component ? `custom:${group.component}` : info?.label || group.template;
+      const description = group.component
+        ? "Componente reutilizável em style/components."
+        : info?.description || "";
+      const shown = group.items.slice(0, 4);
+      const times = `${shown.map((item) => `${formatClock(item.start)}–${formatClock(item.end)}`).join(", ")}${
+        group.items.length > shown.length ? ` +${group.items.length - shown.length}` : ""
+      }`;
+      const sample = group.items.map((item) => elementText(item)).find(Boolean) || "";
+      return `<tr><td>${motionPreviewHtml(group.template, sample)}</td><td><strong>${htmlEscape(label)}</strong><br /><span class="ctx">${htmlEscape(description)}</span></td><td>${group.count}</td><td class="ctx">${htmlEscape(times)}</td><td>${htmlEscape(sample)}</td></tr>`;
+    })
+    .join("");
+  const components = listReusableComponents(project);
+  const componentRows = components
+    .map(
+      (component) =>
+        `<tr><td><code>${htmlEscape(component.name)}</code></td><td>${htmlEscape(component.scope)}</td><td class="ctx">${htmlEscape(component.dir)}</td></tr>`
+    )
+    .join("");
+  const usedTemplates = new Set(motionGroups.map((group) => group.template));
+  const templateRows = MOTION_TEMPLATES.map(
+    (template) =>
+      `<tr><td><code>${htmlEscape(template.id)}</code></td><td>${htmlEscape(template.label)}</td><td class="ctx">${htmlEscape(template.description)}</td><td>${usedTemplates.has(template.id) ? "sim" : "—"}</td></tr>`
+  ).join("");
+  const cutsCount = (plan.cuts || []).length;
+  const keepsCount = (plan.keeps || []).length;
+  const cutsHeading = cutsCount ? `Cortes (${cutsCount})` : keepsCount ? `Edição por seleção (${keepsCount} trechos)` : "Cortes (0)";
+  const cutsEmpty = cutsCount
+    ? ""
+    : keepsCount
+      ? `<p class="empty">Nenhum corte explícito. A edição mantém ${keepsCount} trechos do bruto e descarta o resto; a duração final vem da soma dos trechos.</p>`
+      : `<p class="empty">Nenhum corte.</p>`;
+
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -2139,6 +2517,32 @@ function planHtml(plan, project, transcript = null) {
     .ctx { color:var(--muted); font-size:13px; }
     .final { color:var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
     .text-review td:nth-child(3) { font-weight:600; }
+    .mp { width:150px; height:64px; border:1px solid var(--line); border-radius:8px; background:#0a0d14; display:flex; align-items:center; justify-content:center; gap:5px; padding:8px; overflow:hidden; font-size:11px; }
+    .mp strong { font-size:12px; line-height:1.1; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mp span { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
+    .mp i { display:block; height:2px; width:28px; background:var(--accent); }
+    .mp-title { flex-direction:column; align-items:flex-start; }
+    .mp-chapter { flex-direction:column; align-items:flex-start; }
+    .mp-chapter span { color:var(--accent); }
+    .mp-diagram b { width:16px; height:16px; border-radius:50%; background:color-mix(in srgb, var(--accent) 25%, transparent); border:1px solid var(--accent); display:flex; align-items:center; justify-content:center; font-size:9px; }
+    .mp-diagram i { width:10px; height:1px; background:var(--accent); }
+    .mp-list { justify-content:flex-start; }
+    .mp-list span { color:var(--accent); font-family:monospace; }
+    .mp-lt { justify-content:flex-start; gap:8px; }
+    .mp-lt > i { width:3px; height:28px; background:var(--accent); }
+    .mp-lt div { display:flex; flex-direction:column; }
+    .mp-emphasis strong { color:var(--accent); }
+    .mp-terminal { justify-content:flex-start; font-family:monospace; background:#05070b; color:#a7f3d0; }
+    .mp-terminal span { color:var(--accent); font-size:14px; }
+    .mp-callout { justify-content:flex-start; border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); }
+    .mp-callout b { color:var(--accent); }
+    .mp-broll { background:linear-gradient(135deg, #1e293b, #0a0d14); }
+    .mp-broll span { color:var(--accent); font-size:16px; }
+    .mp-zoom { border-style:dashed; }
+    .mp-zoom span { color:var(--accent); font-size:24px; }
+    .mp-transition { background:linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .mp-transition i { width:100%; height:2px; background:#fff; opacity:.6; }
+    .mp-custom { font-family:monospace; color:var(--accent); }
   </style>
 </head>
 <body>
@@ -2148,11 +2552,14 @@ function planHtml(plan, project, transcript = null) {
     ${mediaRel ? `<video id="player" class="player" controls preload="metadata" src="${mediaRel}"></video>` : ""}
     ${plan.summary ? `<div class="summary">${htmlEscape(plan.summary)}</div>` : ""}
     <p class="meta">O player e a coluna <strong>No bruto</strong> mostram a gravação original. A coluna <strong>No corte</strong> mostra onde o beat aparece no vídeo final.</p>
-    <section><h2>Camada criativa</h2><p>Elementos visuais: ${elementsList.length}${brollCount ? ` (b-roll: ${brollCount})` : ""}<br />Música: ${plan.music?.src ? htmlEscape(plan.music.src) : "nenhuma"}</p>${noVisualElements ? `<p class="empty">Sem elementos visuais. Adicione letreiros, b-roll ou gráficos, ou registre um corte limpo em <code>notes</code>.</p>` : ""}${noMusic ? `<p class="empty">Sem música. Adicione uma faixa ou registre "no music requested" em <code>notes</code>.</p>` : ""}</section>
-    ${motionMixRows ? `<section><h2>Motion mix (source)</h2><table><thead><tr><th>Capítulo</th><th>Janela</th><th>Beats</th><th>Mix</th></tr></thead><tbody>${motionMixRows}</tbody></table><p class="meta">Use b-roll para evidência real; para conceitos, prefira diagram/counter/emphasis/custom.</p></section>` : ""}
-    <section><h2>Cortes (${(plan.cuts || []).length})</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th><th>Contexto</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="empty">Nenhum corte.</p>`}</section>
+    <section><h2>Camada criativa</h2><p>Elementos visuais: ${elementsList.length}${brollCount ? ` (b-roll: ${brollCount})` : ""}<br />Motions: ${motionGroups.length} tipo(s)<br />Música: ${plan.music?.src ? htmlEscape(plan.music.src) : "nenhuma"}</p>${noVisualElements ? `<p class="empty">Sem elementos visuais. Adicione letreiros, b-roll ou gráficos, ou registre um corte limpo em <code>notes</code>.</p>` : ""}${noMusic ? `<p class="empty">Sem música. Adicione uma faixa ou registre "no music requested" em <code>notes</code>.</p>` : ""}</section>
+    ${motionRows ? `<section><h2>Motions planejados (${motionGroups.length} tipos)</h2><table><thead><tr><th>Amostra</th><th>Motion</th><th>Qtd</th><th>Onde</th><th>Exemplo</th></tr></thead><tbody>${motionRows}</tbody></table><p class="meta">Motion é o template visual do elemento. <code>custom</code> usa um componente reutilizável em <code>style/components/</code>.</p></section>` : ""}
+    ${componentRows ? `<section><h2>Componentes reutilizáveis (${components.length})</h2><table><thead><tr><th>Componente</th><th>Escopo</th><th>Pasta</th></tr></thead><tbody>${componentRows}</tbody></table></section>` : ""}
+    <section><h2>Templates disponíveis</h2><table><thead><tr><th>Id</th><th>Nome</th><th>O que faz</th><th>Usado neste plano</th></tr></thead><tbody>${templateRows}</tbody></table></section>
+    ${motionMixRows ? `<section><h2>Ritmo por capítulo</h2><table><thead><tr><th>Capítulo</th><th>Janela</th><th>Beats</th><th>Mix</th></tr></thead><tbody>${motionMixRows}</tbody></table><p class="meta">Use b-roll para evidência real; para conceitos, prefira diagram/counter/emphasis/custom.</p></section>` : ""}
+    <section><h2>${cutsHeading}</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th><th>Contexto</th></tr></thead><tbody>${cuts}</tbody></table>` : cutsEmpty}</section>
     ${keeps ? `<section><h2>Trechos mantidos (${(plan.keeps || []).length})</h2><table><thead><tr><th>Tempo</th><th>Motivo</th></tr></thead><tbody>${keeps}</tbody></table></section>` : ""}
-    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>No bruto</th><th>No corte</th><th>Tipo</th><th>Texto</th><th>Descrição</th><th>Contexto</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
+    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>No bruto</th><th>No corte</th><th>Tipo</th><th>Motion</th><th>Texto</th><th>Descrição</th><th>Contexto</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
     ${textReview ? `<section><h2>Textos para revisar</h2><table class="text-review"><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto em tela</th></tr></thead><tbody>${textReview}</tbody></table></section>` : ""}
     ${chapters ? `<section><h2>Capítulos</h2><table><thead><tr><th>No bruto</th><th>No corte</th><th>Título</th></tr></thead><tbody>${chapters}</tbody></table></section>` : ""}
     <p class="gate">Aprove este plano antes de criar a timeline e renderizar.${mediaRel ? " Clique em um tempo para pular o player." : ""}</p>
@@ -2180,7 +2587,7 @@ function styleProofCommand(args) {
   const project = resolveProject(projectSlugFromArg(args));
   if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
 
-  const profile = resolveProfile(project.config.profile) || {};
+  const profile = resolveProfile(project.config.profile, project.channel) || {};
   const theme = themeFromProfile(profile);
   const format = project.config.format || { width: 1920, height: 1080, fps: 30, aspect: "16:9" };
   const stylePath = path.join(project.dir, "style.md");
@@ -2752,6 +3159,73 @@ function planCommand(args) {
   console.log(`\n  ${errors.length} error(s), ${warnings.length} warning(s)`);
   console.log("\n  The plan must be approved before building.");
   process.exit(errors.length ? 1 : 0);
+}
+
+function motionsCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, null) : null;
+  const planned = plan ? plannedMotions(plan) : [];
+  const components = listReusableComponents(project);
+
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          project: project.slug,
+          plan: plan ? planPath : null,
+          planned: planned.map((group) => ({
+            template: group.template,
+            component: group.component || null,
+            count: group.count,
+            items: group.items.map((element) => ({
+              id: element.id,
+              type: element.type || "",
+              start: element.start,
+              end: element.end,
+              text: elementText(element) || "",
+            })),
+          })),
+          components,
+          templates: MOTION_TEMPLATES,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  heading("Motions");
+  if (!plan) {
+    console.log(`  No plan at ${planPath}. Showing reusable components and built-in templates.`);
+  } else if (!planned.length) {
+    console.log("  The plan has no visual elements.");
+  } else {
+    console.log("  Planned:");
+    for (const group of planned) {
+      const info = motionTemplateInfo(group.template);
+      const label = group.component ? `custom:${group.component}` : info?.label || group.template;
+      const shown = group.items.slice(0, 4);
+      const where = shown.map((element) => `${formatClock(element.start)}–${formatClock(element.end)}`).join(", ");
+      const more = group.items.length > shown.length ? ` +${group.items.length - shown.length}` : "";
+      console.log(`    ${label.padEnd(24)} ${String(group.count).padStart(2)}  ${where}${more}`);
+    }
+  }
+
+  console.log("\n  Reusable components:");
+  if (!components.length) {
+    console.log("    (none)");
+  } else {
+    for (const component of components) {
+      console.log(`    ${component.name.padEnd(24)} ${component.scope.padEnd(16)} ${component.dir}`);
+    }
+  }
+
+  console.log("\n  Built-in templates:");
+  for (const template of MOTION_TEMPLATES) {
+    console.log(`    ${template.id.padEnd(24)} ${template.label.padEnd(18)} ${template.description}`);
+  }
 }
 
 function textcheckCommand(args) {
@@ -3606,14 +4080,18 @@ function checkRoot(args) {
 // build
 // ---------------------------------------------------------------------------
 
-function resolveProfile(profileId) {
+function resolveProfile(profileId, channelId) {
   const id = profileId || "minimal";
-  const candidates = [
+  const candidates = [];
+  if (channelId) {
+    candidates.push(path.join(WORKSPACE, "channels", channelId, "profiles", id, "profile.json"));
+  }
+  candidates.push(
     path.join(WORKSPACE, "profiles", id, "profile.json"),
     path.join(ROOSTER_HOME, "profiles", id, "profile.json"),
     path.join(SKILL_ROOT, "templates", "profiles", id, "profile.json"),
-    path.join(SKILL_ROOT, "templates", "profiles", "minimal", "profile.json"),
-  ];
+    path.join(SKILL_ROOT, "templates", "profiles", "minimal", "profile.json")
+  );
   for (const candidate of candidates) {
     const data = readJson(candidate, null);
     if (data) return data;
@@ -5243,7 +5721,7 @@ function buildHyperFrames(project, plan, args) {
   const finalPlan = { ...remapped.plan, duration: base.duration };
   resolveCustomElements(project, finalPlan);
   copyElementAssets(project.dir, finalPlan, path.join(engineDir, "assets"), "assets/");
-  const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
 
   writeText(path.join(engineDir, "index.html"), renderHyperFramesHtml(project, finalPlan, theme, base));
   writeJson(path.join(engineDir, "hyperframes.json"), {
@@ -5442,7 +5920,7 @@ function buildRemotion(project, plan, args) {
   const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args, "public/assets");
   const finalPlan = { ...remapped.plan, duration: base.duration };
   copyElementAssets(project.dir, finalPlan, assetsDir, "assets/");
-  const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
   const fps = Number(finalPlan.format?.fps || project.config.format?.fps) || 30;
   const enrichedPlan = {
     ...finalPlan,
@@ -6520,7 +6998,7 @@ function buildFilmCraft(project, plan, args) {
   ensureDir(paths.elementsDir);
 
   const remapped = planForBuild(plan, args);
-  const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
   const engine = filmCraftElementEngine(args, plan, project);
   const format = remapped.plan.format || project.config.format || {};
   const fps = Number(format.fps) || 30;
@@ -6792,7 +7270,7 @@ function buildCommand(args) {
   }
 
   const engineDir = path.join(project.dir, "engine", engine);
-  const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
   const resolvedEngine = engineVersion(engine, {
     workspace: WORKSPACE,
     cwd: engineDir,
@@ -7660,7 +8138,7 @@ async function render(args) {
   const height = Number(format.height) || 1080;
   const duration = Number(plan.duration) || 0;
 
-  const profile = resolveProfile(config.profile);
+  const profile = resolveProfile(config.profile, config.channel);
   const theme = themeFromProfile(profile);
   const info = engineVersion(engine, {
     workspace: WORKSPACE,
@@ -7854,7 +8332,7 @@ Commands:
   open <slug> [--project] [--print] Open assets/source or the project folder
   paths <slug> [--json]           Show bruto/estilo/trabalho/final paths
   list [--json]                   List channels, projects, and profiles
-  channel list|show|new|set|use   Manage channels and their defaults
+  channel list|show|new|design|set|use Manage channels, their defaults, and their identity
   check <slug> [--json]           Validate project and timeline
   check [--json]                  Validate the root project (no slug)
   config [show|path|get|set]      Workspace defaults and asset/TTS policy
@@ -7862,6 +8340,7 @@ Commands:
   digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check]           Validate, show, and write edit/plan.html + qa/plan-review.md
+  motions [slug] [--json]         List planned motions, reusable components, and built-in templates
   textcheck <slug>                Write qa/text-review.md with on-screen text
   styleproof <slug> [--open]      Write style/proof/index.html with 3 frames
   captions <slug> [options]       Generate SRT/VTT from the transcript
@@ -8056,7 +8535,7 @@ New project options:
   --target <id>                   auto | hyperframes | remotion | filmcraft
   --engine <id>                   auto | hyperframes | remotion | ffmpeg
   --format <aspect>               16:9 | 9:16 | 1:1 | 4:5 (default: channel)
-  --duration <seconds>            Target duration for this project (default: 60)
+  --duration <seconds>            Optional declared target. Omit it to let the edit define the length.
   --language <code>               Language (default: channel language)
   --source <id>                   live | generated | hybrid
   --voice <id>                    user | tts | none
@@ -8084,6 +8563,20 @@ Channel options:
   --allow-generate <bool>         Allow generated media
   --license-policy <id>           strict | permissive
 
+Channel design options:
+  --from <id>                     Base profile (default: channel profile or minimal)
+  --name <name>                   Profile display name
+  --description <text>            Short identity description
+  --bg/--fg/--muted <hex>         Base colors, e.g. #0b0f19
+  --accent/--accent2 <hex>        Accent colors, e.g. #22d3ee
+  --display/--body/--mono <font>  Typography families
+  --motion <feel>                 Motion feel, e.g. calm | snappy | cinematic
+  --music <style>                 Music style, e.g. ambient | energetic | none
+  --sfx <style>                   SFX density, e.g. subtle | marked | none
+  --style <text>                  Visual prompt for generated assets
+  --negative <text>               What to avoid
+  --force                         Update or overwrite an existing channel profile
+
 Environment:
   ROOSTER_WORKSPACE               Workspace path (default: ./rooster)
   ROOSTER_HOME                    Global library (default: ~/.rooster)
@@ -8095,9 +8588,11 @@ Environment:
 
 Examples:
   node scripts/rooster.mjs init
-  node scripts/rooster.mjs channel new en-tech --language en --format 16:9 --profile tech-neon --voice tts
-  node scripts/rooster.mjs new video-x --channel en-tech --duration 60
-  node scripts/rooster.mjs open en-tech/video-x
+  node scripts/rooster.mjs channel new meu-canal --language pt-BR --format 16:9 --profile minimal --voice tts
+  node scripts/rooster.mjs channel design meu-canal --from minimal --accent "#e4572e" --display Inter --motion calm
+  node scripts/rooster.mjs new video-x --channel meu-canal
+  node scripts/rooster.mjs new video-x --channel meu-canal --duration 60  # only with a declared target
+  node scripts/rooster.mjs open meu-canal/video-x
   node scripts/rooster.mjs config set assets.strategy user
   node scripts/rooster.mjs profile fork minimal --as my-brand
   node scripts/rooster.mjs digest en-tech/video-x --from 0 --to 60
@@ -8571,6 +9066,9 @@ async function main() {
       return;
     case "plan":
       planCommand(args);
+      return;
+    case "motions":
+      motionsCommand(args);
       return;
     case "textcheck":
       textcheckCommand(args);
