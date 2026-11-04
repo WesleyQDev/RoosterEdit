@@ -215,6 +215,7 @@ The `style/proof/index.html` file is the review artifact; `proof.json` records w
   "style": "style.md",
   "language": "pt-BR",
   "duration": 612.4,
+  "editMode": "cleanup",
   "summary": "What the video is about",
   "music": {
     "src": "assets/licensed/music/theme.mp3",
@@ -237,6 +238,8 @@ The `style/proof/index.html` file is the review artifact; `proof.json` records w
 ```
 
 Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
+
+`editMode` defaults to `cleanup`. A plan that uses `keeps` must set `editMode: "condensed"`; `plan --check` rejects the combination otherwise.
 
 `music` is optional; when present, `src` is required and is relative to the project. `gainDb` defaults to `-18`.
 

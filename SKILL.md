@@ -223,11 +223,12 @@ Ask only the questions that change the output. Read `references/intake.md` for t
 | Voice | `user`, `tts`, `none` |
 | Style | `user`, `profile`, `ai`, `reference` |
 | Autonomy | `auto`, `guided`, `manual` |
+| Edit mode | `cleanup` (default), `condensed` |
 | Platform / aspect | YouTube 16:9, Shorts/Reels/TikTok 9:16, square 1:1, custom |
 | Length | Short (<60s), mid (1–5 min), long (>5 min) |
 | Engine | `auto`, `hyperframes`, `remotion`, `ffmpeg` |
 
-Do not interrogate the user with all of them at once. Infer sensible defaults from the brief and confirm the ones that are expensive to change later (aspect ratio, profile, voice, engine). Do not ask for a duration unless the user declares a target.
+Do not interrogate the user with all of them at once. Infer sensible defaults from the brief and confirm the ones that are expensive to change later (aspect ratio, edit mode, profile, voice, engine). Default to `cleanup`; a `condensed` highlight needs explicit approval. Do not ask for a duration unless the user declares a target.
 
 ## Step 3 - Resolve the channel and profile
 
@@ -289,7 +290,7 @@ Build `assets/manifest.json` with:
 
 Never delete or overwrite the user's originals. Prefer copying or linking into the workspace. If a file is missing, say so before building around it.
 
-For footage-driven projects, run transcription and analysis through `transcript-analyst` (HyperFrames/Parakeet, whisper.cpp, or the Whisper CLI). It writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`, and returns duration, topics, beats, and flags. Then have `editor` write `edit/plan.json` from the analysis, `style.md`, and the brief; get approval before opening the engine. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
+For footage-driven projects, run transcription and analysis through `transcript-analyst` (HyperFrames/Parakeet, whisper.cpp, or the Whisper CLI). It writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`, and returns duration, topics, beats, and flags. Then have `editor` write `edit/plan.json` from the analysis, `style.md`, and the brief; get approval before opening the engine. Default to `editMode: "cleanup"`: keep the full story and use `cuts`, with `silence <slug> --json` as the baseline for silence. Use `keeps` only when the user approved a condensed or highlight version and the plan says `editMode: "condensed"`. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
 
 ## Step 6 — Choose and drive the engine
 
@@ -529,6 +530,7 @@ node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" styleproof en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x
 node "<skill>/scripts/rooster.mjs" motions en-tech/video-x
+node "<skill>/scripts/rooster.mjs" silence en-tech/video-x --min 0.8
 node "<skill>/scripts/rooster.mjs" textcheck en-tech/video-x
 # Advanced layers: see references/professional-elements.md
 node "<skill>/scripts/rooster.mjs" check en-tech/video-x

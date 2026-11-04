@@ -87,6 +87,18 @@ The edit plan is the bridge between the transcript analysis and the build. It is
 }
 ```
 
+## Edit mode
+
+Set `editMode` at the top of the plan:
+
+| Value | Use | Model |
+|---|---|---|
+| `cleanup` (default) | Keep the full story; remove silence, filler, false starts, and abandoned retakes. | `cuts` |
+| `condensed` | Highlight or short version; select the best spans. Requires explicit user approval. | `keeps` |
+| `manual` | The user supplied an EDL; do not add cuts. | either |
+
+Do not mix `cuts` and `keeps` in one plan. `plan --check` rejects `keeps` without `editMode: "condensed"` and warns when cleanup removes more than 25% of the source.
+
 ## Cut reasons
 
 Use consistent values so the plan can be reviewed and automated:
@@ -102,7 +114,7 @@ Use consistent values so the plan can be reviewed and automated:
 | `off-topic` | Does not serve the story |
 | `manual` | User requested a cut |
 
-A cut is a removal from the source. If the plan instead describes what to keep, use `keeps`. Do not mix the two models in the same plan; pick one and state it in `notes`.
+A cut is a removal from the source. Cleanup uses `cuts`. A condensed edit uses `keeps`. Do not mix the two models in the same plan; pick one and state it in `editMode`.
 
 ## Element types
 
@@ -297,12 +309,31 @@ Captions are not generated automatically by `build` in this version. If the vide
 
 ### Cuts
 
+Cleanup is the default. Do not turn a long recording into a highlight unless the user explicitly asked for a shorter version and the plan says `editMode: "condensed"`.
+
 - Remove pauses longer than 0.7–1.0 s, unless the pause is dramatic.
 - Remove repeated takes; keep the last or strongest one.
 - Remove false starts and self-corrections when they do not add personality.
 - Remove filler words, but do not make the speaker sound unnatural.
 - Keep breaths and reactions that carry emotion.
 - Do not cut every pause; rhythm needs air.
+
+### Silence cleanup
+
+Use the transcript as the baseline for cleanup:
+
+```bash
+node "<skill>/scripts/rooster.mjs" silence <slug> --json
+node "<skill>/scripts/rooster.mjs" silence <slug> --min 0.8 --pad 0.08
+```
+
+The command proposes `cuts` with `reason: "long-pause"` for every gap between transcript segments above `--min`, plus leading and trailing dead air. It is a dry run by default. Review the list, remove false positives (music-only beats, dramatic pauses, room tone that belongs in the edit), then write it:
+
+```bash
+node "<skill>/scripts/rooster.mjs" silence <slug> --write
+```
+
+`--write` merges the new cuts into `edit/plan.json`, sets `editMode: "cleanup"`, and leaves existing non-silence cuts alone. If the plan already uses `keeps`, it refuses unless you pass `--force`; `--replace` discards the existing cuts before writing. Do not invent silence cuts by hand when the transcript can produce them.
 
 ### Elements
 

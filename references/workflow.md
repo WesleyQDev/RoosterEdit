@@ -44,6 +44,7 @@ Capture:
 - goal and audience;
 - platform and aspect ratio;
 - declared duration, only when the user set a target; otherwise the edit defines it;
+- edit mode (`cleanup` default; `condensed` only with explicit approval);
 - source mode (`live`, `generated`, `hybrid`);
 - voice mode (`user`, `tts`, `none`);
 - style mode (`user`, `profile`, `ai`, `reference`);
@@ -101,7 +102,7 @@ The script should include:
 - visual notes for each beat;
 - the hook and the CTA.
 
-For a faceless explainer, the script is the spine. For a talking-head video, the transcript is the spine and the script is a paper edit. For a 3D short, the script may be a narration track plus a shot list.
+For a faceless explainer, the script is the spine. For a talking-head video, the transcript is the spine and the script is a paper edit; the plan still defaults to `cleanup` unless the user approved a `condensed` version. For a 3D short, the script may be a narration track plus a shot list.
 
 Exit criteria: the user approves the story, or the `auto` mode logs the decision and moves on.
 

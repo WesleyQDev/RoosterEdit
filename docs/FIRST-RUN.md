@@ -145,6 +145,8 @@ O `project.json` registra `channel` e `overrides`, então dá para ver o que vei
 
 Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug>`, que gera `edit/plan.md`, `edit/plan.html` e `qa/plan-review.md`. Se o harness permitir exibir arquivos, ele abre o HTML no preview; se não, mostra o resumo no chat. O pedido de aprovação vem com o marcador de etapa, por exemplo: **"Etapa 4/8 - Plano pronto. Posso seguir com a timeline?"**
 
+Por padrão o plano usa `editMode: "cleanup"`: mantém o vídeo inteiro e corta só silêncio, vícios de fala, falsos começos e retakes abandonados. O comando `silence <slug>` propõe esses cortes a partir da transcrição. Uma versão encurtada (`condensed`, com `keeps`) só acontece se você pedir explicitamente.
+
 As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta. Comece em `guided` nos primeiros vídeos e mude para `auto` quando o estilo estiver estável.
 
 Na etapa 6, antes de criar o projeto do engine, o agente pergunta como montar: **HyperFrames** (padrão, já pronto), **Remotion** (React/3D; precisa de `npm install` com a sua permissão) ou **FilmCraft** (timeline editável; precisa conectar o MCP e reiniciar o agente). Se você já escolheu um engine, ele só confirma; se você disse "auto", ele decide e explica. Nada é instalado nem configurado sem a sua autorização.
@@ -173,6 +175,7 @@ O projeto manda em tudo. O canal é o contexto estável; não há camada de cate
 - Exemplos ou opções prontas de assunto na pergunta do canal — deixe o usuário descrever.
 - Um questionário com 12 campos — pergunte só o que o canal produz e infira o resto.
 - Duração do canal ou duração padrão do projeto — a duração é resultado da edição.
+- Transformar o vídeo em um highlight sem você pedir — o padrão é limpeza (só silêncio e vícios).
 - Categoria, preset ou receita — esse conceito não existe.
 - As mesmas perguntas do canal em todo projeto — herde e confirme só o que mudou.
 

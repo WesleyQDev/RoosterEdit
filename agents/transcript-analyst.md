@@ -33,7 +33,7 @@ Do not read the plan, engine code, or render logs.
 ```
 
 5. Propose 10–20 story beats, not one beat per sentence. A beat is a unit of meaning that earns its own scene.
-6. Propose cut candidates separately from beats: silences, filler words, retakes, tangents. Removing them is an editorial proposal, not a command.
+6. Propose cut candidates separately from beats: silences, filler words, retakes, and dead-air gaps, each with in/out points and a reason. This is the cleanup baseline; do not select highlights or a shorter cut — the editor decides cleanup vs condensed.
 7. Flag claims that need verification, speakers that need identification, and audio problems that will affect the edit.
 
 ## Quality bar

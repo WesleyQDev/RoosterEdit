@@ -61,7 +61,7 @@ Read `references/link-ingest.md` before downloading.
 Ask at most three questions:
 
 1. What is the video about, and who is it for?
-2. Where will it be published? If you have a declared length, tell me; otherwise the edit defines it.
+2. Where will it be published? Is this the full video with pauses removed, or a shorter highlight? If you have a declared length, tell me; otherwise the edit defines it.
 3. Do you have footage/assets, or should everything be generated?
 
 Then propose a default plan and ask for correction.
@@ -73,6 +73,8 @@ Then propose a default plan and ask for correction.
 | "Just make it", "surprise me", "no stops" | `auto` |
 | "Show me before rendering", "I want to approve" | `guided` |
 | "Here is my script/EDL, follow it" | `manual` |
+| "Just remove the pauses/filler" | `cleanup` |
+| "Make a shorter version / highlight reel" | `condensed` |
 | "I have 40 minutes of footage" | `live`, likely `guided` |
 | "No recording, use TTS" | `generated`, `tts` |
 | "Use my brand" | `style: user` or `profile` |
@@ -85,6 +87,7 @@ Do not infer format, voice, or engine from a content label. Read the project's c
 
 - format;
 - declared duration, when the user set one;
+- edit mode: `cleanup` unless the user asked for a shorter or highlight version (`condensed`);
 - profile;
 - source and voice;
 - engine and autonomy;

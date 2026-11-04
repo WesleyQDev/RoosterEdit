@@ -108,6 +108,8 @@ Peça ao agente algo como "quero fazer um vídeo sobre tal assunto". Ele cria o 
 
 Você revisa, aprova e ele segue para o preview e o render. Comece com autonomia `guided` nos primeiros vídeos: o agente mostra o style proof, o plano e o preview antes de seguir. Quando o estilo estiver estável, mude o canal para `auto`. O passo a passo está em [`docs/FIRST-RUN.md`](docs/FIRST-RUN.md).
 
+Por padrão o plano faz **limpeza**: mantém o vídeo inteiro e remove só silêncio, vícios de fala e retakes abandonados. Uma versão encurtada só é feita se você pedir.
+
 ## Motores
 
 O HyperFrames é melhor para HTML, CSS, GSAP, motion graphics e vídeos para redes sociais. O Remotion é melhor quando o projeto pede React, componentes e 3D.

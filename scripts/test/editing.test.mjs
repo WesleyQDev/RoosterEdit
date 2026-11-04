@@ -8,11 +8,13 @@ import {
   elementText,
   keepsFromPlan,
   layoutCollisionWarnings,
+  mergeSilenceCuts,
   motionMix,
   orphanCutWarnings,
   planQualityReport,
   remapTime,
   shortKeepWarnings,
+  silenceCuts,
   textGroundingWarnings,
   visualGaps,
 } from "../features/editing.mjs";
@@ -290,4 +292,53 @@ test("planQualityReport aggregates density, support and grounding warnings", () 
   assert.ok(report.warnings.some((warning) => warning.type === "density"));
   assert.ok(report.warnings.some((warning) => warning.type === "support"));
   assert.ok(report.warnings.some((warning) => warning.type === "text"));
+});
+
+test("silenceCuts proposes padded cuts for leading, middle and trailing gaps", () => {
+  const cuts = silenceCuts(
+    {
+      segments: [
+        { start: 1, end: 2, text: "primeiro" },
+        { start: 3, end: 4, text: "segundo" },
+      ],
+    },
+    { min: 0.8, pad: 0.08, duration: 10 }
+  );
+  assert.equal(cuts.length, 3);
+  assert.deepEqual(cuts.map((cut) => [cut.start, cut.end]), [
+    [0.08, 0.92],
+    [2.08, 2.92],
+    [4.08, 10],
+  ]);
+  assert.ok(cuts.every((cut) => cut.reason === "long-pause"));
+  assert.ok(cuts.every((cut) => cut.id.startsWith("silence-")));
+});
+
+test("silenceCuts ignores gaps below the threshold and clamps padding", () => {
+  const cuts = silenceCuts(
+    {
+      segments: [
+        { start: 0, end: 1, text: "a" },
+        { start: 1.2, end: 2, text: "b" },
+      ],
+    },
+    { min: 0.8, pad: 5, duration: 2 }
+  );
+  assert.deepEqual(cuts, []);
+});
+
+test("mergeSilenceCuts joins overlaps and keeps separate cuts", () => {
+  const merged = mergeSilenceCuts(
+    [{ start: 1, end: 2, reason: "manual", note: "manual" }],
+    [
+      { start: 1.9, end: 3, reason: "long-pause", note: "gap" },
+      { start: 5, end: 6, reason: "long-pause", note: "tail" },
+    ]
+  );
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].start, 1);
+  assert.equal(merged[0].end, 3);
+  assert.equal(merged[0].reason, "mixed");
+  assert.equal(merged[1].start, 5);
+  assert.equal(merged[1].end, 6);
 });

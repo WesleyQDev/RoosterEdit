@@ -58,9 +58,11 @@ import {
   elementSupport,
   elementText,
   keepsFromPlan,
+  mergeSilenceCuts,
   motionMix,
   planQualityReport,
   remapTime,
+  silenceCuts,
 } from "./features/editing.mjs";
 import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./features/feedback.mjs";
 import { getBrollIndex } from "./lib/broll-index.mjs";
@@ -1940,11 +1942,36 @@ function validatePlan(plan, dir, options = {}) {
     if (!cut.reason) errors.push(`plan: cut "${cut.id || "?"}" missing reason`);
   }
 
+  const editMode = String(plan.editMode || "cleanup").toLowerCase();
+  const keepsCount = Array.isArray(plan.keeps) ? plan.keeps.length : 0;
+  const cutsCount = Array.isArray(plan.cuts) ? plan.cuts.length : 0;
+  if (!["cleanup", "condensed", "manual"].includes(editMode)) {
+    errors.push(`plan: unknown editMode "${plan.editMode}"; use cleanup, condensed, or manual`);
+  }
+  if (keepsCount && cutsCount) {
+    errors.push("plan: do not mix cuts and keeps; pick one edit model");
+  }
+  if (keepsCount && editMode !== "condensed" && editMode !== "manual") {
+    errors.push(
+      'plan: keeps is a highlight edit; set "editMode": "condensed" and confirm it with the user, or use cuts for silence cleanup'
+    );
+  }
+
   const sourceDuration =
     Number(plan.duration) ||
     (Array.isArray(plan.keeps) && plan.keeps.length
       ? Math.max(...plan.keeps.map((keep) => Number(keep.end) || 0))
       : 0);
+
+  if (editMode === "cleanup" && cutsCount && sourceDuration > 0) {
+    const kept = keepsFromPlan(plan).reduce((sum, keep) => sum + (keep.end - keep.start), 0);
+    const ratio = kept / sourceDuration;
+    if (ratio < 0.75) {
+      warnings.push(
+        `plan: cleanup mode keeps ${Math.round(ratio * 100)}% of the source; confirm this is silence/filler removal rather than a highlight edit`
+      );
+    }
+  }
 
   for (const element of plan.elements || []) {
     checkId(element.id, "element");
@@ -2045,6 +2072,7 @@ function printPlanSummary(plan, remapped = null) {
   heading(`Edit plan — ${plan.source || "(no source)"}`);
   if (plan.duration) console.log(`  Duration: ${formatClock(plan.duration)} (source)`);
   if (plan.outputDuration) console.log(`  Final:    ${formatClock(plan.outputDuration)} after cuts`);
+  if (plan.editMode) console.log(`  Mode:     ${plan.editMode}`);
   if (plan.style) console.log(`  Style:    ${plan.style}`);
   if (plan.summary) console.log(`  Summary:  ${plan.summary}`);
 
@@ -2164,6 +2192,7 @@ function planMarkdown(plan) {
   if (plan.duration) lines.push(`- Duration: ${formatClock(plan.duration)} (source)`);
   if (plan.outputDuration) lines.push(`- Final duration: ${formatClock(plan.outputDuration)} after cuts`);
   if (plan.style) lines.push(`- Style: ${plan.style}`);
+  if (plan.editMode) lines.push(`- Edit mode: ${plan.editMode}`);
   if (plan.summary) lines.push(`- Summary: ${plan.summary}`);
   const elements = plan.elements || [];
   const brollCount = elements.filter((element) => element.type === "broll").length;
@@ -2548,7 +2577,7 @@ function planHtml(plan, project, transcript = null) {
 <body>
   <main>
     <h1>Plano de edição</h1>
-    <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)} no bruto` : ""}${plan.outputDuration ? ` · ${formatClock(plan.outputDuration)} no corte final` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
+    <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)} no bruto` : ""}${plan.outputDuration ? ` · ${formatClock(plan.outputDuration)} no corte final` : ""}${plan.editMode ? ` · modo ${htmlEscape(plan.editMode)}` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
     ${mediaRel ? `<video id="player" class="player" controls preload="metadata" src="${mediaRel}"></video>` : ""}
     ${plan.summary ? `<div class="summary">${htmlEscape(plan.summary)}</div>` : ""}
     <p class="meta">O player e a coluna <strong>No bruto</strong> mostram a gravação original. A coluna <strong>No corte</strong> mostra onde o beat aparece no vídeo final.</p>
@@ -3225,6 +3254,73 @@ function motionsCommand(args) {
   console.log("\n  Built-in templates:");
   for (const template of MOTION_TEMPLATES) {
     console.log(`    ${template.id.padEnd(24)} ${template.label.padEnd(18)} ${template.description}`);
+  }
+}
+
+function silenceCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  if (!exists(transcriptPath)) fail(`No transcript at ${transcriptPath}. Run "transcribe ${project.slug}" first.`);
+  const transcript = readJson(transcriptPath, null);
+  if (!transcript) fail(`Invalid transcript JSON at ${transcriptPath}.`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, null) : null;
+  const lastSegment = (transcript.segments || []).reduce(
+    (max, segment) => Math.max(max, Number(segment.end) || 0),
+    0
+  );
+  const sourceDuration = Number(plan?.duration) || Number(project.config.format?.duration) || lastSegment;
+  const min = typeof args.min === "string" ? Number(args.min) : 0.8;
+  const pad = typeof args.pad === "string" ? Number(args.pad) : 0.08;
+  if (!Number.isFinite(min) || min <= 0) fail("--min must be a positive number of seconds.");
+  if (!Number.isFinite(pad) || pad < 0) fail("--pad must be a non-negative number of seconds.");
+
+  const cuts = silenceCuts(transcript, { min, pad, duration: sourceDuration });
+  const removed = cuts.reduce((sum, cut) => sum + (cut.end - cut.start), 0);
+  const finalDuration = Math.max(0, sourceDuration - removed);
+  let written = false;
+  let planCuts = cuts;
+
+  if (args.write) {
+    if (!plan) fail(`No plan at ${planPath}. Create the plan first.`);
+    if (Array.isArray(plan.keeps) && plan.keeps.length && !args.force) {
+      fail("Plan uses keeps (a highlight edit). Use --force to replace it with silence cuts, or edit the plan deliberately.");
+    }
+    const existing = Array.isArray(plan.cuts) ? plan.cuts : [];
+    planCuts = args.replace ? cuts : mergeSilenceCuts(existing, cuts);
+    plan.cuts = planCuts;
+    if (args.force || args.replace) plan.keeps = [];
+    plan.editMode = "cleanup";
+    writeJson(planPath, plan);
+    written = true;
+  }
+
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        { project: project.slug, sourceDuration, min, pad, cuts: planCuts, removed, finalDuration, written },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  heading("Silence cleanup");
+  console.log(`  source ${formatClock(sourceDuration)} · gaps >= ${min}s · pad ${pad}s`);
+  console.log(
+    `  proposed ${planCuts.length} cut(s) · ${formatClock(removed)} removed · final ~${formatClock(finalDuration)}`
+  );
+  const shown = planCuts.slice(0, 20);
+  for (const cut of shown) {
+    console.log(`  ${formatClock(cut.start)}–${formatClock(cut.end)}  ${cut.note || cut.reason}`);
+  }
+  if (planCuts.length > shown.length) console.log(`  … ${planCuts.length - shown.length} more`);
+  if (written) {
+    console.log(`\n  Wrote ${planPath} (editMode: cleanup).`);
+  } else {
+    console.log(`\n  Dry run. Add them with: silence ${project.slug} --write`);
   }
 }
 
@@ -8341,6 +8437,7 @@ Commands:
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check]           Validate, show, and write edit/plan.html + qa/plan-review.md
   motions [slug] [--json]         List planned motions, reusable components, and built-in templates
+  silence <slug> [--min <s>]      Propose cuts for silence/filler cleanup from the transcript
   textcheck <slug>                Write qa/text-review.md with on-screen text
   styleproof <slug> [--open]      Write style/proof/index.html with 3 frames
   captions <slug> [options]       Generate SRT/VTT from the transcript
@@ -9069,6 +9166,9 @@ async function main() {
       return;
     case "motions":
       motionsCommand(args);
+      return;
+    case "silence":
+      silenceCommand(args);
       return;
     case "textcheck":
       textcheckCommand(args);

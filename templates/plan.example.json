@@ -4,6 +4,7 @@
   "style": "style.md",
   "language": "pt-BR",
   "duration": 612.4,
+  "editMode": "cleanup",
   "summary": "Entrevista sobre começar um negócio depois de perder o emprego.",
   "music": {
     "src": "assets/licensed/music/theme.mp3",
@@ -26,14 +27,6 @@
       "reason": "retake",
       "note": "O próximo take é mais forte",
       "confidence": 0.95
-    }
-  ],
-  "keeps": [
-    {
-      "id": "keep-001",
-      "start": 18.2,
-      "end": 41.0,
-      "reason": "melhor explicação do problema"
     }
   ],
   "elements": [

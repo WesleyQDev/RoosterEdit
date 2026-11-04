@@ -874,3 +874,83 @@ function clock(seconds) {
   const s = total % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/**
+ * Propose cuts for silence cleanup from transcript gaps.
+ *
+ * Gaps between segments at or above `min` become `long-pause` cuts, padded by
+ * `pad` seconds on each side. Leading and trailing dead air are included when
+ * `duration` is known. The result is sorted by start time.
+ *
+ * @param {object} transcript
+ * @param {{min?:number,pad?:number,duration?:number}} [options]
+ * @returns {Array<{id:string,start:number,end:number,reason:string,note:string}>}
+ */
+export function silenceCuts(transcript, options = {}) {
+  const min = Number(options.min);
+  const pad = Number(options.pad);
+  const threshold = Number.isFinite(min) && min > 0 ? min : 0.8;
+  const padding = Number.isFinite(pad) && pad >= 0 ? pad : 0.08;
+  const duration = Number(options.duration) || 0;
+  const segments = (transcript?.segments || [])
+    .filter((segment) => Number.isFinite(Number(segment.start)) && Number.isFinite(Number(segment.end)))
+    .map((segment) => ({
+      start: Number(segment.start),
+      end: Number(segment.end),
+      text: String(segment.text || ""),
+    }))
+    .sort((a, b) => a.start - b.start);
+  const cuts = [];
+  const add = (start, end, note) => {
+    const from = Math.max(0, Number(Number(start).toFixed(3)));
+    const to = Math.max(from, Number(Number(end).toFixed(3)));
+    if (to - from < 0.2) return;
+    cuts.push({
+      id: `silence-${String(cuts.length + 1).padStart(3, "0")}`,
+      start: from,
+      end: to,
+      reason: "long-pause",
+      note,
+    });
+  };
+  let cursor = 0;
+  for (const segment of segments) {
+    const gap = segment.start - cursor;
+    if (gap >= threshold) {
+      const before = segment.text.trim().slice(0, 48);
+      add(cursor + padding, segment.start - padding, `gap ${Number(gap.toFixed(2))}s before "${before}"`);
+    }
+    cursor = Math.max(cursor, segment.end);
+  }
+  if (duration > cursor && duration - cursor >= threshold) {
+    add(cursor + padding, duration, `tail ${Number((duration - cursor).toFixed(2))}s`);
+  }
+  return cuts;
+}
+
+/**
+ * Merge incoming cuts into existing ones, joining overlaps and near-adjacent
+ * spans. Existing metadata is preserved; mixed reasons become "mixed".
+ *
+ * @param {Array<object>} existing
+ * @param {Array<object>} incoming
+ * @returns {Array<object>}
+ */
+export function mergeSilenceCuts(existing, incoming) {
+  const all = [...(existing || []), ...(incoming || [])]
+    .filter((cut) => cut && Number.isFinite(Number(cut.start)) && Number.isFinite(Number(cut.end)))
+    .map((cut) => ({ ...cut, start: Number(cut.start), end: Number(cut.end) }))
+    .sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const cut of all) {
+    const last = merged[merged.length - 1];
+    if (last && cut.start <= last.end + 0.05) {
+      last.end = Math.max(last.end, cut.end);
+      if (last.reason !== cut.reason) last.reason = "mixed";
+      last.note = [last.note, cut.note].filter(Boolean).join("; ");
+    } else {
+      merged.push({ ...cut });
+    }
+  }
+  return merged;
+}
