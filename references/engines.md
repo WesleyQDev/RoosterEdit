@@ -4,24 +4,29 @@ RoosterEdit is engine-agnostic. This document explains how to choose and drive e
 
 The two creative engines are **HyperFrames** and **Remotion**. FFmpeg is the media utility: it probes, cuts, burns captions, mixes audio, and assembles. It is not a third creative engine.
 
+**FilmCraft** is an optional timeline target, not a creative engine. It receives the base cut and audio mix from FFmpeg and transparent element clips from HyperFrames or Remotion, then assembles an editable project. It is never the default and is never required.
+
 ## Decision tree
 
 ```text
 Did the user explicitly choose an engine?
 ├─ Yes → use it, unless it cannot do the job; explain the tradeoff.
 └─ No
-   ├─ No Node or no FFmpeg?
-   │  └─ Produce the plan; explain that HyperFrames/Remotion need Node, and FFmpeg covers cuts/audio.
-   ├─ Is the core job cutting real footage?
-   │  ├─ Simple cuts, captions, audio → FFmpeg
-   │  └─ Complex overlays, data, React components → Remotion
-   ├─ Is it 3D?
-   │  ├─ React project or needs @remotion/three → Remotion
-   │  └─ HTML project or needs Three.js inside a web composition → HyperFrames
-   ├─ Is it HTML/CSS/GSAP, kinetic type, charts, maps, motion graphics?
-   │  └─ HyperFrames
-   └─ Is it React, data-driven, or component-heavy?
-      └─ Remotion
+   ├─ Does the user want an editable timeline to finish by hand (FilmCraft)?
+   │  ├─ Yes → --target filmcraft; HyperFrames or Remotion renders the element clips
+   │  └─ No
+   │     ├─ No Node or no FFmpeg?
+   │     │  └─ Produce the plan; explain that HyperFrames/Remotion need Node, and FFmpeg covers cuts/audio.
+   │     ├─ Is the core job cutting real footage?
+   │     │  ├─ Simple cuts, captions, audio → FFmpeg
+   │     │  └─ Complex overlays, data, React components → Remotion
+   │     ├─ Is it 3D?
+   │     │  ├─ React project or needs @remotion/three → Remotion
+   │     │  └─ HTML project or needs Three.js inside a web composition → HyperFrames
+   │     ├─ Is it HTML/CSS/GSAP, kinetic type, charts, maps, motion graphics?
+   │     │  └─ HyperFrames
+   │     └─ Is it React, data-driven, or component-heavy?
+   │        └─ Remotion
 ```
 
 The default is `auto`. Respect the user's preference when they have one.
@@ -38,13 +43,46 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 The build:
 
 - validates `edit/plan.json`;
-- applies the plan's cuts with FFmpeg;
+- applies the plan's cuts with FFmpeg, or reuses a cached base when the source, keeps, format, and mix are unchanged;
 - remaps element and chapter timings to the cut timeline;
 - copies the base media and element assets into the engine project;
 - writes a working composition for the chosen engine;
-- updates `project.json` with the engine and `preview` status.
+- writes `work/build-state.json` and updates `project.json` with the engine and `preview` status.
 
-Use `--force` to rebuild an existing engine project and `--no-cuts` to keep the original source timeline.
+Use `--force` to rebuild an existing engine project, `--if-needed` to skip when the build state is unchanged, `--rebuild-media` to force FFmpeg again, and `--no-cache` to bypass the cache. `--sample 3` now builds a short montage around the selected elements instead of the whole timeline.
+
+Render through the CLI so the cache key, quality tier, workers, frame cache, and probe are consistent:
+
+```bash
+node "<skill>/scripts/rooster.mjs" render meu-video --draft
+node "<skill>/scripts/rooster.mjs" render meu-video --final
+node "<skill>/scripts/rooster.mjs" render meu-video --draft --print
+```
+
+`--force` re-renders even when the key matches. HyperFrames accepts `--workers`, `--gpu`, `--resume`, and `--frames-cache-dir`; Remotion accepts `--concurrency`, `--gl`, and `--frames`.
+
+## FilmCraft (optional timeline target)
+
+FilmCraft is opt-in with `--target filmcraft` on `build` or `new`; the default target stays `auto`. The full set is `--target auto|hyperframes|remotion|filmcraft`. The build is hybrid:
+
+1. FFmpeg builds the base cut and audio mix, as it does for the other engines.
+2. HyperFrames or Remotion renders each visual element as its own transparent clip:
+   - HyperFrames: MOV ProRes 4444 with alpha, one composition per element.
+   - Remotion: ProRes 4444 with PNG frames and `yuva444p10le`, one composition per element.
+   Remotion needs a one-time `npm install` in `engine/filmcraft/remotion`; the build reports that path when the CLI is missing.
+3. FilmCraft assembles an editable `.fcproj`: source on V1 (video only), the mixed audio on A1, element clips on V2+ (greedy non-overlapping lanes), markers for chapters/elements/cuts, and captions when an SRT or VTT exists.
+
+```bash
+node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --engine hyperframes
+node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --engine remotion
+node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --if-needed
+node "<skill>/scripts/rooster.mjs" timeline meu-video --open
+node "<skill>/scripts/rooster.mjs" render meu-video --draft
+```
+
+`--engine hyperframes|remotion` selects the element renderer; `auto` picks Remotion for 3D elements and HyperFrames otherwise. The CLI is used for deterministic builds; the MCP server is for interactive editing and is not required for `build`. The project records `timeline: "filmcraft"` and `engine` as the element renderer.
+
+FilmCraft is MIT OR Apache-2.0 and still alpha; Windows is less tested. Read `references/nle-handoff.md` for the project layout, incremental builds, render, and caveats; read `references/timeline.md` for the adapter mapping.
 
 ## HyperFrames
 
@@ -273,13 +311,16 @@ It produces:
 
 The adapter must not invent editorial decisions. If the timeline is ambiguous, ask or fix the timeline first.
 
+FilmCraft is a build target, not an adapter in this sense: it consumes the same plan through FFmpeg and the element renderers, so the contract above still applies to HyperFrames and Remotion.
+
 ## Hybrid pipelines
 
 Mixing engines is allowed when it is the simplest path:
 
 - render a 3D scene in Remotion, composite it with footage in FFmpeg;
 - render motion graphics in HyperFrames, use FFmpeg for the final audio mix;
-- use FFmpeg to create proxies and Remotion for the final composition.
+- use FFmpeg to create proxies and Remotion for the final composition;
+- build a FilmCraft target: FFmpeg base plus HyperFrames/Remotion element clips, assembled into `.fcproj`.
 
 Document the pipeline in `project.json` under `pipeline` and keep intermediate files in `renders/intermediate/`.
 
@@ -291,6 +332,7 @@ Before using an engine API, check the installed version:
 node --version
 npx hyperframes --version
 npx remotion --version
+filmcraft-cli --version
 ffmpeg -version
 ```
 

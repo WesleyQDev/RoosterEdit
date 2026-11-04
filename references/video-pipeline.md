@@ -132,10 +132,10 @@ Save the result as `edit/transcript.json` (and optionally `.srt`). The transcrip
 The RoosterEdit CLI wraps both paths:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" transcribe meu-video --language pt --model small
+node "<skill>/scripts/rooster.mjs" transcribe meu-video --language pt --quality fast
 ```
 
-It prefers HyperFrames when available and falls back to the OpenAI Whisper CLI.
+It prefers Parakeet/sherpa-onnx when the language is covered, then faster-whisper, then whisper.cpp/OpenAI Whisper. `--quality fast` uses `base`, beam 1, and word timestamps only when captions are enabled; `balanced` uses `small` and `accurate` uses `medium`. Results are cached by source and options; rerunning without changes is instant.
 
 ### Plan
 
@@ -183,7 +183,7 @@ Build a HyperFrames project from the approved plan:
 node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
 ```
 
-The build applies the plan's cuts with FFmpeg, remaps the element timings, copies the media, and writes a working composition. Preview it in the browser. Review the cuts, captions, overlays, and audio. Render to `renders/final.mp4`.
+The build applies the plan's cuts with FFmpeg, remaps the element timings, copies the media, and writes a working composition. Base media and mixes are cached; `--if-needed` skips unchanged builds, and `--sample 3` builds a short montage for approval. Preview it in the browser. Review the cuts, captions, overlays, and audio. Render to `renders/final.mp4`.
 
 ### Option 2 — Remotion
 

@@ -209,9 +209,27 @@ Markers are useful for review and QA:
 - Translate captions into the `subtitles` filter or a sidecar file.
 - Translate audio into `amix`, `volume`, `sidechaincompress`, and `loudnorm`.
 
+### FilmCraft
+
+FilmCraft is an optional timeline target (`build --target filmcraft`), not a third creative engine. The adapter writes an editable project at `engine/filmcraft/<slug>.fcproj`:
+
+- **V1**: source video clips only, one clip per keep, in cut-timeline order.
+- **A1**: the mixed base audio (voice plus music) from FFmpeg.
+- **V2+**: one transparent element clip per renderable plan element, packed into the first free lane (greedy, non-overlapping).
+- **Markers**: chapters, elements, and cut boundaries.
+- **Captions**: imported from `edit/captions/*.srt` or `.vtt` on the first build.
+
+`zoom` elements are not standalone clips; they apply to the base and are skipped with a note. Track state lives in `work/filmcraft.json`, and element clips are cached in `cache/elements/<hash>.mov`.
+
+Incremental builds update only what changed: unchanged element clips are reused, a changed element is replaced in place when its time window is the same, and a changed base re-places only V1/A1. User clips on other tracks stay untouched. `--force` archives the previous `.fcproj` under `engine/filmcraft/archive/` before rebuilding.
+
+Open the result with `timeline <slug> --open`; `preview <slug>` points to the `.fcproj` when it exists. Read `references/nle-handoff.md` for export, caveats, and the difference from the EDL/FCPXML path.
+
 ## Review page
 
 `node "<skill>/scripts/rooster.mjs" preview <slug>` writes `preview/index.html` and prints the path. `--open` opens it when the harness has a browser. The page works without a build step or a server; it is a single HTML file with vanilla JS/CSS.
+
+When a FilmCraft timeline exists, `preview` also prints the `.fcproj` path and the `timeline <slug> --open` command. The review page stays the HTML summary; FilmCraft is the editable timeline.
 
 It includes:
 

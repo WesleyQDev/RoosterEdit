@@ -26,6 +26,14 @@
 
 - [x] Transcrição via HyperFrames/Whisper, testada com amostra pública.
 - [x] `edit/plan.json` com validação e gate de aprovação.
+- [x] Cache content-addressed de capabilities, probes, transcrições, TTS, build e render.
+- [x] Transcrição por idioma: Parakeet/sherpa-onnx, faster-whisper e whisper.cpp; defaults `fast` (base/beam 1).
+- [x] `build --if-needed`, sample curto e reuse de mídia por estágio.
+- [x] Wrapper real de `render` com qualidade, workers, resume, cache de frames e probe.
+- [x] `cache info|path|clear|gc`, `frames` com contact sheet e índice de b-roll.
+- [ ] Cortes sem re-encode no engine (`data-media-start`/`trimBefore`).
+- [ ] Render híbrido FFmpeg + overlays curtos.
+- [ ] Passe de áudio fundido e hardware encode automático.
 - [ ] `cut-plan` automático: silêncios, filler words, rough cut.
 - [ ] TTS adapter (provider-agnostic).
 - [ ] Mix, loudness e ducking.

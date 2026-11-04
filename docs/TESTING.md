@@ -119,6 +119,31 @@ Teste em projeto temporário de 10s, com um corte e quatro elementos:
 
 Ainda falta testar em um projeto real, com mídia longa, legendas queimadas e importação do FCPXML no DaVinci.
 
+## 9. FilmCraft (smoke test manual)
+
+Teste de fumaça em workspace temporário. Não é benchmark; registre o resultado ao rodar.
+
+Requer FilmCraft e `filmcraft-cli` instalados (confira em `doctor --json`).
+
+```bash
+node "<skill>/scripts/rooster.mjs" doctor --json
+node "<skill>/scripts/rooster.mjs" build demo --target filmcraft
+node "<skill>/scripts/rooster.mjs" timeline demo
+node "<skill>/scripts/rooster.mjs" render demo --draft
+# edite um elemento em edit/plan.json
+node "<skill>/scripts/rooster.mjs" build demo --if-needed
+```
+
+O que conferir:
+
+- `doctor --json` traz `filmcraft.installed`, `cli`, `app`, `version` e `mcp`.
+- o build cria `engine/filmcraft/demo.fcproj`, `work/filmcraft.json` e clipes em `engine/filmcraft/elements/`.
+- `timeline demo` mostra o caminho do `.fcproj`; `--open` abre no FilmCraft.
+- `render --draft` exporta H.264 em meia escala (`renders/draft.mp4`).
+- depois de editar um elemento, `build --if-needed` re-renderiza só aquele elemento; os demais vêm do cache e os clipes de usuário em outras tracks continuam onde estavam.
+
+Se o FilmCraft não estiver instalado, use `filmcraft status --json` para ver o prompt de onboarding. Não instale nem grave config de MCP sem permissão.
+
 ## O que funcionou
 
 - `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).

@@ -115,6 +115,34 @@ node "<skill>/scripts/rooster.mjs" channel set en-tech assets.strategy user
 node "<skill>/scripts/rooster.mjs" channel use en-tech
 ```
 
+## Optional: FilmCraft
+
+FilmCraft is an optional editable-timeline target. Do not install it, download it, or write MCP config without explicit permission. During first-run, run `filmcraft status --json` once and ask the question when `prompt.kind` is `connect-mcp` or `install`. If the user declines, continue with HyperFrames/Remotion and do not ask again for that project; the default HyperFrames/Remotion path does not need FilmCraft.
+
+Get the current state and the prompt from the CLI:
+
+```bash
+node "<skill>/scripts/rooster.mjs" filmcraft status --json
+```
+
+The response includes `installed`, `cli`, `app`, `version`, `mcp`, and `prompt.kind`. Use `prompt.kind` to choose the question:
+
+| `prompt.kind` | Question | Options |
+|---|---|---|
+| `connect-mcp` | "I found FilmCraft <version> on your PC. Do you want to connect its MCP now? After connecting, you must restart the program/agent so it can see the tools." | Connect MCP / Not now |
+| `install` | "I did not find FilmCraft on your PC. Do you want to continue with HyperFrames/Remotion, or install FilmCraft and connect its MCP?" | Continue with HyperFrames/Remotion / Install FilmCraft + connect MCP |
+| `install-cli` | "FilmCraft is installed, but the CLI was not found. Do you want to install the CLI or set ROOSTER_FILMCRAFT_CLI, then connect the MCP?" | Continue with HyperFrames/Remotion / Install the FilmCraft CLI |
+| `ready` | "FilmCraft was found and the MCP is configured. If the tools are not visible yet, restart the agent." | — |
+
+Rules:
+
+- If the user chooses Not now or Continue with HyperFrames/Remotion, do not install or write anything. Keep the default engine path.
+- If they choose Connect MCP, run `filmcraft setup --client opencode` (or `--client claude`) to print the snippet. Add `--write` only after they confirm the change; it merges into `opencode.json` or `.mcp.json` and keeps a `.bak` backup of an existing file. Restart the agent afterward.
+- If FilmCraft is missing and they choose install, point them to https://getartcraft.com/apps/filmcraft. Do not download or run an installer for them.
+- If the app is installed but the CLI is missing, they can install the CLI or set `ROOSTER_FILMCRAFT_CLI` to the `filmcraft-cli` path.
+- If the MCP is already registered but the tools are not visible, tell them to restart; do not rewrite the config.
+- FilmCraft is optional. The build target stays `--target filmcraft`; HyperFrames/Remotion remain the default.
+
 ## Creating a project
 
 Ask:

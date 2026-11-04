@@ -42,6 +42,7 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 - Revisar o plano e a timeline no browser com player, contexto da transcrição e QA.
 - Listar todos os textos em tela e avisar sobre cortes no meio de palavras.
 - Exportar EDL/FCPXML para finalizar no DaVinci Resolve ou Premiere.
+- Montar uma timeline editável no FilmCraft (opcional), com clipes de elemento separados.
 - Baixar links autorizados com `yt-dlp`.
 - Usar perfis prontos ou criar os seus.
 - Revisar no preview e renderizar o arquivo final.
@@ -108,6 +109,8 @@ Você revisa, aprova e ele segue para o preview e o render. Comece com autonomia
 O HyperFrames é melhor para HTML, CSS, GSAP, motion graphics e vídeos para redes sociais. O Remotion é melhor quando o projeto pede React, componentes e 3D.
 
 O FFmpeg não é um terceiro motor. Ele trabalha por baixo, nos cortes, nas legendas e na montagem.
+
+O FilmCraft é opcional e também não é um terceiro motor criativo: ele é um alvo de timeline. Com `build --target filmcraft`, o FFmpeg monta o corte e o áudio, HyperFrames ou Remotion renderizam cada elemento com alpha, e o FilmCraft recebe um `.fcproj` editável. Sem o FilmCraft instalado, o fluxo continua em HyperFrames ou Remotion.
 
 ## Canais e perfis
 

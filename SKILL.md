@@ -130,6 +130,13 @@ If the answer is yes:
 3. Show the inferred defaults in one compact line and ask "Está bom ou quer ajustar algo?" Ask a follow-up only when a field is genuinely ambiguous, such as the platform or whether the source is real footage.
 4. On confirmation, run `init`, then `channel new <id> ...` with the answers. Show a short summary and stop.
 
+During first-run, run `filmcraft status --json` once. If `prompt.kind` is `connect-mcp` or `install`, ask the question in `prompt` before creating the first project:
+
+- CLI found, MCP not registered: "I found FilmCraft <version> on your PC. Do you want to connect its MCP now? After connecting, you must restart the program/agent so it can see the tools." (Connect MCP / Not now)
+- FilmCraft not found: "I did not find FilmCraft on your PC. Do you want to continue with HyperFrames/Remotion, or install FilmCraft and connect its MCP?" (Continue with HyperFrames/Remotion / Install FilmCraft + connect MCP)
+
+If the user declines, continue with HyperFrames/Remotion and do not ask again for that project. If the MCP is already registered, mention that a restart may still be needed if the tools are not visible. Never install FilmCraft or write MCP config without explicit permission. Read `references/onboarding.md` for the CLI-missing and already-registered cases.
+
 Duration is not a channel default: it belongs to each project and is chosen when the video is created. The full twelve-field setup is an opt-in advanced path. If the user asks to customize everything, ask in groups of at most three, never all at once.
 
 A channel is the stable group for a brand, audience, or operation (for example "EN Tech" or "PT Criador"). It owns the creative defaults: language, format, profile, assets policy, engine, autonomy, and voice. Every project belongs to a channel and can override any of those defaults. Duration is per project, not a channel default.
@@ -189,7 +196,7 @@ Run:
 node "<skill>/scripts/rooster.mjs" doctor --json
 ```
 
-This reports Node, npm, Python, FFmpeg, FFprobe, Git, GPU, detected engines, TTS providers, `yt-dlp`, Whisper, and the HyperFrames CLI. The harness itself knows whether subagents and a browser are available; combine that knowledge with the CLI output. For costs, read `docs/COSTS.md`; never call a paid provider without explicit permission.
+This reports Node, npm, Python, FFmpeg, FFprobe, Git, GPU, detected engines, TTS providers, `yt-dlp`, Whisper, the HyperFrames CLI, and the optional FilmCraft CLI and MCP status. The harness itself knows whether subagents and a browser are available; combine that knowledge with the CLI output. For costs, read `docs/COSTS.md`; never call a paid provider without explicit permission.
 
 Read `references/harness.md` when something is missing. The short version:
 
@@ -308,6 +315,18 @@ Run the build through `engineer`. It owns the generated code, the logs in `work/
 
 Before the full build, use `build <slug> --sample 3`. It builds three representative elements over the real cuts so the user can approve motion, type, and density without paying for the whole video. Rebuild with `--force` after approval.
 
+### Optional FilmCraft timeline
+
+FilmCraft is an optional, opt-in timeline target (`--target filmcraft` on `build` or `new`), not a third creative engine and not the default. FFmpeg builds the base cut and audio mix, HyperFrames or Remotion renders each element as a transparent ProRes 4444 clip, and FilmCraft assembles an editable `.fcproj` with the source on V1, the mix on A1, and elements on V2+. `--engine hyperframes|remotion` picks the element renderer; `auto` uses Remotion for 3D and HyperFrames otherwise.
+
+```bash
+node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --engine hyperframes
+node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --if-needed
+node "<skill>/scripts/rooster.mjs" timeline meu-video --open
+```
+
+Read `references/timeline.md` for the adapter and `references/nle-handoff.md` for incremental builds, caveats, and the difference from the `export` EDL/FCPXML path. The existing HyperFrames, Remotion, and `export` workflows are unchanged.
+
 For the fast path, Option 1 is automatic assembly in HyperFrames for HTML/CSS/GSAP motion. Option 2 is Remotion for React, data-driven scenes, and 3D. FFmpeg remains a utility for cuts, proxies, captions, and audio. Both engines start from the same approved plan.
 
 ## Step 7 — Preview and review
@@ -318,6 +337,7 @@ Offer a preview before rendering:
 - Remotion: `npx remotion studio`.
 - FFmpeg: render a low-resolution draft and show it in the review page.
 - Unified review: `node "<skill>/scripts/rooster.mjs" preview <slug>` writes `preview/index.html` with the player, plan, timeline, captions, audio, validation, and QA checklist. Open it with `--open` when the harness has a browser.
+- FilmCraft: `timeline <slug> --open` opens the `.fcproj`. `preview <slug>` also points to the FilmCraft timeline when it exists.
 
 Read `references/timeline.md` for the timeline contract and the review page. When a browser is available, use it: open the preview, take screenshots, check console errors, and inspect the timeline. When it is not, render stills at key beats and read them as images. `qa` can open the preview, capture the screenshots and console errors, and write the report; look at 3–5 of its frames yourself before deciding.
 
@@ -351,7 +371,7 @@ Fix the cheap issues before rendering. A technical QA pass on a draft is faster 
 
 ## Step 9 — Render and deliver
 
-Use `engineer` in render mode: render a draft, inspect 3–5 frames, then render the final. The engineer validates the output with FFprobe (duration, resolution, fps, audio channels, loudness) and runs `deliver <slug>` to write `renders/thumbnail.jpg` and `renders/metadata.json`. It returns the final path and the probe stats, not the log.
+Use `engineer` in render mode: run `render <slug> --draft`, inspect 3–5 frames, then `render <slug> --final`. The wrapper resolves the engine directly, applies the quality/worker/frame-cache settings, skips unchanged renders, and writes `renders/render-<quality>.json` with probe stats. When the project's timeline is FilmCraft, `render` exports H.264 through FilmCraft instead: draft at 0.5 scale, final at full size. The engineer then runs `deliver <slug>` to write `renders/thumbnail.jpg` and `renders/metadata.json`. It returns the final path and the probe stats, not the log.
 
 If the user wants to finish in DaVinci Resolve or Premiere, run `export <slug> --format both` after the plan is stable. It writes `edit/export/cuts.edl` and `timeline.fcpxml`; these are handoffs, not a replacement for the plan.
 
@@ -397,7 +417,7 @@ rooster/
 │   │   ├── storyboard/
 │   │   ├── assets/{source,generated,licensed}/
 │   │   ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/,export/}
-│   │   ├── engine/{hyperframes|remotion|ffmpeg}/
+│   │   ├── engine/{hyperframes|remotion|ffmpeg|filmcraft}/
 │   │   ├── work/{handoffs,logs,scratch,notes}/
 │   │   ├── preview/
 │   │   ├── renders/
@@ -441,10 +461,10 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/intake.md` | Questions, defaults, and mode detection |
 | `references/engines.md` | Engine decision matrix and adapter contracts |
 | `references/profiles.md` | Profile schemas and resolution |
-| `references/timeline.md` | Timeline JSON, review page, and browser QA |
+| `references/timeline.md` | Timeline JSON, FilmCraft adapter, review page, and browser QA |
 | `references/qa.md` | Technical and editorial checklists |
 | `references/professional-elements.md` | Index of advanced layers and feature references |
-| `references/nle-handoff.md` | EDL/FCPXML export and DaVinci/Premiere import |
+| `references/nle-handoff.md` | FilmCraft timeline, EDL/FCPXML export, and DaVinci/Premiere import |
 | `references/harness.md` | Capability detection and degradation |
 | `references/link-ingest.md` | Downloading video links with yt-dlp, metadata, subtitles, and licensing |
 | `references/schemas.md` | JSON schemas for project, channel, profile, transcript, analysis, timeline, manifest |
@@ -464,7 +484,7 @@ node "<skill>/scripts/rooster.mjs" new video-x --channel en-tech --duration 60
 node "<skill>/scripts/rooster.mjs" open en-tech/video-x
 node "<skill>/scripts/rooster.mjs" paths en-tech/video-x
 node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.youtube.com/watch?v=..." --confirm-rights
-node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --model small --language en
+node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --quality fast --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" styleproof en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
@@ -474,10 +494,16 @@ node "<skill>/scripts/rooster.mjs" check en-tech/video-x
 
 # Review and handoff
 node "<skill>/scripts/rooster.mjs" build en-tech/video-x --sample 3
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --if-needed
+node "<skill>/scripts/rooster.mjs" filmcraft status --json
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --target filmcraft --engine hyperframes
+node "<skill>/scripts/rooster.mjs" timeline en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" preview en-tech/video-x --open
+node "<skill>/scripts/rooster.mjs" frames en-tech/video-x --count 12
 node "<skill>/scripts/rooster.mjs" export en-tech/video-x --format both
 node "<skill>/scripts/rooster.mjs" render en-tech/video-x --draft
 node "<skill>/scripts/rooster.mjs" render en-tech/video-x --final
+node "<skill>/scripts/rooster.mjs" cache gc --max-size 20GB
 ```
 
 If a command is not implemented yet, do the equivalent manually and tell the user what you did. Do not pretend the CLI succeeded.

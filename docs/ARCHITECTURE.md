@@ -16,9 +16,9 @@ Intenção + assets + restrições
       │ RoosterEdit │  direção, organização, QA
       └─────────────┘
             │
-   ┌────────┼────────┬──────────┐
-   ▼        ▼        ▼          ▼
-Remotion  HyperFrames  FFmpeg
+   ┌────────┼──────────────┬──────────────┐
+   ▼        ▼              ▼              ▼
+Remotion  HyperFrames  FFmpeg   FilmCraft (opcional)
 ```
 
 ## 2. Decisões fechadas
@@ -28,7 +28,8 @@ Remotion  HyperFrames  FFmpeg
 | Local da skill instalável | Raiz do repositório |
 | Engine padrão | `auto` |
 | Motores criativos | HyperFrames e Remotion; FFmpeg é utilitário de mídia |
-| Timeline no v1 | Review unificado + estúdios nativos |
+| Timeline | Review unificado + estúdios nativos; FilmCraft é um alvo de timeline opcional |
+| FilmCraft | Opt-in (`--target filmcraft`), nunca default; monta um `.fcproj` editável |
 | Geração de mídia no v1 | Código + TTS + assets do usuário; image/video gen plugável |
 | Idioma | `SKILL.md` e referências em inglês; docs humanos em pt-BR |
 | Workspace local | `rooster/` no projeto |
@@ -37,7 +38,7 @@ Remotion  HyperFrames  FFmpeg
 
 ## 2.1 Inspiração no vídeo de referência
 
-O fluxo de 6 etapas do vídeo "Como editar vídeos com IA usando o Claude Code" (Marcos Lemos) inspira o **caminho rápido** do RoosterEdit: preparar ferramentas, organizar o material, criar um guia de estilo, transcrever com Whisper, montar um plano de edição, mostrar o plano para aprovação, criar os elementos visuais e montar no HyperFrames ou no Remotion.
+O fluxo de 6 etapas do vídeo "Como editar vídeos com IA usando o Claude Code" (Marcos Lemos) inspira o **caminho rápido** do RoosterEdit: preparar ferramentas, organizar o material, criar um guia de estilo, transcrever com Whisper, montar um plano de edição, mostrar o plano para aprovação, criar os elementos visuais e montar no HyperFrames ou no Remotion. Opcionalmente, a timeline final pode ser entregue ao FilmCraft para edição.
 
 O que **não** copiamos: os nomes das pastas e a estrutura rígida do vídeo. O RoosterEdit usa o workspace próprio:
 
@@ -70,6 +71,8 @@ RoosterEdit/
 │   └── schemas.md
 ├── scripts/
 │   ├── rooster.mjs
+│   ├── lib/
+│   ├── features/
 │   └── sync-skill.mjs
 ├── templates/
 │   ├── profiles/
@@ -173,12 +176,20 @@ rooster/
 │       │       ├── engine/
 │       │       │   ├── hyperframes/
 │       │       │   ├── remotion/
+│       │       │   ├── filmcraft/
+│       │       │   │   ├── <slug>.fcproj
+│       │       │   │   ├── assets/
+│       │       │   │   ├── hyperframes/
+│       │       │   │   ├── remotion/
+│       │       │   │   ├── elements/
+│       │       │   │   └── archive/
 │       │       │   └── ffmpeg/
 │       │       ├── work/
 │       │       │   ├── handoffs/
 │       │       │   ├── logs/
 │       │       │   ├── scratch/
-│       │       │   └── notes/
+│       │       │   ├── notes/
+│       │       │   └── filmcraft.json
 │       │       ├── preview/
 │       │       ├── renders/
 │       │       ├── qa/{report.md,text-review.md,frames/}
@@ -196,7 +207,7 @@ rooster/
 │   ├── luts/
 │   ├── broll/
 │   └── images/
-└── cache/
+└── cache/          # inclui cache/elements/ (clipes de elemento)
 ```
 
 ### Biblioteca global
@@ -223,6 +234,7 @@ A biblioteca global é opcional. Ela existe para o usuário reutilizar perfis, f
 | `ROOSTER_HOME` | Caminho da biblioteca global (default: `~/.rooster`) |
 | `ROOSTER_PROFILE` | Perfil default |
 | `ROOSTER_ENGINE` | Engine default (`auto`, `hyperframes`, `remotion`, `ffmpeg`) |
+| `ROOSTER_FILMCRAFT_CLI` | Caminho do `filmcraft-cli` (opcional) |
 | `ROOSTER_TTS_PROVIDER` | Provider de TTS default |
 | `ROOSTER_BROWSER` | `available` / `unavailable` / `unknown` |
 
@@ -322,6 +334,7 @@ O projeto é a instância concreta. Ele combina channel + profile + overrides.
   "channel": "en-tech",
   "profile": "tech-neon",
   "engine": "auto",
+  "timeline": "none",
   "language": "en",
   "overrides": ["format", "voice"],
   "mode": {
@@ -351,6 +364,8 @@ O projeto é a instância concreta. Ele combina channel + profile + overrides.
 ```
 
 Status possíveis: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, `rendering`, `done`, `blocked`.
+
+`timeline` aceita `none` ou `filmcraft`. Quando é `filmcraft`, `engine` registra o renderer dos elementos (`hyperframes` ou `remotion`), não um terceiro motor.
 
 ## 7. Fluxo de trabalho
 
@@ -382,6 +397,7 @@ Sem subagents, a etapa roda inline, mas os arquivos e o handoff continuam existi
 
 - SO, arquitetura, Node, npm, Python, FFmpeg, FFprobe, Git, yt-dlp.
 - Presença de HyperFrames, Remotion, Three.js no projeto.
+- FilmCraft: CLI, app, versão, origem e registro do MCP (`filmcraft` no JSON).
 - Browser disponível? (via `ROOSTER_BROWSER` ou convenção do harness)
 - Subagents disponíveis? (o agente sabe; o CLI reporta `unknown`)
 - Providers de TTS configurados (variáveis de ambiente e CLIs).
@@ -474,16 +490,16 @@ Para cortes específicos, usar `--download-sections "*00:01:20-00:02:10"` com mo
 
 ### 7.7 Build
 
-- Escolher engine.
-- Scaffold do projeto.
-- Implementar cenas/componentes.
-- Para 3D: Three.js determinístico.
-- Para footage: EDL + FFmpeg/Remotion.
+- Escolher o alvo: `build <slug> --target auto|hyperframes|remotion|filmcraft` (o default vem do projeto/canal).
+- HyperFrames/Remotion: scaffold do projeto, cenas/componentes, 3D determinístico com Three.js e footage via EDL + FFmpeg.
+- FilmCraft (`--target filmcraft`): build híbrido. O FFmpeg monta o corte e o mix de áudio; HyperFrames ou Remotion renderizam cada elemento visual como clipe separado com alpha; o FilmCraft monta o `.fcproj` editável.
+- No FilmCraft, `--engine hyperframes|remotion` escolhe o renderer dos elementos; `auto` usa Remotion quando há elemento 3D e HyperFrames nos outros casos.
 
 ### 7.8 Preview
 
 - `node scripts/rooster.mjs preview <slug>` escreve `preview/index.html` com player, plano, timeline, legendas, áudio, assets faltando e checklist de QA.
 - Estúdios nativos: Remotion Studio ou HyperFrames preview.
+- Com timeline FilmCraft, o `preview` aponta para `engine/filmcraft/<slug>.fcproj`; `timeline <slug> --open` abre no FilmCraft.
 - Browser agents podem abrir, tirar screenshot e inspecionar console.
 
 ### 7.9 QA
@@ -507,7 +523,8 @@ Checklist técnico e editorial em `references/qa.md`:
 - Final em alta qualidade.
 - Validar com FFprobe.
 - Entregar MP4, SRT/VTT, thumbnail, metadata e arquivo do projeto.
-- `export <slug>` para EDL/FCPXML quando o usuário quiser finalizar no DaVinci ou Premiere.
+- Com timeline FilmCraft, `render <slug> --draft|--final` exporta H.264 pelo FilmCraft; draft usa escala 0.5 e final usa o tamanho cheio.
+- `export <slug>` para EDL/FCPXML quando o usuário quiser finalizar no DaVinci ou Premiere. Esse caminho continua independente do FilmCraft.
 
 ### 7.11 Learn
 
@@ -517,13 +534,23 @@ Checklist técnico e editorial em `references/qa.md`:
 
 ## 8. Engines
 
-Os dois motores criativos são **HyperFrames** e **Remotion**. O FFmpeg é utilitário de mídia: probe, corte, legendas, mix e assembly.
+Os dois motores criativos são **HyperFrames** e **Remotion**. O FFmpeg é utilitário de mídia: probe, corte, legendas, mix e assembly. O FilmCraft é um alvo de timeline opcional, não um terceiro motor criativo.
 
 | Engine | Melhor para | Evitar |
 |---|---|---|
 | HyperFrames | HTML/CSS/GSAP, motion graphics, kinetic type, charts, maps, 3D via Three.js, preview rápido | Projetos que já são React |
 | Remotion | React, componentes complexos, dados, `@remotion/three`, Player, Lambda | Vídeos simples que só precisam de corte |
 | FFmpeg | Corte de footage real, legendas queimadas, mix, assembly (utilitário) | Motion graphics complexo |
+
+### FilmCraft (timeline opcional)
+
+O FilmCraft não substitui HyperFrames nem Remotion e não é escolhido pelo `auto` por conta própria. Ele só é usado com `--target filmcraft` ou quando o projeto já registra `timeline: "filmcraft"`. O build é híbrido:
+
+1. O FFmpeg monta o corte e o mix de áudio da base.
+2. HyperFrames ou Remotion renderizam cada elemento visual como um clipe separado (MOV ProRes 4444 com alpha). O Remotion exige um `npm install` único em `engine/filmcraft/remotion`; o build informa esse caminho quando o CLI não está instalado.
+3. O FilmCraft monta um `.fcproj` editável com o source em V1, o áudio mixado em A1, os elementos em V2+ e markers de capítulos, elementos e cortes.
+
+O CLI é usado para builds determinísticos. O MCP/bridge serve para edição interativa e não é necessário para `build`. O FilmCraft é MIT/Apache-2.0, nativo em Windows/macOS/Linux, mas ainda alpha; o README do projeto reporta ~86% de cobertura de funcionalidades e ~56% de prontidão para uso real, e o Windows é menos testado.
 
 ### Regra de decisão (`auto`)
 
@@ -533,6 +560,7 @@ Os dois motores criativos são **HyperFrames** e **Remotion**. O FFmpeg é utili
 4. Se o projeto é HTML/GSAP/motion graphics, `hyperframes`.
 5. Se o ambiente não tem Node/FFmpeg, produza o plano e explique que o render precisa de Node/FFmpeg.
 6. Se houver dúvida, prefira `hyperframes` para motion e `ffmpeg` para corte.
+7. FilmCraft nunca é escolhido pelo `auto`; só entra por pedido explícito (`--target filmcraft`) ou projeto já configurado para ele.
 
 ## 9. Timeline
 
@@ -569,6 +597,22 @@ O `timeline.json` é engine-agnostic e serve para revisão, QA e geração de c�
 }
 ```
 
+### FilmCraft
+
+`build --target filmcraft` grava `engine/filmcraft/<slug>.fcproj` e mantém `edit/timeline.json` como visão engine-agnostic. No `.fcproj`:
+
+| Track | Conteúdo |
+|---|---|
+| V1 | source de vídeo, só vídeo (sem áudio); ausente quando o projeto é só áudio |
+| A1 | áudio mixado pelo FFmpeg |
+| V2+ | um clipe por elemento, em faixas sem sobreposição |
+| markers | capítulos, elementos e cortes |
+| captions | importadas de SRT/VTT em `edit/captions/` quando existem |
+
+O estado fica em `work/filmcraft.json`. `--if-needed` compara plano, base, renderer e formato e pula quando nada mudou. Clipes inalterados vêm de `cache/elements/`; um elemento alterado usa `clip.replaceFromBin` quando a janela de tempo é a mesma; se a janela mudou, só aquele clipe é apagado e reposicionado. Uma base nova reposiciona apenas V1/A1 e preserva clipes do usuário nas outras tracks. `--force` arquiva o `.fcproj` anterior em `engine/filmcraft/archive/`; `--rebuild-media` força base e elementos.
+
+Cuidados: `zoom` não vira clipe (aplica-se à base e é pulado com aviso); markers e legendas são criados no primeiro build e preservados depois; edições manuais em um clipe gerenciado (V1, A1 ou clipe de elemento) são sobrescritas quando aquele clipe muda, mas edições em outras tracks/clipes são preservadas; V1 e A1 são gerenciados em par, então recortar V1 à mão não move o mix de A1 (mude o plano e rebuild, ou remixe no FilmCraft); o `.fcproj` guarda caminhos absolutos, então mover a pasta quebra os links; só um processo deve escrever por vez (feche o FilmCraft durante o build); ProRes 4444 ocupa espaço e o GC do cache se aplica.
+
 ### Preview v1
 
 - Página de review com:
@@ -601,6 +645,7 @@ A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de 
 | yt-dlp | Baixar links autorizados como material de origem | Pedir o arquivo ao usuário ou instalar com permissão |
 | TTS | Gerar narração | Voz do usuário, legendas ou silêncio |
 | GPU | 3D/render mais rápido | Render em CPU, reduzir qualidade |
+| FilmCraft | Timeline editável + export H.264, opcional | Continuar em HyperFrames/Remotion |
 
 ## 11. Segurança e licenças
 
@@ -640,6 +685,7 @@ A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de 
 - Build automático de `edit/plan.json` para HyperFrames/Remotion (v1).
 - Build mais rico: b-roll, gráficos, listas e 3D.
 - FFmpeg adapter.
+- FilmCraft como alvo opcional de timeline (`build --target filmcraft`, `timeline`, `render`).
 - `preview` unificado.
 - `render` e `package`.
 

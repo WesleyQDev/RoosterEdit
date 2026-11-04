@@ -125,7 +125,8 @@ Do not describe a video as "beautiful" or "correct" without seeing at least repr
 ## Cost control
 
 - Prefer local tools and local models when quality is sufficient.
-- Cache probes, transcripts, TTS, and renders.
+- Use the built-in cache: probes, transcripts, TTS, builds, and renders are keyed by content and options. Use `--refresh`/`--rebuild-media` only when needed.
+- Use `doctor` (fast, cached) for the normal path and `doctor --deep` only when Parakeet or engine details matter.
 - Render drafts at lower resolution/quality; render final only after approval.
 - Do not call paid APIs in a loop; batch and reuse.
 - Ask before using a paid provider or a cloud render.
