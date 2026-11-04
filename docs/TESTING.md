@@ -29,7 +29,7 @@ Resultado:
 - 1 capítulo.
 
 ```bash
-node "<skill>/scripts/rooster.mjs" plan demo --show
+node "<skill>/scripts/rooster.mjs" plan demo
 ```
 
 Resultado: `0 error(s), 0 warning(s)`. O comando mostra o resumo e lembra que o plano precisa de aprovação antes do build.
@@ -78,9 +78,9 @@ Resultado:
 - Os dois builds aplicaram os cortes com FFmpeg, remapearam os tempos dos elementos, geraram o projeto do engine e renderizaram frames inspecionados visualmente.
 - O tema veio do profile `minimal` (fundo claro, tipografia escura, acento terracota).
 
-## 6. Teste com vídeo real (pitch Momai)
+## 6. Teste com vídeo real (pitch de produto)
 
-Vídeo de entrada: `Boa 2910 01.mp4` (8:57, 1920×1080, 60 fps, 416 MB).
+Vídeo de entrada: `pitch.mp4` (8:57, 1920×1080, 60 fps, 416 MB).
 
 - Transcrição com faster-whisper `base` (o `small` estava trocando acentos por `?`): 74 segmentos.
 - Plano inicial de highlight (88s) rejeitado pelo usuário: o painel cobria a tela e os cortes eram agressivos demais.
@@ -164,6 +164,55 @@ O que conferir:
 
 Se `gh` não estiver instalado ou autenticado, o comando falha com instruções e mantém o rascunho local. O usuário pode abrir a issue manualmente em <https://github.com/WesleyQDev/RoosterEdit/issues>.
 
+## 11. Templates estruturados e corte suave (smoke test manual)
+
+Teste feito em workspace temporário com um source de 6 s:
+
+```powershell
+$env:ROOSTER_WORKSPACE = "$env:TEMP\rooster-structured"
+node "<skill>/scripts/rooster.mjs" init
+node "<skill>/scripts/rooster.mjs" channel new demo --language pt-BR --format 16:9 --profile tech-neon
+node "<skill>/scripts/rooster.mjs" new teste --channel demo --duration 6
+# escreva edit/plan.json com chapter, diagram, counter, emphasis e broll layout:pip
+node "<skill>/scripts/rooster.mjs" plan teste --check
+node "<skill>/scripts/rooster.mjs" plan teste
+node "<skill>/scripts/rooster.mjs" build teste --target filmcraft --engine hyperframes --strict-plan --force --rebuild-media
+node "<skill>/scripts/rooster.mjs" render teste --draft --force
+```
+
+O que conferir:
+
+- `plan.html` mostra duas colunas: `No bruto` (player) e `No corte` (tempo final).
+- `qa/plan-review.md` lista vãos visuais, cortes secos, textos sem lastro, b-roll sem `covers` e colisões de layout.
+- `plan --check` acusa dois cards no mesmo canto e um b-roll sem `covers`.
+- `build --strict-plan` recusa o plano com warning; depois de corrigir, passa.
+- Os MOVs em `engine/filmcraft/elements/` mostram chapter, diagrama com nós/setas, contador, ênfase riscada e PIP.
+- `build` falha com `zoom` no FilmCraft e explica como seguir; `--allow-skipped-elements` permite omitir de propósito.
+- O draft renderiza os elementos na posição certa e o PIP não cobre o rosto.
+- O log do build lista os elementos pulados por id e tipo.
+
+## 12. Custom component (smoke test manual)
+
+No mesmo workspace de 6 s:
+
+```powershell
+# crie style/components/glow-ring/{element.html,element.css,element.js}
+# no plan.json: { "id":"el-006", "type":"custom", "template":"custom", "component":"glow-ring", "start":0.5, "end":1.4 }
+node "<skill>/scripts/rooster.mjs" plan teste --check
+node "<skill>/scripts/rooster.mjs" build teste --engine hyperframes --force
+node "<skill>/scripts/rooster.mjs" render teste --draft --force
+node "<skill>/scripts/rooster.mjs" build teste --target filmcraft --engine hyperframes --force
+```
+
+O que conferir:
+
+- `plan --check` resolve o componente no projeto, canal, perfil ou templates.
+- O `index.html` do HyperFrames contém o markup, o CSS e o `tl.fromTo` do `element.js`.
+- O draft mostra o anel/círculo animado no tempo certo.
+- O build do FilmCraft renderiza o componente como clipe ProRes com alpha.
+- Componente inexistente vira erro com a lista de pastas procuradas.
+- `--target filmcraft --engine remotion` com elemento custom falha com mensagem clara; Remotion não executa HTML/JS.
+
 ## O que funcionou
 
 - `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).
@@ -177,7 +226,7 @@ Se `gh` não estiver instalado ou autenticado, o comando falha com instruções 
 
 - Transcrição em português com whisper.cpp: o ambiente usou Parakeet (inglês). Para português, é preciso instalar whisper.cpp ou o Whisper CLI.
 - Download de link do YouTube com `yt-dlp`: o YouTube bloqueia este ambiente com bot check. O código e o gate de direitos estão implementados, mas o download real precisa ser testado em uma máquina/rede autorizada.
-- Build v1 cobre letreiros, caption-emphasis, cards e cortes. B-roll, gráficos ricos, listas e 3D ainda precisam de templates mais específicos.
+- Build v1 cobre letreiros, caption-emphasis, cards e cortes. Templates estruturados (chapter, diagram, counter, list, emphasis, callout, terminal, end-card), b-roll em PIP/split e suavização de corte estão implementados; cenas 3D ainda precisam de starter próprio.
 - Preview unificado no browser e render wrapper do CLI.
 
 ## Reproduzir
@@ -189,5 +238,5 @@ Se `gh` não estiver instalado ou autenticado, o comando falha com instruções 
    node "<skill>/scripts/rooster.mjs" new meu-video --channel demo
    ```
 2. Coloque um áudio/vídeo em `rooster/channels/demo/projects/meu-video/assets/source/`.
-3. Rode `transcribe`, crie `edit/plan.json` e rode `plan --show`.
+3. Rode `transcribe`, crie `edit/plan.json` e rode `plan`.
 4. Use `npx hyperframes` ou `npx remotion` para montar e renderizar.

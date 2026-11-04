@@ -19,7 +19,7 @@ rooster/
 │       │       ├── brief.md
 │       │       ├── script.md
 │       │       ├── style.md
-│       │       ├── style/proof/
+│       │       ├── style/{proof/,components/}
 │       │       ├── storyboard/
 │       │       ├── assets/{source,generated,licensed}/
 │       │       ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/,export/}
@@ -41,7 +41,7 @@ rooster/
 │       │       │   └── filmcraft.json
 │       │       ├── preview/
 │       │       ├── renders/
-│       │       ├── qa/{report.md,text-review.md,frames/}
+│       │       ├── qa/{report.md,text-review.md,plan-review.md,frames/}
 │       │       └── review.md
 │       ├── profiles/
 │       ├── assets/
@@ -152,7 +152,8 @@ O principal lê os handoffs, vê o `plan.html` e 3–5 frames. A transcrição c
 | Artefato | Comando | Uso |
 |---|---|---|
 | `style/proof/index.html` | `styleproof <slug>` | 3 frames de amostra do estilo antes do plano |
-| `edit/plan.html` | `plan <slug> --show` | Plano com player, contexto da transcrição e textos para revisar |
+| `edit/plan.html` | `plan <slug>` | Plano com player, contexto da transcrição, tempo no bruto e no corte final |
+| `qa/plan-review.md` | `plan <slug>` | Vãos visuais, cortes secos, textos sem lastro, b-roll sem `covers` e colisões de layout |
 | `preview/index.html` | `preview <slug>` | Player, timeline, validação, assets e checklist de QA |
 | `qa/text-review.md` | `textcheck <slug>` | Todos os textos em tela com timecodes e alertas |
 | `edit/export/` | `export <slug> --format both` | EDL/FCPXML para DaVinci ou Premiere |
@@ -227,6 +228,8 @@ Perfis podem ser:
 - **global** — `~/.rooster/profiles`;
 - **built-in** — `templates/profiles`.
 
+`components/<name>/` guarda animações autorais reutilizáveis (`element.html`, `element.css`, `element.js`). O build procura o componente primeiro no projeto (`style/components/<name>/`), depois no canal, no perfil e nos templates. Use `component: "<name>"` no elemento `custom` do plano. Quando um visual novo funciona, salve-o no perfil ou no canal para o próximo vídeo reutilizar.
+
 ```bash
 node scripts/rooster.mjs profile list
 node scripts/rooster.mjs profile show minimal
@@ -266,6 +269,6 @@ Leia `references/link-ingest.md` antes de baixar. O comando só funciona com `--
 4. `ingest` — adiciona assets.
 5. `transcribe` — gera `edit/transcript.json` (via `transcript-analyst`).
 6. `digest` — lê a transcrição em partes; o principal recebe só o handoff.
-7. `plan --show` — aprova o plano (via `editor`).
+7. `plan` - aprova o plano (via `editor`).
 8. `build --target` — gera HyperFrames/Remotion (`--target hyperframes|remotion`) ou, opcionalmente, uma timeline FilmCraft (`--target filmcraft`), via `engineer`.
 9. `preview`/`render` — revisão e entrega (via `qa` + `engineer`).

@@ -219,7 +219,7 @@ FilmCraft is an optional timeline target (`build --target filmcraft`), not a thi
 - **Markers**: chapters, elements, and cut boundaries.
 - **Captions**: imported from `edit/captions/*.srt` or `.vtt` on the first build.
 
-`zoom` elements are not standalone clips; they apply to the base and are skipped with a note. Track state lives in `work/filmcraft.json`, and element clips are cached in `cache/elements/<hash>.mov`.
+`zoom` and overlay `transition` elements are not standalone clips; FilmCraft cannot apply them to the base, so `build` fails by default with a clear message. Use `--target hyperframes`/`remotion`, replace them with punch-in coverage, or pass `--allow-skipped-elements` to build without them. Track state lives in `work/filmcraft.json`, and element clips are cached in `cache/elements/<hash>.mov`.
 
 Incremental builds update only what changed: unchanged element clips are reused, a changed element is replaced in place when its time window is the same, and a changed base re-places only V1/A1. User clips on other tracks stay untouched. `--force` archives the previous `.fcproj` under `engine/filmcraft/archive/` before rebuilding.
 

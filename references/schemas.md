@@ -238,6 +238,22 @@ Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
 
 `music` is optional; when present, `src` is required and is relative to the project. `gainDb` defaults to `-18`.
 
+Element fields:
+
+- `type`: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`, `custom`.
+- `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `custom`. See `references/edit-plan.md`.
+- `component`: on a `custom` element, the name of a reusable component folder (`style/components/<name>/`).
+- `html`, `css`, `animation`: inline custom markup, CSS, and GSAP statements. The animation receives `root`, `start`, `duration`, and `tl`.
+- `data`: template-specific data (`nodes`, `rows`, `items`, `name`, `role`, `strike`, `tag`, `command`, `note`).
+- `role`: `chapter` marks a section card and exempts its text from transcript grounding.
+- `position`: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `center`, `center-left`.
+- `layout` on `broll`: `pip` (default), `split`, or `full`.
+- `covers`: exact transcript quote the element illustrates. Required for b-roll; recommended for captions and graphics.
+- `intent` on `broll`: `evidence`, `texture`, or `transition`.
+- `sourceTime` on `broll`: where in the raw the clip was extracted, in source seconds. The check warns when it comes from a later scene.
+- `sub`: short on-screen subtitle. `description` is a production note and is never rendered as on-screen text.
+- `start`/`end`: source times. The build remaps them through the cuts; `plan.md` and `plan.html` show the final time too.
+
 Optional advanced fields: `sfx`, `color`, `multicam`, and `chart` on `grafico`/`lista` elements. See `references/professional-elements.md` for the feature references.
 
 Cut reasons: `long-pause`, `repetition`, `false-start`, `retake`, `filler`, `mistake`, `off-topic`, `manual`.

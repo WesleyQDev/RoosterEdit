@@ -6,7 +6,7 @@ Vídeo gasta tokens naturalmente: transcrição, frames, plano, logs de render e
 
 1. **Logs de render/check** — HyperFrames e Remotion imprimem milhares de linhas. Redirecione para arquivo e leia só o final.
 2. **Transcrição completa com palavras** — use `digest` e leia só os segmentos.
-3. **Plano JSON cru** — use `plan --show`.
+3. **Plano JSON cru** - use `plan`.
 4. **Referências inteiras** — leia só a seção necessária.
 5. **Muitos frames** — 3 a 5 frames representativos bastam.
 6. **Re-renderizar por mudança pequena** — use still/snapshot ou draft.
@@ -60,7 +60,7 @@ node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
 
 - Não cole logs no chat; leia o `Fix:` ou as últimas 30 linhas.
 - Use `digest` em vez de `transcript.json`.
-- Use `plan --show` em vez de `plan.json`; o comando também gera `edit/plan.html` para revisão.
+- Use `plan` em vez de ler `plan.json`; o comando também gera `edit/plan.html` e `qa/plan-review.md` para revisão.
 - Leia só o reference da fase atual.
 - Inspecione 3–5 frames por revisão.
 - Renderize draft uma vez; final só depois da aprovação.

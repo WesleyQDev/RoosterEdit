@@ -117,8 +117,140 @@ A cut is a removal from the source. If the plan instead describes what to keep, 
 | `caption-emphasis` | Highlight a word or phrase |
 | `transition` | Wipe, slide, fade between ideas |
 | `end-card` | CTA, subscribe, next video |
+| `custom` | Agent-authored HTML/CSS/GSAP or a reusable component |
 
 Each element needs `start`, `end`, and `description`. `text` is optional but encouraged for anything with words.
+
+## Time base
+
+`cuts` and `keeps` are **source** times. `elements` and `chapters` are **source** times too, because the build remaps them through the cuts. The `plan` command writes both values to `plan.md` and `plan.html`: the raw time and the final time after the cuts. Approve the final time; the raw time is only for finding the moment in the source.
+
+## Structured templates
+
+Do not rely on the generic card fallback. Pick a template and give it the data it needs. The renderer draws real motion for these; `description` is a production note and is never placed on screen.
+
+| `template` | Use | `data` |
+|---|---|---|
+| `chapter` | Section card | `{ kicker, sub }` |
+| `title` | Opening or key promise | `{ sub }` |
+| `diagram` | Process, flow, comparison | `{ nodes: string[], caption, kicker }` |
+| `counter` | Numbers, before/after, time saved | `{ rows: [{ value, label }], kicker }` |
+| `list` | Steps, features, recap | `{ items: string[], title }` |
+| `lower-third` | Name and role | `{ name, role }` |
+| `emphasis` | Highlight or correction | `{ text, strike, tag }` |
+| `callout` | Short corner label | `{ label, sub, icon }` |
+| `terminal` | Command, file, technical detail | `{ command, note }` |
+| `end-card` | CTA | `{ title, sub }` |
+| `custom` | Agent-authored HTML/CSS/GSAP | inline `html`, `css`, `animation`, or a `component` |
+
+Use `role: "chapter"` on a `letreiro` when it is a section card. Chapter cards are exempt from transcript grounding.
+
+`position` is optional: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `center`, `center-left`. The default keeps the face visible.
+
+`text` must be short, on-screen copy. Put the explanation in `description`, never in `text`.
+
+## Custom components
+
+The agent can author a motion graphic that is not in the built-in vocabulary. Use `template: "custom"` and either inline fields or a reusable component.
+
+Inline, for a one-off:
+
+```json
+{
+  "id": "el-020",
+  "type": "custom",
+  "template": "custom",
+  "start": 120.0,
+  "end": 124.0,
+  "html": "<div class=\"glow\"><span class=\"ring\"></span><strong>novo</strong></div>",
+  "css": ".glow { position:absolute; inset:0; display:grid; place-items:center; } .ring { width:180px; height:180px; border:6px solid #8b5cf6; border-radius:50%; position:absolute; }",
+  "animation": "tl.fromTo(root.querySelector('.ring'), { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'back.out(1.7)' }, start + 0.1);"
+}
+```
+
+Reusable, for the channel's visual language:
+
+```json
+{
+  "id": "el-021",
+  "type": "custom",
+  "template": "custom",
+  "component": "chapter-glow",
+  "start": 240.0,
+  "end": 244.0
+}
+```
+
+The build looks for `chapter-glow` in this order:
+
+1. `<project>/style/components/chapter-glow/`
+2. `<workspace>/channels/<channel>/style/components/chapter-glow/`
+3. `<workspace>/channels/<channel>/profiles/<profile>/components/chapter-glow/`
+4. `<workspace>/profiles/<profile>/components/chapter-glow/`
+5. `~/.rooster/profiles/<profile>/components/chapter-glow/`
+6. `<skill>/templates/profiles/<profile>/components/chapter-glow/`
+7. `<skill>/templates/components/chapter-glow/`
+
+A component folder contains:
+
+- `element.html` (or `index.html`) — the markup.
+- `element.css` (or `style.css`) — optional CSS, injected once.
+- `element.js` (or `animation.js` / `index.js`) — optional GSAP statements.
+
+The animation runs inside the composition timeline with these variables:
+
+- `root` — the wrapper element (`#el-<index>`).
+- `start` — the element start in the final timeline, in seconds.
+- `duration` — the element duration, in seconds.
+- `tl` — the paused GSAP timeline that HyperFrames seeks.
+
+Use `tl.fromTo(root.querySelector(...), ...)` and `start + 0.1`. Do not create a separate timeline; HyperFrames will not seek it. Put scripts in `element.js`/`animation`, not inline in `element.html`.
+
+Custom elements are trusted local HTML/CSS/JS. They are supported by HyperFrames (including the FilmCraft element path), not by Remotion. FilmCraft + Remotion fails with a clear message. Custom components should use inline SVG/CSS; for media, use a `broll` element so the asset pipeline and license tracking still apply.
+
+The first time the agent invents a look that works, save it as a component. The next video can reuse it, and the channel's visual language accumulates instead of starting from zero.
+
+## B-roll layout
+
+`broll` accepts `layout`:
+
+- `pip` — the b-roll sits in a large rounded card in the top-right; the speaker stays visible. This is the default and the right choice for talking-head footage.
+- `split` — the b-roll takes the top 58% and leaves the lower part of the frame visible. Use it when the screen recording needs more width.
+- `full` — only when the b-roll is the subject and the face does not need to stay on screen.
+
+Every b-roll needs:
+
+- `covers` — the exact line it is illustrating;
+- `intent` — `evidence` (the actual UI or action is the proof), `texture` (visual variation), or `transition` (covers a cut);
+- `sourceTime` — where in the raw the clip was extracted, in source seconds.
+
+`plan --check` compares `sourceTime` with the placement. If the clip comes from a later scene (more than 30 s ahead) and it is not marked `evidence`, it warns: use a custom motion graphic or a same-context clip. Even an `evidence` clip gets a spoiler warning; the editor must confirm it does not reveal a demo that happens later.
+
+B-roll is not a substitute for a designed beat. If the line is conceptual (an idea, a comparison, a promise), prefer a `diagram`, `counter`, `emphasis`, or `custom` element. Use b-roll when the real footage is the evidence.
+
+## Visual rhythm
+
+A cut-only plan is not a finished video. Before showing the plan, check:
+
+- at least one visual beat every 20–40 seconds;
+- no stretch longer than 45 seconds without a letreiro, graphic, list, b-roll, lower-third, or end card;
+- alternate templates: a diagram, a counter, a list, a b-roll, an emphasis, a callout;
+- a chapter card does not replace the need for beats inside the chapter;
+- every long silence jump (6 s or more) has a PIP/split b-roll, a transition, or a deliberate punch-in;
+- captions and graphics quote or paraphrase the line that is being spoken, and use `covers` when the connection is not obvious.
+
+`plan <slug> --check` reports density gaps, unsupported element types, orphan cuts, ungrounded text, and b-roll without `covers`. `qa/plan-review.md` lists all of them. Fix the top warnings before building; use `build --strict-plan` when the plan should be clean.
+
+## Cut smoothing
+
+The build softens the cut pass automatically:
+
+- a 35 ms audio micro-fade at every join (no clicks, no hard consonant cut);
+- a small punch-in on uncovered silence cuts, alternating wide/tight so the eye reads two camera angles;
+- `--cut-punch <scale>` changes the punch (default `1.035`; `1` disables it);
+- `--cut-fade <seconds>` changes the audio fade (default `0.035`; `0` disables it).
+
+Covered cuts (a b-roll or transition overlaps the join) are not punched. `plan --check` lists the long jumps that still have no visual cover, the orphan reactions, and keeps shorter than 0.8 seconds that will read as a flash.
 
 ## Advanced fields
 
@@ -136,7 +268,7 @@ Each element needs `start`, `end`, and `description`. `text` is optional but enc
 A cut-only plan is incomplete unless the user explicitly asked for a clean cut. Before showing the plan, check:
 
 - at least one visual element (letreiro, lower-third, graphic, list, zoom, b-roll, or end card);
-- b-roll or a graphic for each long stretch of talking head where the visual does not change;
+- no stretch longer than 45 seconds without a beat (see **Visual rhythm** above);
 - music, or a `notes` entry explaining why there is none;
 - captions or on-screen text for key lines, or a `notes` entry explaining why there are none.
 
@@ -227,7 +359,7 @@ Estilo: style.md
 Aprovar este plano? Só vou criar a timeline e os visuais depois do seu OK.
 ```
 
-`node "<skill>/scripts/rooster.mjs" plan <slug> --show` writes the same summary to `edit/plan.md` and `edit/plan.html`. If the harness can display a file or open a browser, show `edit/plan.html` in the review pane or browser. Otherwise, paste the summary in chat and give the file path. Ask for approval with the progress marker, for example: `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?`
+`node "<skill>/scripts/rooster.mjs" plan <slug>` writes the same summary to `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`. If the harness can display a file or open a browser, show `edit/plan.html` in the review pane or browser. Otherwise, paste the summary in chat and give the file path. Ask for approval with the progress marker, for example: `Etapa 4/8 - Plano pronto. Posso seguir com a timeline?`
 
 The HTML review includes a player, clickable timecodes, the transcript context for each cut and element, and a **Textos para revisar** table. The context is there so the user can approve a cut without opening the raw transcript.
 
@@ -250,7 +382,7 @@ Wait for an explicit approval. If the user changes the plan, update `edit/plan.j
 - chapters are sorted by start time;
 - when `edit/transcript.json` has word-level timestamps, no cut starts or ends inside a word (warning).
 
-`--show` prints the human-readable summary.
+The human-readable summary comes from `plan <slug>`; `--check` validates without printing the full summary.
 
 ## Mapping to the build
 

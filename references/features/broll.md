@@ -4,6 +4,42 @@
 
 > **Licensing:** this module only sees files on disk. It cannot detect or verify a license, attribution, or model release. The agent must confirm the rights for every suggested clip and record them in `assets/manifest.json` before publishing.
 
+## Plan fields
+
+A good b-roll element has more than a path:
+
+```json
+{
+  "id": "el-014",
+  "type": "broll",
+  "layout": "pip",
+  "start": 120.4,
+  "end": 126.2,
+  "src": "assets/source/broll/notes-editor.mp4",
+  "covers": "importar aquela pasta do seu Obsidian ou do seu Notion",
+  "intent": "evidence",
+  "sourceTime": 1159.0,
+  "description": "Editor de notas em PIP, mantendo o rosto visível"
+}
+```
+
+- `layout`: `pip` (default; large rounded card in the top-right, face stays visible), `split` (b-roll on top, lower frame visible), or `full` (only when the b-roll is the subject).
+- `covers`: the exact line the clip illustrates. `plan --check` warns when it is missing or not found around the element time.
+- `intent`: `evidence`, `texture`, or `transition`.
+- `sourceTime`: where in the raw the clip was extracted. If it is more than 30 s ahead of the placement and the intent is not `evidence`, the check suggests a custom motion graphic or a same-context clip.
+- The clip must show the thing the line is talking about. A generic notes editor from a later cake demo is not a b-roll for "import your Obsidian folder"; it is a spoiler.
+
+## Verification
+
+Before approving a b-roll, extract a frame from the clip at its midpoint and look at it. Confirm:
+
+- the image matches the spoken noun/action;
+- it is not from a later scene or a different demo;
+- the layout keeps the face and the UI text readable;
+- the clip has no burned-in cursor movement that fights the current action.
+
+`plan --check` can catch a missing `covers` and a text/transcript mismatch. It cannot see the image. The editor still has to watch it.
+
 ## Purpose
 
 - Scan project and library folders for usable video/image files.

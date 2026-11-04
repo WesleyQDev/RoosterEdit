@@ -80,6 +80,12 @@ Watch the draft end to end at least once before the final render. Sampling frame
 - [ ] The draft includes the planned visual elements, b-roll, and music; cuts alone are not a finished video.
 - [ ] Every element in the plan is visible in the draft, and every music track is audible under the voice.
 - [ ] If elements, b-roll, or music were omitted, the plan or review records why.
+- [ ] No stretch longer than 45 seconds without a visual beat.
+- [ ] Every b-roll shows the line it covers and is not from a later scene.
+- [ ] No reaction survives without its setup, and no clip from a later scene sits in the middle.
+- [ ] No flash-length keep (< 0.8 s) without a deliberate reason.
+- [ ] No two cards fight for the same corner at the same time.
+- [ ] The punch-in and audio micro-fade at cuts are not distracting.
 - [ ] The hook lands in the first three seconds.
 - [ ] The promise is clear before the first 10% of the video.
 - [ ] Each scene earns its duration.

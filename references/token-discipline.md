@@ -62,12 +62,12 @@ For a long transcript:
 2. Use `transcript-analyst` (or a subagent with the same role file) to propose 10–20 candidate beats, cuts, and elements.
 3. Review the compact result in the main context.
 
-## Rule 3 — Use `plan --show`, not the raw plan
+## Rule 3 - Use `plan`, not the raw plan
 
 `edit/plan.json` can be large. The human-readable summary is enough for approval:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" plan meu-video --show
+node "<skill>/scripts/rooster.mjs" plan meu-video
 ```
 
 Read the JSON only when editing specific fields or debugging validation.

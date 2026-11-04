@@ -86,7 +86,7 @@ O `project.json` registra `channel` e `overrides`, então dá para ver o que vei
 
 Antes do plano, o agente pode rodar `styleproof <slug>` e abrir `style/proof/index.html` com três frames de amostra (hook, dado e legenda). Aprove o look nessa etapa: mudar cor e tipografia depois do build é caro.
 
-Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug> --show`, que gera `edit/plan.md` e `edit/plan.html`. Se o harness permitir exibir arquivos, ele abre o HTML no preview; se não, mostra o resumo no chat. O pedido de aprovação vem com o marcador de etapa, por exemplo: **“Etapa 4/8 — Plano pronto. Posso seguir com a timeline?”**
+Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug>`, que gera `edit/plan.md`, `edit/plan.html` e `qa/plan-review.md`. Se o harness permitir exibir arquivos, ele abre o HTML no preview; se não, mostra o resumo no chat. O pedido de aprovação vem com o marcador de etapa, por exemplo: **"Etapa 4/8 - Plano pronto. Posso seguir com a timeline?"**
 
 As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta. Comece em `guided` nos primeiros vídeos e mude para `auto` quando o estilo estiver estável.
 

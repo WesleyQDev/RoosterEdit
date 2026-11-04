@@ -154,7 +154,7 @@ Read `references/edit-plan.md` for the schema and heuristics.
 
 ### Show the plan before building
 
-Always show the user a readable summary of `edit/plan.json` and wait for approval. `plan <slug> --show` also writes `edit/plan.md` and `edit/plan.html`; display the HTML artifact in the harness's preview pane or browser when available. Do not create the HyperFrames project, the timeline, or the final render before the plan is approved. This is the most important gate in the workflow.
+Always show the user a readable summary of `edit/plan.json` and wait for approval. `plan <slug>` also writes `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`; display the HTML artifact in the harness's preview pane or browser when available. Do not create the HyperFrames project, the timeline, or the final render before the plan is approved. This is the most important gate in the workflow.
 
 ## Step 5 — Create the visual elements
 

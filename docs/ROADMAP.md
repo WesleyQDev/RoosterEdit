@@ -45,7 +45,9 @@
 - [x] Adapter HyperFrames (smoke test: init, check, render).
 - [x] Adapter Remotion (smoke test: scaffold, still, render).
 - [x] Build automático de `edit/plan.json` para HyperFrames/Remotion (v1: cortes, elementos e mídia base).
-- [ ] Build mais rico: b-roll, gráficos, listas e 3D.
+- [x] Build rico: b-roll em PIP/split, gráficos estruturados, listas, ênfase, callout, terminal e end card.
+- [x] Suavização de cortes: micro-fade de áudio e punch-in alternado em saltos sem cobertura.
+- [ ] Gráficos 3D no build.
 - [ ] Adapter FFmpeg (EDL → filtergraph).
 - [x] Preview unificado com timeline e QA.
 - [x] Handoff NLE com EDL/FCPXML.

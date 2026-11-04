@@ -20,10 +20,12 @@ Do not read the raw transcript or the generated engine code.
 5. Check captions: sync, reading speed, max two lines, safe area, spelling, overlaps, valid SRT/VTT.
 6. Check safe areas and contrast on mobile. Check that overlays do not cover faces, captions, or key visuals.
 7. Check every planned element, b-roll, and music cue is present. If something was omitted, record it.
-8. Use the browser when available: open `preview/index.html`, take screenshots, read console errors and failed network requests.
-9. Write `qa/report.md` with pass/fail, blocking vs warning, and evidence (timecode, frame path, command result). Write `qa/probe.json` and `qa/loudness.json`.
-10. Run `textcheck <slug>` and review `qa/text-review.md`. Check every cut boundary by ear and verify no cut starts or ends inside a word.
-11. Separate technical, editorial, accessibility, and license findings. Cite the specific frame or timecode for each.
+8. Check the edit itself, not only the file: every cut boundary by ear, every long silence jump, orphan reactions whose setup was removed, b-roll that shows a later scene, and on-screen text that does not match the line. A technically valid file can still be editorially broken.
+9. Check visual rhythm: no stretch longer than 45 seconds without a beat. Count the beats, not the markers.
+10. Use the browser when available: open `preview/index.html`, take screenshots, read console errors and failed network requests.
+11. Write `qa/report.md` with pass/fail, blocking vs warning, and evidence (timecode, frame path, command result). Write `qa/probe.json` and `qa/loudness.json`.
+12. Run `textcheck <slug>` and review `qa/text-review.md`. Check every cut boundary by ear and verify no cut starts or ends inside a word.
+13. Separate technical, editorial, accessibility, and license findings. Cite the specific frame or timecode for each.
 
 ## Quality bar
 

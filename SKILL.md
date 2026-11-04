@@ -255,7 +255,7 @@ Produce, in order:
 2. `storyboard/storyboard.json` and `edit/timeline.json` — the scene plan and the edit decision list.
 3. `edit/plan.json` — the fast-path plan the user approves before the build.
 
-Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug> --show` to write `edit/plan.md` and `edit/plan.html`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. Delegate the draft to `editor`; review the HTML with the user instead of building the JSON by hand in the main thread. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
+Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug>` to write `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. Delegate the draft to `editor`; review the HTML with the user instead of building the JSON by hand in the main thread. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
 
 If the user asked for `auto`, log the decisions and keep moving; if they asked for `guided`, stop at the gates that matter (brief, script, style/storyboard, rough cut, final).
 
@@ -311,6 +311,10 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 
 `build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. A cut-only plan or a plan with no music decision is refused unless `notes` records the exception; pass `--allow-cut-only` or `--allow-no-music` only when the user explicitly asked for that. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
 
+Run `plan <slug> --check` before the build and read `qa/plan-review.md`. It reports visual gaps over 45 seconds, long silence jumps without b-roll or a transition, orphan reactions, b-roll without `covers`/`intent`/`sourceTime`, b-roll extracted from a later scene, on-screen text that does not match the transcript, and element types the target engine cannot render. Fix the top warnings or pass `--strict-plan` to make the build refuse them. The build applies a 35 ms audio micro-fade and an alternating punch-in on uncovered silence cuts; use `--cut-punch` / `--cut-fade` to tune or disable them. FilmCraft cannot animate `zoom` or overlay `transition`; use HyperFrames/Remotion for those, or replace them with PIP/split b-roll and punch-ins. `build` fails on unsupported elements unless you pass `--allow-skipped-elements`.
+
+Use `template: "custom"` when the built-in motion graphics are not enough: the plan carries `html`, `css`, and a GSAP `animation` (or a reusable `component` from `style/components/<name>/`). Components are the channel's growing visual library; see `references/edit-plan.md` and `references/profiles.md`. HyperFrames renders custom elements; Remotion does not execute custom HTML/JS.
+
 Run the build through `engineer`. It owns the generated code, the logs in `work/logs/`, and the fixes, and returns status, artifact paths, and any blocker. The main agent does not run the command above directly; it passes the approved plan and the engine. If a fix changes the story, the engineer returns `needs-decision` instead of editing the plan.
 
 Before the full build, use `build <slug> --sample 3`. It builds three representative elements over the real cuts so the user can approve motion, type, and density without paying for the whole video. Rebuild with `--force` after approval.
@@ -362,6 +366,9 @@ Read `references/qa.md` for the full checklist. Run `captions <slug>` first when
 - every asset exists and has a recorded license;
 - the hook lands in the first three seconds;
 - the pacing matches the channel and the plan;
+- no stretch longer than 45 seconds without a visual beat;
+- every b-roll shows the line it covers and is not from a later scene;
+- no reaction survives without its setup and no clip from a later scene sits in the middle;
 - the brand profile is applied consistently;
 - no cut starts or ends inside a word, and every cut boundary was checked by ear;
 - every on-screen text in `qa/text-review.md` was proofread;
@@ -498,7 +505,7 @@ node "<skill>/scripts/rooster.mjs" ingest en-tech/video-x --url "https://www.you
 node "<skill>/scripts/rooster.mjs" transcribe en-tech/video-x --quality fast --language en
 node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" styleproof en-tech/video-x --open
-node "<skill>/scripts/rooster.mjs" plan en-tech/video-x --show
+node "<skill>/scripts/rooster.mjs" plan en-tech/video-x
 node "<skill>/scripts/rooster.mjs" textcheck en-tech/video-x
 # Advanced layers: see references/professional-elements.md
 node "<skill>/scripts/rooster.mjs" check en-tech/video-x

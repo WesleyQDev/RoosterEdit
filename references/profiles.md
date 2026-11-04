@@ -96,12 +96,16 @@ profiles/<id>/
 │   ├── textures/
 │   └── luts/
 ├── components/
-│   ├── remotion/
-│   └── hyperframes/
+│   └── <name>/
+│       ├── element.html
+│       ├── element.css
+│       └── element.js
 └── examples/
 ```
 
 `STYLE.md` is the human-readable art direction: what the profile feels like, what to avoid, and how to apply it to a new scene. The JSON is the machine-readable contract.
+
+Each `components/<name>/` folder is a reusable custom motion graphic. `element.html` is the markup, `element.css` is injected into the composition, and `element.js` holds GSAP statements that receive `root`, `start`, `duration`, and `tl`. A plan references it with `component: "<name>"` on a `custom` element. When a new animation proves itself, save it here instead of rebuilding it from scratch next time.
 
 ## Inheritance
 

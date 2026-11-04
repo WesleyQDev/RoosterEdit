@@ -82,6 +82,8 @@ node "<skill>/scripts/rooster.mjs" render meu-video --draft
 
 `--engine hyperframes|remotion` selects the element renderer; `auto` picks Remotion for 3D elements and HyperFrames otherwise. The CLI is used for deterministic builds; the MCP server is for interactive editing and is not required for `build`. The project records `timeline: "filmcraft"` and `engine` as the element renderer.
 
+FilmCraft cannot animate the base clip or apply overlay transitions. A plan with `zoom` or `transition` fails the FilmCraft build instead of silently dropping the motion; use `--target hyperframes`/`remotion`, replace those layers with punch-ins and PIP/split b-roll, or pass `--allow-skipped-elements` if the omission is deliberate.
+
 FilmCraft is MIT OR Apache-2.0 and still alpha; Windows is less tested. Read `references/nle-handoff.md` for the project layout, incremental builds, render, and caveats; read `references/timeline.md` for the adapter mapping.
 
 ## HyperFrames

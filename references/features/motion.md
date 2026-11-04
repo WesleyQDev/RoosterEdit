@@ -115,6 +115,16 @@ const opacity = interpolate(frame, t.inputRange, t.outputRange, {
 
 `remotionZoomSnippet(element, { fps })` and `remotionTransitionSnippet(element, { fps, theme })` return copy-paste statements when editing the generated TSX by hand. `styleAt(frame)` on either values object returns the same style inline, which is easier to use inside a mapped element component.
 
+## Cut smoothing
+
+The cut pass is separate from the plan's `zoom`/`transition` elements. It makes silence cuts feel less dry without extra footage:
+
+- **Audio micro-fade**: 35 ms in/out at every join. It removes clicks and softens hard consonants. `--cut-fade 0` disables it.
+- **Punch-in**: an uncovered silence cut toggles a 3.5% scale (center crop) on the following clip, so consecutive shots read as wide/tight instead of a hard jump. A b-roll or transition that overlaps the join suppresses the punch. `--cut-punch 1` disables it; `--cut-punch 1.06` makes it stronger.
+- **Coverage report**: `plan --check` lists long jumps with no visual cover. Add a `broll` with `layout: "pip"` or `"split"`, or a `transition`, at the join.
+
+FilmCraft limitation: FilmCraft does not animate the base clip's scale, so `zoom` and overlay `transition` elements are not rendered by the FilmCraft target. `build` now fails with a clear message unless you pass `--allow-skipped-elements`. Use HyperFrames or Remotion when the plan needs real zooms/transitions, or replace them with `punch-in` coverage.
+
 ## Build integration
 
 `build` now reads `zoom` and `transition` elements from `edit/plan.json`:
