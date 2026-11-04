@@ -160,6 +160,10 @@ export function cutKey({
   crf = 20,
   preset = "veryfast",
   loudnorm = true,
+  punchKeeps = [],
+  punchScale = 1.035,
+  cutFade = 0,
+  toolVersion = "",
 } = {}) {
   if (sourceKey === undefined || sourceKey === null || sourceKey === "") {
     throw new TypeError("cutKey: sourceKey is required");
@@ -178,6 +182,7 @@ export function cutKey({
   }
 
   const alignedKeeps = roundKeeps(keeps ?? [], fps).map(({ start, end }) => ({ start, end }));
+  const punch = Array.isArray(punchKeeps) ? punchKeeps.map(Boolean) : [];
   return hashKey([
     CUT_NAMESPACE,
     sourceKey,
@@ -188,6 +193,10 @@ export function cutKey({
       crf: quality,
       preset: String(preset || "veryfast"),
       loudnorm: loudnormFilter(loudnorm),
+      punch,
+      punchScale: Number(punchScale) || 1.035,
+      cutFade: Math.max(0, Number(cutFade) || 0),
+      toolVersion: String(toolVersion || ""),
     },
   ]);
 }

@@ -53,6 +53,15 @@ import {
   ticksToSeconds,
 } from "./lib/filmcraft.mjs";
 import { elementSpecs, summarizeTimeline, timelineFromPlan, timelineMarkers } from "./features/timeline.mjs";
+import {
+  cutSmoothing,
+  elementSupport,
+  elementText,
+  keepsFromPlan,
+  motionMix,
+  planQualityReport,
+  remapTime,
+} from "./features/editing.mjs";
 import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./features/feedback.mjs";
 import { getBrollIndex } from "./lib/broll-index.mjs";
 import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
@@ -1629,7 +1638,7 @@ function cutBoundaryWarnings(plan, dir) {
   return warnings;
 }
 
-function validatePlan(plan, dir) {
+function validatePlan(plan, dir, options = {}) {
   const errors = [];
   const warnings = [];
   if (!plan) {
@@ -1756,6 +1765,19 @@ function validatePlan(plan, dir) {
 
   warnings.push(...cutBoundaryWarnings(plan, dir));
 
+  let transcript = options.transcript || null;
+  if (!transcript) {
+    const transcriptPath = path.join(dir, "edit", "transcript.json");
+    if (exists(transcriptPath)) transcript = readJson(transcriptPath, null);
+  }
+  if (transcript) {
+    const engine = options.engine || "hyperframes";
+    const report = planQualityReport(plan, transcript, { engine });
+    for (const warning of report.warnings) {
+      warnings.push(`plan: ${warning.message}`);
+    }
+  }
+
   return { errors, warnings };
 }
 
@@ -1768,9 +1790,51 @@ function formatClock(seconds) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function printPlanSummary(plan) {
+function brollSummary(element) {
+  if (!element || element.type !== "broll") return "";
+  const intent = element.intent ? String(element.intent) : "no intent";
+  const source =
+    element.sourceTime === undefined || element.sourceTime === null || element.sourceTime === ""
+      ? "?"
+      : formatClock(element.sourceTime);
+  return ` [${intent} · source ${source}]`;
+}
+
+/**
+ * Add output-time fields for display. `plan.json` keeps source times; the
+ * review artifact must show both so an approved element cannot land somewhere
+ * else after the cut pass.
+ *
+ * @param {object} plan
+ * @param {{plan:object, keeps:Array<object>, duration:number}} remapped
+ * @returns {object}
+ */
+function withOutputTimes(plan, remapped) {
+  if (!remapped) return { ...plan, outputDuration: plan.duration };
+  const keeps = Array.isArray(remapped.keeps) ? remapped.keeps : [];
+  const outputElements = Array.isArray(remapped.plan?.elements) ? remapped.plan.elements : [];
+  const outputChapters = Array.isArray(remapped.plan?.chapters) ? remapped.plan.chapters : [];
+  const elements = (plan.elements || []).map((element, index) => ({
+    ...element,
+    outputStart: outputElements[index]?.start ?? remapTime(element.start, keeps),
+    outputEnd: outputElements[index]?.end ?? remapTime(element.end, keeps),
+  }));
+  const chapters = (plan.chapters || []).map((chapter, index) => ({
+    ...chapter,
+    outputStart: outputChapters[index]?.start ?? remapTime(chapter.start, keeps),
+  }));
+  return {
+    ...plan,
+    elements,
+    chapters,
+    outputDuration: Number(remapped.duration) || 0,
+  };
+}
+
+function printPlanSummary(plan, remapped = null) {
   heading(`Edit plan — ${plan.source || "(no source)"}`);
-  if (plan.duration) console.log(`  Duration: ${formatClock(plan.duration)}`);
+  if (plan.duration) console.log(`  Duration: ${formatClock(plan.duration)} (source)`);
+  if (plan.outputDuration) console.log(`  Final:    ${formatClock(plan.outputDuration)} after cuts`);
   if (plan.style) console.log(`  Style:    ${plan.style}`);
   if (plan.summary) console.log(`  Summary:  ${plan.summary}`);
 
@@ -1803,23 +1867,92 @@ function printPlanSummary(plan) {
 
   heading(`Elements (${(plan.elements || []).length})`);
   for (const element of plan.elements || []) {
-    const text = element.text ? ` "${element.text}"` : "";
-    console.log(`  ${formatClock(element.start)}–${formatClock(element.end)}  ${element.type || "?"}${text} — ${element.description || ""}`);
+    const text = elementText(element) ? ` "${elementText(element)}"` : "";
+    const output =
+      element.outputStart !== undefined
+        ? `  → final ${formatClock(element.outputStart)}–${formatClock(element.outputEnd)}`
+        : "";
+    console.log(`  ${formatClock(element.start)}–${formatClock(element.end)}  ${element.type || "?"}${text}${brollSummary(element)}${output} — ${element.description || ""}`);
     if (element.chart) console.log(`    ${chartSummary(element)}`);
   }
 
   if ((plan.chapters || []).length) {
     heading("Chapters");
     for (const chapter of plan.chapters || []) {
-      console.log(`  ${formatClock(chapter.start)}  ${chapter.title}`);
+      const output =
+        chapter.outputStart !== undefined ? `  → final ${formatClock(chapter.outputStart)}` : "";
+      console.log(`  ${formatClock(chapter.start)}  ${chapter.title}${output}`);
     }
   }
+}
+
+function planReviewMarkdown(report, plan = null) {
+  const lines = ["# Plan review", ""];
+  lines.push("## Visual rhythm", "");
+  if (!report.density.gaps.length) {
+    lines.push("- No gap longer than the configured maximum.");
+  } else {
+    for (const gap of report.density.gaps) {
+      lines.push(`- **${formatClock(gap.start)}–${formatClock(gap.end)}** — ${Math.round(gap.duration)} s without a visual beat`);
+    }
+  }
+  lines.push("", "## Motion mix", "");
+  const mix = plan ? motionMix(plan) : [];
+  if (!mix.length) {
+    lines.push("- No chapters; no motion mix.");
+  } else {
+    for (const row of mix) {
+      const parts = [];
+      if (row.broll) parts.push(`${row.broll} b-roll`);
+      if (row.custom) parts.push(`${row.custom} custom`);
+      if (row.graphic) parts.push(`${row.graphic} graphic`);
+      if (row.text) parts.push(`${row.text} text`);
+      if (row.motion) parts.push(`${row.motion} motion`);
+      const range = row.end === null ? `${formatClock(row.start)}+` : `${formatClock(row.start)}–${formatClock(row.end)}`;
+      const future = row.futureBroll ? `; ${row.futureBroll} b-roll from a later scene` : "";
+      lines.push(`- **${row.title}** (${range}): ${row.total} beat(s) — ${parts.join(" · ") || "none"}${future}`);
+    }
+  }
+  lines.push("", "## Engine support", "");
+  if (!report.support.unsupported.length && !(report.support.fallback || []).length) {
+    lines.push("- All planned element types are supported by the target engine.");
+  } else {
+    for (const item of report.support.unsupported) {
+      lines.push(`- **${item.id || item.type}** (${item.type}) — ${item.reason}`);
+    }
+    for (const item of report.support.fallback || []) {
+      lines.push(`- **${item.id || item.type}** (${item.type}) — ${item.reason}`);
+    }
+  }
+  const groups = new Map();
+  for (const warning of report.warnings) {
+    const key = warning.type || "other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(warning);
+  }
+  for (const key of ["text", "broll", "cut", "layout"]) {
+    const list = groups.get(key) || [];
+    if (!list.length) continue;
+    lines.push("", `## ${key}`, "");
+    for (const warning of list) lines.push(`- ${warning.message}`);
+  }
+  lines.push("", "## Checklist", "");
+  lines.push(
+    "- [ ] Every long silence jump has a PIP/split b-roll, a transition, or a deliberate punch-in",
+    "- [ ] Every b-roll has a `covers` quote and shows the thing the line is talking about",
+    "- [ ] Every caption/graphic text appears in the transcript around its timecode",
+    "- [ ] No orphan reaction survives a removed setup",
+    "- [ ] No flash-length keep (< 0.8 s) without a deliberate reason",
+    "- [ ] Chapter cards use `role: \"chapter\"` or match a chapter title"
+  );
+  return lines.join("\n") + "\n";
 }
 
 function planMarkdown(plan) {
   const lines = ["# Edit plan", ""];
   if (plan.source) lines.push(`- Source: ${plan.source}`);
-  if (plan.duration) lines.push(`- Duration: ${formatClock(plan.duration)}`);
+  if (plan.duration) lines.push(`- Duration: ${formatClock(plan.duration)} (source)`);
+  if (plan.outputDuration) lines.push(`- Final duration: ${formatClock(plan.outputDuration)} after cuts`);
   if (plan.style) lines.push(`- Style: ${plan.style}`);
   if (plan.summary) lines.push(`- Summary: ${plan.summary}`);
   const elements = plan.elements || [];
@@ -1830,6 +1963,25 @@ function planMarkdown(plan) {
   if (!elements.length) lines.push("- WARNING: no visual elements; add letreiros, b-roll, or graphics, or record a clean-cut request in notes");
   if (!plan.music?.src) lines.push("- WARNING: no music; add a track or record \"no music requested\" in notes");
   lines.push("");
+  lines.push("> Source times are the raw recording. The value in parentheses is where the beat lands after the cuts.");
+  lines.push("");
+
+  const mix = motionMix(plan);
+  if (mix.length) {
+    lines.push("## Motion mix (source)", "");
+    for (const row of mix) {
+      const parts = [];
+      if (row.broll) parts.push(`${row.broll} b-roll`);
+      if (row.custom) parts.push(`${row.custom} custom`);
+      if (row.graphic) parts.push(`${row.graphic} graphic`);
+      if (row.text) parts.push(`${row.text} text`);
+      if (row.motion) parts.push(`${row.motion} motion`);
+      const range = row.end === null ? `${formatClock(row.start)}+` : `${formatClock(row.start)}-${formatClock(row.end)}`;
+      const future = row.futureBroll ? `; ${row.futureBroll} b-roll from a later scene` : "";
+      lines.push(`- **${row.title}** (${range}): ${row.total} beat(s) — ${parts.join(" · ") || "none"}${future}`);
+    }
+    lines.push("");
+  }
 
   lines.push(`## Cuts (${(plan.cuts || []).length})`, "");
   for (const cut of plan.cuts || []) {
@@ -1845,14 +1997,20 @@ function planMarkdown(plan) {
 
   lines.push("", `## Elements (${elements.length})`, "");
   for (const element of elements) {
-    const text = element.text ? ` "${element.text}"` : "";
-    lines.push(`- ${formatClock(element.start)}-${formatClock(element.end)} - ${element.type || "?"}${text} - ${element.description || ""}`);
+    const text = elementText(element) ? ` "${elementText(element)}"` : "";
+    const output =
+      element.outputStart !== undefined
+        ? ` (final ${formatClock(element.outputStart)}-${formatClock(element.outputEnd)})`
+        : "";
+    lines.push(`- ${formatClock(element.start)}-${formatClock(element.end)}${output} - ${element.type || "?"}${text}${brollSummary(element)} - ${element.description || ""}`);
   }
 
   if ((plan.chapters || []).length) {
     lines.push("", "## Chapters", "");
     for (const chapter of plan.chapters || []) {
-      lines.push(`- ${formatClock(chapter.start)} - ${chapter.title}`);
+      const output =
+        chapter.outputStart !== undefined ? ` (final ${formatClock(chapter.outputStart)})` : "";
+      lines.push(`- ${formatClock(chapter.start)}${output} - ${chapter.title}`);
     }
   }
 
@@ -1908,6 +2066,12 @@ function planHtml(plan, project, transcript = null) {
   };
   const timeCell = (value) =>
     mediaRel ? `<a href="#" onclick="seek(${Number(value) || 0});return false">${formatClock(value)}</a>` : formatClock(value);
+  const finalCell = (start, end) => {
+    if (start === undefined || start === null) return "—";
+    const left = formatClock(start);
+    const right = end === undefined || end === null ? "" : `–${formatClock(end)}`;
+    return `<span class="final">${left}${right}</span>`;
+  };
   const cuts = (plan.cuts || [])
     .map(
       (cut) =>
@@ -1920,18 +2084,33 @@ function planHtml(plan, project, transcript = null) {
   const elements = elementsList
     .map(
       (element) =>
-        `<tr><td>${timeCell(element.start)}–${formatClock(element.end)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "")}</td><td>${htmlEscape(element.description || "")}</td><td class="ctx">${htmlEscape(contextFor(element.start, element.end))}</td></tr>`
+        `<tr><td>${timeCell(element.start)}–${formatClock(element.end)}</td><td>${finalCell(element.outputStart, element.outputEnd)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(elementText(element))}</td><td>${htmlEscape(element.description || "")}</td><td class="ctx">${htmlEscape(contextFor(element.start, element.end))}</td></tr>`
     )
     .join("");
   const chapters = (plan.chapters || [])
-    .map((chapter) => `<tr><td>${timeCell(chapter.start)}</td><td>${htmlEscape(chapter.title || "")}</td></tr>`)
+    .map((chapter) => `<tr><td>${timeCell(chapter.start)}</td><td>${finalCell(chapter.outputStart)}</td><td>${htmlEscape(chapter.title || "")}</td></tr>`)
     .join("");
   const textItems = elementsList.filter((element) => element.text || ["letreiro", "grafico", "lista", "lower-third", "caption-emphasis", "end-card"].includes(element.type));
   const textReview = textItems
     .map(
       (element) =>
-        `<tr><td>${timeCell(element.start)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(element.text || "(sem texto)")}</td></tr>`
+        `<tr><td>${timeCell(element.start)}</td><td>${htmlEscape(element.type || "")}</td><td>${htmlEscape(elementText(element) || "(sem texto)")}</td></tr>`
     )
+    .join("");
+  const motionMixRows = motionMix(plan)
+    .map((row) => {
+      const parts = [];
+      if (row.broll) parts.push(`${row.broll} b-roll`);
+      if (row.custom) parts.push(`${row.custom} custom`);
+      if (row.graphic) parts.push(`${row.graphic} graphic`);
+      if (row.text) parts.push(`${row.text} text`);
+      if (row.motion) parts.push(`${row.motion} motion`);
+      const range = row.end === null ? `${formatClock(row.start)}+` : `${formatClock(row.start)}–${formatClock(row.end)}`;
+      const future = row.futureBroll
+        ? ` <span class="final">${row.futureBroll} b-roll de cena futura</span>`
+        : "";
+      return `<tr><td>${htmlEscape(row.title)}</td><td>${range}</td><td>${row.total}</td><td>${htmlEscape(parts.join(" · ") || "none")}${future}</td></tr>`;
+    })
     .join("");
 
   return `<!doctype html>
@@ -1958,21 +2137,24 @@ function planHtml(plan, project, transcript = null) {
     .gate { margin-top:24px; color:var(--muted); }
     .player { width:100%; max-height:440px; background:#000; border-radius:10px; margin-bottom:18px; display:block; }
     .ctx { color:var(--muted); font-size:13px; }
+    .final { color:var(--accent); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
     .text-review td:nth-child(3) { font-weight:600; }
   </style>
 </head>
 <body>
   <main>
     <h1>Plano de edição</h1>
-    <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)}` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
+    <p class="meta">${htmlEscape(title)}${plan.source ? ` · ${htmlEscape(plan.source)}` : ""}${plan.duration ? ` · ${formatClock(plan.duration)} no bruto` : ""}${plan.outputDuration ? ` · ${formatClock(plan.outputDuration)} no corte final` : ""}${plan.style ? ` · ${htmlEscape(plan.style)}` : ""}</p>
     ${mediaRel ? `<video id="player" class="player" controls preload="metadata" src="${mediaRel}"></video>` : ""}
     ${plan.summary ? `<div class="summary">${htmlEscape(plan.summary)}</div>` : ""}
+    <p class="meta">O player e a coluna <strong>No bruto</strong> mostram a gravação original. A coluna <strong>No corte</strong> mostra onde o beat aparece no vídeo final.</p>
     <section><h2>Camada criativa</h2><p>Elementos visuais: ${elementsList.length}${brollCount ? ` (b-roll: ${brollCount})` : ""}<br />Música: ${plan.music?.src ? htmlEscape(plan.music.src) : "nenhuma"}</p>${noVisualElements ? `<p class="empty">Sem elementos visuais. Adicione letreiros, b-roll ou gráficos, ou registre um corte limpo em <code>notes</code>.</p>` : ""}${noMusic ? `<p class="empty">Sem música. Adicione uma faixa ou registre "no music requested" em <code>notes</code>.</p>` : ""}</section>
+    ${motionMixRows ? `<section><h2>Motion mix (source)</h2><table><thead><tr><th>Capítulo</th><th>Janela</th><th>Beats</th><th>Mix</th></tr></thead><tbody>${motionMixRows}</tbody></table><p class="meta">Use b-roll para evidência real; para conceitos, prefira diagram/counter/emphasis/custom.</p></section>` : ""}
     <section><h2>Cortes (${(plan.cuts || []).length})</h2>${cuts ? `<table><thead><tr><th>Tempo</th><th>Motivo</th><th>Nota</th><th>Contexto</th></tr></thead><tbody>${cuts}</tbody></table>` : `<p class="empty">Nenhum corte.</p>`}</section>
     ${keeps ? `<section><h2>Trechos mantidos (${(plan.keeps || []).length})</h2><table><thead><tr><th>Tempo</th><th>Motivo</th></tr></thead><tbody>${keeps}</tbody></table></section>` : ""}
-    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto</th><th>Descrição</th><th>Contexto</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
+    <section><h2>Elementos (${(plan.elements || []).length})</h2>${elements ? `<table><thead><tr><th>No bruto</th><th>No corte</th><th>Tipo</th><th>Texto</th><th>Descrição</th><th>Contexto</th></tr></thead><tbody>${elements}</tbody></table>` : `<p class="empty">Nenhum elemento.</p>`}</section>
     ${textReview ? `<section><h2>Textos para revisar</h2><table class="text-review"><thead><tr><th>Tempo</th><th>Tipo</th><th>Texto em tela</th></tr></thead><tbody>${textReview}</tbody></table></section>` : ""}
-    ${chapters ? `<section><h2>Capítulos</h2><table><thead><tr><th>Tempo</th><th>Título</th></tr></thead><tbody>${chapters}</tbody></table></section>` : ""}
+    ${chapters ? `<section><h2>Capítulos</h2><table><thead><tr><th>No bruto</th><th>No corte</th><th>Título</th></tr></thead><tbody>${chapters}</tbody></table></section>` : ""}
     <p class="gate">Aprove este plano antes de criar a timeline e renderizar.${mediaRel ? " Clique em um tempo para pular o player." : ""}</p>
   </main>
   <script>
@@ -2015,9 +2197,9 @@ function styleProofCommand(args) {
     profile: project.config.profile || null,
     format,
     frames: [
-      { id: "hook", label: "Hook", purpose: "Headline, contrast, and first-three-seconds energy" },
-      { id: "data", label: "Dado", purpose: "Chart, number, or comparison treatment" },
-      { id: "caption", label: "Legenda", purpose: "Caption, lower third, and safe-area check" },
+      { id: "hook", label: "Hook", purpose: "Chapter card, headline, contrast, and first-three-seconds energy" },
+      { id: "data", label: "Dado", purpose: "Diagram, number, or comparison treatment" },
+      { id: "caption", label: "Ênfase", purpose: "Emphasis, PIP, lower third, and safe-area check" },
     ],
     createdAt: now(),
   });
@@ -2068,6 +2250,14 @@ function styleProofHtml(project, profile, theme, format, styleText) {
     .bar { flex:1; background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 35%, var(--bg))); border-radius:6px 6px 0 0; min-height:8px; }
     .bar:nth-child(2) { height:62%; background:linear-gradient(180deg, var(--accent2), color-mix(in srgb, var(--accent2) 30%, var(--bg))); }
     .bar:nth-child(3) { height:38%; }
+    .diagram { position:relative; z-index:1; display:flex; align-items:center; gap:3%; margin-top:6%; }
+    .node { border:1px solid color-mix(in srgb, var(--accent) 60%, transparent); border-radius:12px; padding:2.4% 3%; background:color-mix(in srgb, var(--accent) 12%, transparent); font-weight:800; font-size:clamp(11px,1.9vw,24px); white-space:nowrap; }
+    .node b { color:var(--accent); margin-right:6px; }
+    .arrow { flex:1; height:2px; background:linear-gradient(90deg, var(--accent), var(--accent2)); position:relative; }
+    .arrow::after { content:""; position:absolute; right:-1px; top:-5px; border-left:9px solid var(--accent2); border-top:6px solid transparent; border-bottom:6px solid transparent; }
+    .emphasis { position:relative; z-index:1; font-family:${JSON.stringify(display)}, ${JSON.stringify(body)}, system-ui, sans-serif; font-size:clamp(18px,4.4vw,48px); line-height:1.05; letter-spacing:-.04em; font-weight:800; }
+    .emphasis s { color:var(--muted); text-decoration-color:var(--accent2); text-decoration-thickness:.08em; }
+    .pip { position:absolute; z-index:2; right:6%; bottom:20%; width:38%; aspect-ratio:16/9; border:2px solid var(--accent); border-radius:12px; background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 35%, var(--bg)), var(--bg)); box-shadow:0 18px 50px rgba(0,0,0,.5); }
     .caption { position:absolute; z-index:2; left:8%; right:8%; bottom:10%; text-align:center; font-family:${JSON.stringify(display)}, ${JSON.stringify(body)}, system-ui, sans-serif; font-size:clamp(14px,2.7vw,30px); line-height:1.12; font-weight:800; letter-spacing:-0.02em; text-shadow:0 2px 12px rgba(0,0,0,.8); }
     .lower { position:absolute; z-index:2; left:8%; bottom:8%; padding-left:3%; border-left:4px solid var(--accent); }
     .lower strong { display:block; font-size:clamp(13px,2.2vw,26px); }
@@ -2102,22 +2292,25 @@ function styleProofHtml(project, profile, theme, format, styleText) {
 
     <article class="frame">
       <div class="canvas">
-        <div class="kicker">Prova</div>
-        <div class="big">3<span>×</span> mais rápido</div>
-        <div class="bars"><div class="bar" style="height:82%"></div><div class="bar"></div><div class="bar"></div></div>
-        <div class="sub">Um gráfico de exemplo com a paleta e a tipografia do perfil.</div>
+        <div class="kicker">Fluxo</div>
+        <div class="diagram">
+          <div class="node"><b>1</b>fala</div><div class="arrow"></div>
+          <div class="node"><b>2</b>intenção</div><div class="arrow"></div>
+          <div class="node"><b>3</b>ação</div>
+        </div>
+        <div class="sub">Diagrama de exemplo com a paleta e a tipografia do perfil.</div>
       </div>
-      <div class="label"><strong>2 · Dado</strong><span>gráfico + número</span></div>
+      <div class="label"><strong>2 · Dado</strong><span>diagrama + nós</span></div>
     </article>
 
     <article class="frame">
       <div class="canvas">
         <div class="kicker">Em tela</div>
-        <div class="headline" style="font-size:clamp(18px,4.2vw,46px)">O detalhe que<br />ninguém mostra.</div>
-        <div class="caption">Legenda de exemplo em duas linhas, dentro da área segura.</div>
+        <div class="emphasis">não é um <s>GPT</s></div>
+        <div class="pip"></div>
         <div class="lower"><strong>Nome do convidado</strong><span>Cargo · Empresa</span></div>
       </div>
-      <div class="label"><strong>3 · Legenda</strong><span>safe area + lower third</span></div>
+      <div class="label"><strong>3 · Ênfase</strong><span>PIP + lower third</span></div>
     </article>
   </div>
 
@@ -2499,40 +2692,63 @@ function planCommand(args) {
 
   const plan = readJson(planPath, null);
   if (!plan) fail(`Invalid plan JSON at ${planPath}. Fix the file and run again.`);
-  const { errors, warnings } = validatePlan(plan, project.dir);
+  const engine =
+    project.config.timeline === "filmcraft"
+      ? "filmcraft"
+      : project.config.engine && project.config.engine !== "auto"
+        ? project.config.engine
+        : "hyperframes";
+  const { errors, warnings } = validatePlan(plan, project.dir, { engine });
+  const customIssues = customElementIssues(plan, project);
+  errors.push(...customIssues.errors);
+  warnings.push(...customIssues.warnings);
+  const remapped = planForBuild(plan, {});
+  const displayPlan = withOutputTimes(plan, remapped);
 
   if (args.json) {
     console.log(JSON.stringify({ project: project.slug, plan: planPath, errors, warnings, ok: errors.length === 0 }, null, 2));
     process.exit(errors.length ? 1 : 0);
   }
 
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  const transcript = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
+  const quality = planQualityReport(plan, transcript, { engine });
+  const reviewPath = path.join(project.dir, "qa", "plan-review.md");
+  ensureDir(path.dirname(reviewPath));
+  writeText(reviewPath, planReviewMarkdown(quality, plan));
+
+  const markdownPath = path.join(project.dir, "edit", "plan.md");
+  const htmlPath = path.join(project.dir, "edit", "plan.html");
+  writeText(markdownPath, planMarkdown(displayPlan));
+  writeText(htmlPath, planHtml(displayPlan, project, transcript));
+  const timeline = timelineFromPlan(remapped.plan, {
+    projectSlug: project.slug,
+    format: remapped.plan.format || project.config.format,
+    keeps: remapped.keeps,
+    duration: remapped.duration,
+    engine: project.config.engine,
+  });
+  const timelinePath = path.join(project.dir, "edit", "timeline.json");
+  writeJson(timelinePath, timeline);
+
   if (!args.check) {
-    printPlanSummary(plan);
-    const markdownPath = path.join(project.dir, "edit", "plan.md");
-    const htmlPath = path.join(project.dir, "edit", "plan.html");
-    const transcriptPath = path.join(project.dir, "edit", "transcript.json");
-    const transcript = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
-    writeText(markdownPath, planMarkdown(plan));
-    writeText(htmlPath, planHtml(plan, project, transcript));
-    const remapped = planForBuild(plan, {});
-    const timeline = timelineFromPlan(remapped.plan, {
-      projectSlug: project.slug,
-      format: remapped.plan.format || project.config.format,
-      keeps: remapped.keeps,
-      duration: remapped.duration,
-      engine: project.config.engine,
-    });
-    const timelinePath = path.join(project.dir, "edit", "timeline.json");
-    writeJson(timelinePath, timeline);
+    printPlanSummary(displayPlan, remapped);
     console.log(`\n  Artifact: ${htmlPath}`);
     console.log(`  Markdown: ${markdownPath}`);
+    console.log(`  Review:   ${reviewPath}`);
     console.log(`  Timeline: ${timelinePath} (${summarizeTimeline(timeline).clips} clip(s))`);
+  } else {
+    console.log(`  Review:   ${reviewPath}`);
   }
 
   heading("Validation");
   if (!errors.length && !warnings.length) console.log("  ✓ No issues found.");
   for (const error of errors) console.log(`  ✗ ${error}`);
-  for (const warning of warnings) console.log(`  ! ${warning}`);
+  const shownWarnings = warnings.slice(0, 12);
+  for (const warning of shownWarnings) console.log(`  ! ${warning}`);
+  if (warnings.length > shownWarnings.length) {
+    console.log(`  … ${warnings.length - shownWarnings.length} more warning(s); fix the top ones first.`);
+  }
   console.log(`\n  ${errors.length} error(s), ${warnings.length} warning(s)`);
   console.log("\n  The plan must be approved before building.");
   process.exit(errors.length ? 1 : 0);
@@ -2544,6 +2760,8 @@ function textcheckCommand(args) {
 
   const plan = readJson(path.join(project.dir, "edit", "plan.json"), { elements: [] });
   const storyboard = readJson(path.join(project.dir, "storyboard", "storyboard.json"), { scenes: [] });
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  const transcript = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
   const items = [];
 
   for (const element of plan.elements || []) {
@@ -2553,7 +2771,7 @@ function textcheckCommand(args) {
       type: element.type || "element",
       start: element.start ?? null,
       end: element.end ?? null,
-      text: String(element.text || "").trim(),
+      text: elementText(element),
     });
   }
 
@@ -2592,6 +2810,14 @@ function textcheckCommand(args) {
     if (/\s{2,}/.test(text)) issues.push({ level: "warning", id: item.id, message: "espaços duplicados" });
     if (/^\s|\s$/.test(item.text)) issues.push({ level: "warning", id: item.id, message: "espaço no início/fim" });
     if (/\?\?|TODO|TBD|FIXME/i.test(text)) issues.push({ level: "error", id: item.id, message: "placeholder no texto" });
+  }
+
+  if (transcript) {
+    const quality = planQualityReport(plan, transcript, { engine: "hyperframes" });
+    for (const warning of quality.warnings) {
+      if (warning.type !== "text" && warning.type !== "broll") continue;
+      issues.push({ level: "warning", id: warning.id, message: warning.message });
+    }
   }
 
   const outDir = path.join(project.dir, "qa");
@@ -3415,37 +3641,6 @@ function sortedCuts(plan) {
     .sort((a, b) => a.start - b.start);
 }
 
-function keepsFromPlan(plan) {
-  const duration = Number(plan.duration) || 0;
-  if (Array.isArray(plan.keeps) && plan.keeps.length) {
-    return plan.keeps
-      .filter((keep) => typeof keep.start === "number" && typeof keep.end === "number" && keep.end > keep.start)
-      .sort((a, b) => a.start - b.start);
-  }
-
-  const cuts = sortedCuts(plan);
-  if (!cuts.length) return [{ start: 0, end: duration }];
-
-  const keeps = [];
-  let cursor = 0;
-  for (const cut of cuts) {
-    if (cut.start > cursor) keeps.push({ start: cursor, end: cut.start });
-    cursor = Math.max(cursor, cut.end);
-  }
-  if (cursor < duration) keeps.push({ start: cursor, end: duration });
-  return keeps;
-}
-
-function remapTimeWithKeeps(time, keeps) {
-  let elapsed = 0;
-  for (const keep of keeps) {
-    if (time < keep.start) break;
-    if (time <= keep.end) return elapsed + (time - keep.start);
-    elapsed += keep.end - keep.start;
-  }
-  return elapsed;
-}
-
 function remapPlan(plan) {
   const cuts = sortedCuts(plan);
   const keeps = keepsFromPlan(plan);
@@ -3462,12 +3657,12 @@ function remapPlan(plan) {
     keeps: [],
     elements: (plan.elements || []).map((element) => ({
       ...element,
-      start: remapTimeWithKeeps(Number(element.start) || 0, keeps),
-      end: remapTimeWithKeeps(Number(element.end) || 0, keeps),
+      start: remapTime(Number(element.start) || 0, keeps),
+      end: remapTime(Number(element.end) || 0, keeps),
     })),
     chapters: (plan.chapters || []).map((chapter) => ({
       ...chapter,
-      start: remapTimeWithKeeps(Number(chapter.start) || 0, keeps),
+      start: remapTime(Number(chapter.start) || 0, keeps),
     })),
     originalCuts: cuts,
   };
@@ -3677,6 +3872,126 @@ function copyElementAssets(projectDir, plan, assetsDir, prefix) {
   }
 }
 
+function isCustomElement(element) {
+  return Boolean(element && (element.type === "custom" || element.template === "custom"));
+}
+
+function customComponentDirs(project, name) {
+  const safe = String(name || "").trim();
+  if (!/^[a-z0-9][a-z0-9-_]*$/i.test(safe)) return [];
+  const dirs = [path.join(project.dir, "style", "components", safe)];
+  if (project.channel) {
+    dirs.push(path.join(WORKSPACE, "channels", project.channel, "style", "components", safe));
+  }
+  const profile = project.config?.profile;
+  if (profile) {
+    if (project.channel) {
+      dirs.push(path.join(WORKSPACE, "channels", project.channel, "profiles", profile, "components", safe));
+    }
+    dirs.push(path.join(WORKSPACE, "profiles", profile, "components", safe));
+    dirs.push(path.join(ROOSTER_HOME, "profiles", profile, "components", safe));
+    dirs.push(path.join(SKILL_ROOT, "templates", "profiles", profile, "components", safe));
+  }
+  dirs.push(path.join(SKILL_ROOT, "templates", "components", safe));
+  return dirs;
+}
+
+function readFirstTextFile(dir, names) {
+  for (const name of names) {
+    const file = path.join(dir, name);
+    if (exists(file)) return fs.readFileSync(file, "utf8");
+  }
+  return "";
+}
+
+function customComponentDir(project, name) {
+  return customComponentDirs(project, name).find((dir) => exists(dir)) || null;
+}
+
+/**
+ * Merge a reusable custom component into each custom element.
+ *
+ * Components live in `style/components/<name>/` on the project or channel, or
+ * in `profiles/<profile>/components/<name>/`. The files are `element.html`,
+ * `element.css`, and `element.js` (older names are accepted). Inline fields win
+ * over the component, so a plan can reuse a base and tweak one beat.
+ *
+ * @param {object} project
+ * @param {object} plan
+ * @returns {object}
+ */
+function resolveCustomElements(project, plan) {
+  for (const element of plan.elements || []) {
+    if (!isCustomElement(element)) continue;
+    const component = String(element.component || "").trim();
+    if (component) {
+      const dir = customComponentDir(project, component);
+      if (!dir && !element.html) {
+        fail(
+          `Custom component "${component}" not found. Create it at one of:\n` +
+            customComponentDirs(project, component).map((candidate) => `- ${candidate}`).join("\n")
+        );
+      }
+      if (dir) {
+        if (!element.html) element.html = readFirstTextFile(dir, ["element.html", "index.html"]);
+        if (!element.css) element.css = readFirstTextFile(dir, ["element.css", "style.css"]);
+        if (!element.animation) element.animation = readFirstTextFile(dir, ["element.js", "animation.js", "index.js"]);
+      }
+    }
+    if (!element.html) {
+      fail(`Custom element "${element.id || "?"}" needs inline html or a component with element.html.`);
+    }
+    element.type = "custom";
+    element.template = "custom";
+  }
+  return plan;
+}
+
+/**
+ * Validate custom elements without exiting, so `plan --check` can report them.
+ *
+ * @param {object} plan
+ * @param {object} project
+ * @returns {{errors:string[], warnings:string[]}}
+ */
+function customElementIssues(plan, project) {
+  const errors = [];
+  const warnings = [];
+  for (const element of plan?.elements || []) {
+    if (!isCustomElement(element)) continue;
+    const label = element.id || "custom element";
+    const component = String(element.component || "").trim();
+    if (component) {
+      if (!/^[a-z0-9][a-z0-9-_]*$/i.test(component)) {
+        errors.push(`plan: ${label} has an invalid component name "${component}"`);
+        continue;
+      }
+      const dir = customComponentDir(project, component);
+      if (!dir) {
+        if (element.html) {
+          warnings.push(`plan: ${label} component "${component}" not found; using inline html`);
+        } else {
+          errors.push(
+            `plan: ${label} component "${component}" not found. Looked in: ${customComponentDirs(project, component).join(", ")}`
+          );
+        }
+        continue;
+      }
+      const html = element.html || readFirstTextFile(dir, ["element.html", "index.html"]);
+      if (!html) errors.push(`plan: ${label} component "${component}" needs element.html or index.html`);
+    } else if (!element.html) {
+      errors.push(`plan: ${label} needs inline html or a component`);
+    }
+    if (/<script/i.test(String(element.html || ""))) {
+      warnings.push(`plan: ${label} has inline <script>; put GSAP in element.js/animation so the timeline can control it`);
+    }
+    if (!element.animation && !element.component) {
+      warnings.push(`plan: ${label} has no animation; it will be static`);
+    }
+  }
+  return { errors, warnings };
+}
+
 function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir = "assets") {
   const source = path.resolve(project.dir, plan.source);
   if (!exists(source)) fail(`Plan source not found: ${source}`);
@@ -3707,6 +4022,10 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
   const targetExt = hasVideo ? ".mp4" : ".m4a";
   const target = path.join(assetsDir, `base${targetExt}`);
   const cutKeeps = args["no-cuts"] ? [] : keeps;
+  const smoothing = cutSmoothing(plan, {
+    punchScale: Number(args["cut-punch"]) || 1.035,
+    fade: args["cut-fade"] === undefined ? 0.035 : Number(args["cut-fade"]),
+  });
   const ffArgs = buildBaseMediaArgs({
     source,
     keeps: cutKeeps,
@@ -3718,6 +4037,11 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
     preset: args.preset || "veryfast",
     loudnorm: true,
     duration: Number(plan.duration) || null,
+    punchKeeps: cutKeeps.length ? smoothing.punchKeeps : [],
+    punchScale: smoothing.punchScale,
+    frameWidth: Number(probe.width) || 0,
+    frameHeight: Number(probe.height) || 0,
+    cutFade: cutKeeps.length ? smoothing.fade : 0,
   });
 
   const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
@@ -3751,6 +4075,10 @@ function planMediaKey(project, plan, keeps, args) {
   const preset = args.preset || "veryfast";
   const sourceKey = sourceFingerprint(source, { full: false });
   const alignedKeeps = roundKeeps(keeps, fps);
+  const smoothing = cutSmoothing(plan, {
+    punchScale: Number(args["cut-punch"]) || 1.035,
+    fade: args["cut-fade"] === undefined ? 0.035 : Number(args["cut-fade"]),
+  });
   const baseCutKey = cutKey({
     sourceKey,
     keeps: alignedKeeps,
@@ -3759,6 +4087,10 @@ function planMediaKey(project, plan, keeps, args) {
     crf,
     preset,
     loudnorm: true,
+    punchKeeps: smoothing.punchKeeps,
+    punchScale: smoothing.punchScale,
+    cutFade: smoothing.fade,
+    toolVersion: VERSION,
   });
 
   const voiceoverPath = path.join(project.dir, "edit", "voiceover.json");
@@ -4037,43 +4369,377 @@ function renderHyperFramesElement(element, index, theme = {}) {
   const start = Number(element.start) || 0;
   const end = Number(element.end) || start + 1;
   if (end <= start) return "";
-  const text = element.text || element.description || "";
+  const text = String(element.text || "").trim();
+  const data = element.data && typeof element.data === "object" ? element.data : {};
+  if (element.type === "zoom" || element.type === "transition") return "";
+  const template = elementTemplate(element, text, data);
+  const position = elementPosition(element, template, data);
   const common = (classes) =>
-    `id="el-${index}" class="clip ${classes}" data-start="${start.toFixed(3)}" data-duration="${(end - start).toFixed(3)}" data-track-index="${index + 2}"`;
+    `id="el-${index}" class="clip fx fx-${template} pos-${position}${classes ? ` ${classes}` : ""}" data-start="${start.toFixed(3)}" data-duration="${(end - start).toFixed(3)}" data-track-index="${index + 2}" data-template="${template}"`;
+  const panel = (classes, content) =>
+    `<div ${common("")}><div class="fx-panel ${classes}">${content}</div></div>`;
 
-  switch (element.type) {
-    case "letreiro":
-      return `<div ${common("title")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
-    case "caption-emphasis":
-      return `<div ${common("caption")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
-    case "grafico":
-    case "lista":
-      if (element.chart) {
-        return `<div ${common("chart")} data-layout-allow-overlap data-layout-ignore data-description="${htmlEscape(element.description || "")}">${renderChartSvg(element, theme)}</div>`;
-      }
-      return `<div ${common("card")}><span class="card-kicker">${element.type === "lista" ? "Lista" : "Grafico"}</span><strong>${htmlEscape(text)}</strong><p>${htmlEscape(element.description || "")}</p></div>`;
-    case "lower-third":
-      return `<div ${common("lower-third")}><strong>${htmlEscape(text)}</strong><span>${htmlEscape(element.description || "")}</span></div>`;
-    case "end-card":
-      return `<div ${common("end-card")} data-description="${htmlEscape(element.description || "")}">${htmlEscape(text)}</div>`;
-    case "broll": {
-      const asset = element.src || element.asset;
-      if (asset) {
-        if (/\.(png|jpe?g|webp|gif|svg)$/i.test(asset)) {
-          return `<img ${common("broll")} src="${htmlEscape(asset)}" alt="" />`;
-        }
-        if (/\.(mp4|webm|mov|m4v)$/i.test(asset)) {
-          return `<video ${common("broll")} src="${htmlEscape(asset)}" muted></video>`;
-        }
-      }
-      return `<div ${common("card")}><span class="card-kicker">B-roll</span><p>${htmlEscape(element.description || "")}</p></div>`;
+  if (element.type === "broll") {
+    const asset = element.src || element.asset;
+    if (asset) {
+      const layout = ["full", "pip", "split"].includes(String(element.layout || data.layout))
+        ? String(element.layout || data.layout)
+        : "pip";
+      const tag = /\.(png|jpe?g|webp|gif|svg)$/i.test(asset) ? "img" : "video";
+      const attrs = tag === "video" ? " muted playsinline" : ' alt=""';
+      return `<${tag} ${common(`broll layout-${layout}`)} src="${htmlEscape(asset)}"${attrs}></${tag}>`;
     }
-    case "zoom":
-    case "transition":
-      return "";
-    default:
-      return `<div ${common("card")}><span class="card-kicker">${htmlEscape(element.type || "Elemento")}</span><p>${htmlEscape(text)}</p></div>`;
+    return panel(
+      "callout-panel",
+      `<span class="callout-icon">▸</span><div><strong>${htmlEscape(text || "B-roll")}</strong>${data.sub ? `<span>${htmlEscape(data.sub)}</span>` : ""}</div>`
+    );
   }
+
+  if (element.chart) {
+    return `<div ${common("chart")} data-layout-allow-overlap data-layout-ignore>${renderChartSvg(element, theme)}</div>`;
+  }
+
+  if (template === "custom") {
+    return `<div ${common("custom-root")} data-element-id="${htmlEscape(element.id || "")}">${element.html || ""}</div>`;
+  }
+
+  if (template === "chapter" || template === "title") {
+    const title = element.text || data.title || element.id || "";
+    const sub = data.sub || element.sub || "";
+    const kicker = data.kicker || (template === "chapter" ? "capítulo" : "");
+    return panel(
+      "title-panel",
+      `<div class="fx-kicker">${htmlEscape(kicker)}</div>
+      <div class="fx-title">${htmlEscape(title)}</div>
+      ${sub ? `<div class="fx-sub">${htmlEscape(sub)}</div>` : ""}
+      <div class="fx-rule"></div>`
+    );
+  }
+
+  if (template === "diagram") {
+    const nodes = diagramNodes(text, data);
+    const caption = data.caption || element.sub || "";
+    return panel(
+      "diagram-panel",
+      `<div class="fx-kicker">${htmlEscape(data.kicker || "fluxo")}</div>
+      <div class="node-row">${nodes
+        .map(
+          (node, nodeIndex) =>
+            `<div class="node" data-index="${nodeIndex}"><span class="node-dot">${nodeIndex + 1}</span><strong>${htmlEscape(node)}</strong></div>${nodeIndex < nodes.length - 1 ? '<span class="arrow" aria-hidden="true"></span>' : ""}`
+        )
+        .join("")}</div>
+      ${caption ? `<div class="fx-sub">${htmlEscape(caption)}</div>` : ""}`
+    );
+  }
+
+  if (template === "counter") {
+    const rows = counterRows(text, data);
+    return panel(
+      "counter-panel",
+      `<div class="fx-kicker">${htmlEscape(data.kicker || "números")}</div>
+      ${rows
+        .map(
+          (row, rowIndex) =>
+            `<div class="counter-row" data-index="${rowIndex}"><strong class="counter-value ${rowIndex % 2 ? "accent" : ""}">${htmlEscape(row.value)}</strong><span>${htmlEscape(row.label)}</span></div>`
+        )
+        .join("")}`
+    );
+  }
+
+  if (template === "list") {
+    const items = listItems(text, data);
+    return panel(
+      "list-panel",
+      `${data.title || element.title ? `<div class="fx-kicker">${htmlEscape(data.title || element.title)}</div>` : ""}
+      ${items
+        .map(
+          (item, itemIndex) =>
+            `<div class="list-row" data-index="${itemIndex}"><span class="list-index">${String(itemIndex + 1).padStart(2, "0")}</span><span>${htmlEscape(item)}</span></div>`
+        )
+        .join("")}`
+    );
+  }
+
+  if (template === "lower-third") {
+    const parsed = splitLowerThird(text, data);
+    if (!parsed.name && !parsed.role) return "";
+    return panel(
+      "lt-panel",
+      `<div class="lt-rule"></div>
+      <div class="lt-copy">${parsed.name ? `<strong>${htmlEscape(parsed.name)}</strong>` : ""}${parsed.role ? `<span>${htmlEscape(parsed.role)}</span>` : ""}</div>`
+    );
+  }
+
+  if (template === "emphasis") {
+    const parsed = emphasisParts(text, data);
+    if (!parsed.text && !parsed.strike) return "";
+    const body = parsed.strike && parsed.text.includes(parsed.strike)
+      ? htmlEscape(parsed.text).replace(
+          htmlEscape(parsed.strike),
+          `<span class="strike">${htmlEscape(parsed.strike)}<span class="strike-line"></span></span>`
+        )
+      : htmlEscape(parsed.text || parsed.strike);
+    return panel(
+      "emphasis-panel",
+      `<div class="emphasis-text">${body}</div>
+      ${parsed.tag ? `<div class="emphasis-tag">${htmlEscape(parsed.tag)}</div>` : ""}`
+    );
+  }
+
+  if (template === "terminal") {
+    const command = data.command || text || "";
+    const note = data.note || element.sub || "";
+    return panel(
+      "terminal-panel",
+      `<div class="terminal-bar"><span></span><span></span><span></span></div>
+      <div class="terminal-line"><span class="prompt">›</span><span class="cmd">${htmlEscape(command)}</span><span class="cursor"></span></div>
+      ${note ? `<div class="terminal-note">${htmlEscape(note)}</div>` : ""}`
+    );
+  }
+
+  if (template === "end-card") {
+    const sub = data.sub || element.sub || "";
+    return panel(
+      "end-card-panel",
+      `<div class="end-title">${htmlEscape(text || data.title || "")}</div>
+      ${sub ? `<div class="end-sub">${htmlEscape(sub)}</div>` : ""}
+      <div class="fx-rule"></div>`
+    );
+  }
+
+  // Callout is the safe fallback for unknown graphic types: one short label,
+  // never the internal description.
+  return panel(
+    "callout-panel",
+    `<span class="callout-icon">◆</span><div><strong>${htmlEscape(text || element.type || "")}</strong>${data.sub || element.sub ? `<span>${htmlEscape(data.sub || element.sub)}</span>` : ""}</div>`
+  );
+}
+
+function elementTemplate(element, text, data) {
+  if (element.type === "custom" || element.template === "custom") return "custom";
+  if (element.template) return String(element.template);
+  const role = String(element.role || "").toLowerCase();
+  switch (String(element.type || "")) {
+    case "letreiro":
+      return role === "chapter" || role === "section" ? "chapter" : "title";
+    case "caption-emphasis":
+      return "emphasis";
+    case "lower-third":
+      return "lower-third";
+    case "lista":
+      return "list";
+    case "end-card":
+      return "end-card";
+    case "broll":
+      return "broll";
+    case "grafico":
+      if (element.chart) return "chart";
+      if (data.rows || /\d/.test(text) && /→|->|a\s|para/i.test(text)) return "counter";
+      if (data.nodes || /→|->|=|\+|·/.test(text)) return "diagram";
+      if (String(data.command || "").length) return "terminal";
+      return "callout";
+    default:
+      return "callout";
+  }
+}
+
+function elementPosition(element, template, data) {
+  const explicit = String(element.position || data.position || "");
+  if (["top-left", "top-right", "bottom-left", "bottom-right", "center", "center-left"].includes(explicit)) {
+    return explicit;
+  }
+  if (template === "custom") return "center";
+  switch (template) {
+    case "chapter":
+    case "title":
+      return "center-left";
+    case "counter":
+      return "top-right";
+    case "diagram":
+      return "bottom-right";
+    case "emphasis":
+      return "bottom-center";
+    case "lower-third":
+    case "list":
+    case "callout":
+    case "terminal":
+      return "bottom-left";
+    case "end-card":
+      return "center";
+    default:
+      return "bottom-right";
+  }
+}
+
+function diagramNodes(text, data) {
+  if (Array.isArray(data.nodes) && data.nodes.length) {
+    return data.nodes.map((node) => (typeof node === "string" ? node : node?.label || node?.text || "")).filter(Boolean);
+  }
+  return String(text || "")
+    .split(/\s*(?:→|->|=|\+|·|\|)\s*/g)
+    .map((node) => node.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+function counterRows(text, data) {
+  if (Array.isArray(data.rows) && data.rows.length) {
+    return data.rows
+      .map((row) => ({
+        value: String(row?.value ?? row?.number ?? "").trim(),
+        label: String(row?.label ?? row?.text ?? "").trim(),
+      }))
+      .filter((row) => row.value || row.label);
+  }
+  const parts = String(text || "")
+    .split(/\s*(?:→|->|·|\|)\s*/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return parts.map((part, index) => ({ value: part, label: index === 0 ? "antes" : "depois" }));
+  }
+  return [{ value: String(text || "—"), label: data.label || "" }];
+}
+
+function listItems(text, data) {
+  if (Array.isArray(data.items) && data.items.length) {
+    return data.items.map((item) => (typeof item === "string" ? item : item?.label || item?.text || "")).filter(Boolean);
+  }
+  return String(text || "")
+    .split(/\s*(?:·|\||,|\n)\s*/g)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function splitLowerThird(text, data) {
+  if (data.name || data.role) {
+    return { name: String(data.name || "").trim(), role: String(data.role || "").trim() };
+  }
+  const parts = String(text || "")
+    .split(/\s*(?:·|—|–|\|)\s*/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return { name: parts[0] || "", role: parts.slice(1).join(" · ") };
+}
+
+function emphasisParts(text, data) {
+  return {
+    text: String(data.text ?? text ?? "").trim(),
+    strike: String(data.strike ?? "").trim(),
+    tag: String(data.tag ?? "").trim(),
+  };
+}
+
+/**
+ * Collect the CSS from every custom element in the plan.
+ *
+ * Custom CSS is trusted local code authored by the agent. It is injected once
+ * into the composition so per-element rules do not require a separate file.
+ *
+ * @param {object} plan
+ * @returns {string}
+ */
+function customElementCss(plan) {
+  return (plan?.elements || [])
+    .filter((element) => element && (element.type === "custom" || element.template === "custom") && element.css)
+    .map((element) => `/* ${element.id || "custom"} */\n${element.css}`)
+    .join("\n");
+}
+
+/**
+ * GSAP timeline statements for a structured element.
+ *
+ * The wrapper fades in/out; the template children carry the actual motion.
+ * `start` is the absolute timeline position, so the same helper works for the
+ * full-film composition and for a standalone element clip.
+ *
+ * @param {object} element
+ * @param {number} index
+ * @param {number} start
+ * @param {number} duration
+ * @returns {string}
+ */
+function templateTween(element, index, start, duration) {
+  const template = elementTemplate(element, String(element.text || ""), element.data || {});
+  const id = `#el-${index}`;
+  const at = (time) => (Number(start) + Number(time)).toFixed(3);
+  const total = Math.max(0.25, Number(duration) || 0.25);
+  const out = Math.max(0.1, total - 0.22);
+  const lines = [
+    `tl.fromTo("${id}", { opacity: 0 }, { opacity: 1, duration: 0.18, ease: "power1.out" }, ${at(0)});`,
+    `tl.to("${id}", { opacity: 0, duration: 0.18, ease: "power1.in" }, ${at(out)});`,
+  ];
+
+  switch (template) {
+    case "custom": {
+      const script = String(element.animation || "").trim();
+      if (script) {
+        lines.push(
+          `(() => { const root = document.querySelector("#el-${index}"); const start = ${Number(start).toFixed(3)}; const duration = ${total.toFixed(3)}; ${script}\n})();`
+        );
+      }
+      break;
+    }
+    case "chapter":
+    case "title":
+      lines.push(
+        `tl.fromTo("${id} .fx-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.7, ease: "power3.out" }, ${at(0.05)});`,
+        `tl.fromTo("${id} .fx-title", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, ${at(0.1)});`,
+        `tl.fromTo("${id} .fx-sub", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, ${at(0.22)});`
+      );
+      break;
+    case "diagram":
+      lines.push(
+        `tl.fromTo("${id} .node", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, stagger: 0.16, ease: "power3.out" }, ${at(0.08)});`,
+        `tl.fromTo("${id} .arrow", { scaleX: 0 }, { scaleX: 1, duration: 0.35, stagger: 0.16, ease: "power2.out" }, ${at(0.18)});`
+      );
+      break;
+    case "counter":
+      lines.push(
+        `tl.fromTo("${id} .counter-row", { x: 32, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, stagger: 0.16, ease: "power3.out" }, ${at(0.08)});`
+      );
+      break;
+    case "list":
+      lines.push(
+        `tl.fromTo("${id} .list-row", { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, stagger: 0.12, ease: "power2.out" }, ${at(0.08)});`
+      );
+      break;
+    case "lower-third":
+      lines.push(
+        `tl.fromTo("${id} .lt-rule", { scaleY: 0 }, { scaleY: 1, duration: 0.35, ease: "power2.out" }, ${at(0.05)});`,
+        `tl.fromTo("${id} .lt-copy", { x: -20, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, ${at(0.12)});`
+      );
+      break;
+    case "emphasis":
+      lines.push(
+        `tl.fromTo("${id} .emphasis-text", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, ${at(0.06)});`,
+        `tl.fromTo("${id} .strike-line", { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: "power2.out" }, ${at(0.22)});`,
+        `tl.fromTo("${id} .emphasis-tag", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, ${at(0.28)});`
+      );
+      break;
+    case "callout":
+      lines.push(
+        `tl.fromTo("${id} .callout-panel", { x: -26, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, ${at(0.05)});`
+      );
+      break;
+    case "terminal":
+      lines.push(
+        `tl.fromTo("${id} .terminal-panel", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, ${at(0.05)});`,
+        `tl.to("${id} .cursor", { opacity: 0, repeat: -1, yoyo: true, duration: 0.45, ease: "none" }, ${at(0.3)});`
+      );
+      break;
+    case "end-card":
+      lines.push(
+        `tl.fromTo("${id} .end-title", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.out" }, ${at(0.08)});`,
+        `tl.fromTo("${id} .end-sub", { opacity: 0 }, { opacity: 1, duration: 0.45, ease: "power2.out" }, ${at(0.3)});`
+      );
+      break;
+    default:
+      break;
+  }
+
+  return lines.join("\n      ");
 }
 
 /**
@@ -4194,6 +4860,189 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .broll { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
       .chart { position: absolute; inset: 80px; z-index: 2; }
       .chart svg { width: 100%; height: 100%; }
+
+      /* Structured motion-graphics templates. */
+      .fx { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+      .fx.chart { inset: 80px; }
+      .fx-panel { position: absolute; color: var(--fg); }
+      .fx-kicker {
+        font-family: var(--body); font-size: 22px; font-weight: 700;
+        letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+        margin-bottom: 16px;
+      }
+      .fx-title {
+        font-family: var(--display); font-size: 96px; font-weight: 800;
+        line-height: 1.0; letter-spacing: -0.04em;
+        text-shadow: 0 10px 50px rgba(0, 0, 0, 0.45);
+      }
+      .fx-sub {
+        margin-top: 18px; max-width: 920px; color: var(--muted);
+        font-size: 30px; line-height: 1.3; font-weight: 500;
+      }
+      .fx-rule {
+        width: 180px; height: 6px; margin-top: 26px; border-radius: 999px;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+        transform-origin: left center;
+      }
+      .pos-center-left > .fx-panel { left: 96px; top: 50%; transform: translateY(-50%); }
+      .pos-center > .fx-panel { left: 50%; top: 50%; transform: translate(-50%, -50%); }
+      .pos-top-left > .fx-panel { left: 96px; top: 96px; }
+      .pos-top-right > .fx-panel { right: 96px; top: 96px; }
+      .pos-bottom-left > .fx-panel { left: 96px; bottom: 120px; }
+      .pos-bottom-right > .fx-panel { right: 96px; bottom: 120px; }
+      .pos-bottom-center > .fx-panel { left: 50%; bottom: 140px; transform: translateX(-50%); }
+
+      .title-panel { max-width: 1400px; padding-left: 32px; border-left: 8px solid var(--accent); }
+      .title-panel .fx-title { font-size: 110px; }
+      .title-panel .fx-rule { margin-left: 0; }
+
+      .diagram-panel {
+        width: 1020px; padding: 30px 34px;
+        border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+        border-radius: 24px; background: rgba(10, 6, 18, 0.88);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+      }
+      .node-row { display: flex; align-items: center; gap: 16px; }
+      .node {
+        display: flex; align-items: center; gap: 12px;
+        padding: 16px 20px; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+        border-radius: 16px; background: rgba(139, 92, 246, 0.12);
+        white-space: nowrap;
+      }
+      .node strong { font-family: var(--display); font-size: 34px; font-weight: 800; }
+      .node-dot {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 34px; height: 34px; border-radius: 999px;
+        background: var(--accent); color: var(--bg);
+        font-family: var(--body); font-size: 18px; font-weight: 800;
+      }
+      .arrow {
+        position: relative; flex: 1; min-width: 34px; height: 3px;
+        background: linear-gradient(90deg, var(--accent), var(--accent2));
+        transform-origin: left center;
+      }
+      .arrow::after {
+        content: ""; position: absolute; right: -2px; top: -6px;
+        border-left: 12px solid var(--accent2);
+        border-top: 7px solid transparent; border-bottom: 7px solid transparent;
+      }
+
+      .counter-panel {
+        min-width: 560px; padding: 26px 30px;
+        border-left: 6px solid var(--accent); border-radius: 0 20px 20px 0;
+        background: rgba(10, 6, 18, 0.88);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      }
+      .counter-row { display: flex; align-items: baseline; gap: 18px; margin-top: 10px; }
+      .counter-value {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 64px; font-weight: 700; line-height: 1; color: var(--fg);
+      }
+      .counter-value.accent { color: var(--accent2); }
+      .counter-row span { color: var(--muted); font-size: 26px; font-weight: 600; }
+
+      .list-panel {
+        min-width: 540px; padding: 26px 30px;
+        border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+        border-radius: 20px; background: rgba(10, 6, 18, 0.88);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      }
+      .list-row { display: flex; align-items: baseline; gap: 18px; margin-top: 14px; }
+      .list-index {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        color: var(--accent); font-size: 26px; font-weight: 700;
+      }
+      .list-row span:last-child { font-family: var(--display); font-size: 42px; font-weight: 800; }
+
+      .lt-panel {
+        padding: 18px 32px 18px 36px;
+        border-radius: 0 18px 18px 0; background: rgba(10, 6, 18, 0.9);
+        box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
+      }
+      .lt-rule {
+        position: absolute; left: 0; top: 18px; bottom: 18px; width: 6px;
+        border-radius: 999px; background: linear-gradient(180deg, var(--accent), var(--accent2));
+        transform-origin: top center;
+      }
+      .lt-copy strong { display: block; font-family: var(--display); font-size: 38px; font-weight: 800; }
+      .lt-copy span { display: block; margin-top: 6px; color: var(--muted); font-size: 27px; font-weight: 500; }
+
+      .emphasis-panel {
+        max-width: 1500px; padding: 20px 34px;
+        border-left: 6px solid var(--accent); border-radius: 0 18px 18px 0;
+        background: rgba(10, 6, 18, 0.86);
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.4);
+      }
+      .emphasis-text {
+        font-family: var(--display); font-size: 72px; font-weight: 800;
+        line-height: 1.05; letter-spacing: -0.03em; white-space: nowrap;
+      }
+      .emphasis-text .strike { position: relative; color: var(--muted); }
+      .emphasis-text .strike-line {
+        position: absolute; left: -4%; right: -4%; top: 54%;
+        height: 6px; border-radius: 999px; background: var(--accent2);
+        transform: scaleX(0); transform-origin: left center;
+      }
+      .emphasis-tag {
+        display: inline-block; margin-top: 14px; padding: 8px 16px;
+        border-radius: 999px; background: var(--accent); color: var(--bg);
+        font-family: var(--display); font-size: 24px; font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .callout-panel {
+        display: flex; align-items: center; gap: 16px;
+        padding: 18px 24px; border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+        border-radius: 999px; background: rgba(10, 6, 18, 0.9);
+        box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+      }
+      .callout-icon { color: var(--accent2); font-size: 28px; }
+      .callout-panel strong { display: block; font-family: var(--display); font-size: 36px; font-weight: 800; }
+      .callout-panel span:last-child { display: block; margin-top: 4px; color: var(--muted); font-size: 24px; }
+
+      .terminal-panel {
+        min-width: 640px; padding: 20px 26px 22px;
+        border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+        border-radius: 18px; background: rgba(7, 5, 13, 0.94);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      .terminal-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+      .terminal-bar span { width: 12px; height: 12px; border-radius: 999px; background: var(--accent); opacity: 0.55; }
+      .terminal-line { display: flex; align-items: center; gap: 10px; font-size: 42px; font-weight: 600; }
+      .terminal-line .prompt { color: var(--accent2); }
+      .terminal-line .cmd { color: var(--fg); }
+      .cursor { width: 14px; height: 42px; background: var(--accent); display: inline-block; }
+      .terminal-note { margin-top: 12px; color: var(--muted); font-size: 26px; }
+
+      .end-card-panel {
+        inset: 0; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; text-align: center;
+        background:
+          radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 60%),
+          rgba(10, 6, 18, 0.92);
+      }
+      .end-title {
+        font-family: var(--display); font-size: 84px; font-weight: 800;
+        line-height: 1.05; letter-spacing: -0.03em;
+      }
+      .end-sub {
+        margin-top: 26px; color: var(--muted); font-size: 30px;
+        font-weight: 500; letter-spacing: 0;
+      }
+      .end-card-panel .fx-rule { margin-left: auto; margin-right: auto; width: 220px; }
+
+      .broll.layout-pip {
+        inset: 96px 72px auto auto; width: 720px; height: 405px;
+        border-radius: 24px; border: 2px solid var(--accent);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); z-index: 3;
+      }
+      .broll.layout-split {
+        inset: 0 0 42% 0; width: 100%; height: 58%;
+        border-bottom: 2px solid var(--accent); z-index: 3;
+      }
+      .broll.layout-full { inset: 0; width: 100%; height: 100%; z-index: 3; }
+
       ${extraCss}
   `;
 }
@@ -4204,7 +5053,6 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   const fps = plan.format?.fps || 30;
   const duration = Number(plan.duration) || 10;
   const lang = String(plan.language || "").toLowerCase().startsWith("pt") ? "pt-BR" : "en";
-  const projectName = project.config.name || project.slug;
   const panel = plan.layout?.type === "speaker-left-panel";
   const panelBox = plan.layout?.panel || { x: 700, y: 40, width: 1160, height: 1000 };
   const panelCss = panel
@@ -4241,11 +5089,9 @@ function renderHyperFramesHtml(project, plan, theme, base) {
     .map(({ element, index }) => {
       const start = Number(element.start) || 0;
       const end = Math.max(start + 0.5, Number(element.end) || start + 1);
-      return `
-      tl.fromTo("#el-${index}", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, ${start.toFixed(3)});
-      tl.to("#el-${index}", { opacity: 0, duration: 0.25, ease: "power2.in" }, ${Math.max(start + 0.5, end - 0.25).toFixed(3)});`;
+      return templateTween(element, index, start, end - start);
     })
-    .join("");
+    .join("\n      ");
 
   const transitions = (plan.elements || [])
     .filter((element) => element.type === "transition")
@@ -4259,6 +5105,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
         .map((element) => hyperframesZoom(element, "#base"));
   const motionHtml = transitions.map((transition) => transition.html).join("\n      ");
   const motionCss = [...transitions.map((transition) => transition.css), ...zooms.map((zoom) => zoom.css)].join("\n");
+  const customCss = customElementCss(plan);
   const motionTween = [...zooms.map((zoom) => zoom.tween), ...transitions.map((transition) => transition.tween)].join("\n");
 
   let baseHtml = "";
@@ -4282,7 +5129,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
     <meta name="viewport" content="width=${width}, height=${height}" />
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
     <style>
-      ${hyperFramesCss(theme, width, height, { extraCss: `${motionCss}\n${panelCss}` })}
+      ${hyperFramesCss(theme, width, height, { extraCss: `${motionCss}\n${panelCss}\n${customCss}` })}
     </style>
   </head>
   <body>
@@ -4295,7 +5142,6 @@ function renderHyperFramesHtml(project, plan, theme, base) {
       data-width="${width}"
       data-height="${height}"
     >
-      <div id="brand" class="clip" data-start="0" data-duration="${duration.toFixed(3)}" data-track-index="0">${htmlEscape(projectName)}</div>
       ${baseHtml}
       ${panelHtml}
       ${elementHtml}
@@ -4332,10 +5178,9 @@ function renderHyperFramesElementDocument(project, plan, element, spec, theme) {
     tween = transition.tween;
   } else {
     elementHtml = renderHyperFramesElement(local, 0, theme);
-    tween = `
-      tl.fromTo("#el-0", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0);
-      tl.to("#el-0", { opacity: 0, duration: 0.25, ease: "power2.in" }, ${Math.max(0.5, duration - 0.25).toFixed(3)});`;
+    tween = templateTween(local, 0, 0, duration);
   }
+  if (local.css) extraCss += `\n${local.css}`;
   if (!elementHtml) return null;
 
   return `<!doctype html>
@@ -4396,6 +5241,7 @@ function buildHyperFrames(project, plan, args) {
   const remapped = planForBuild(plan, args);
   const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args);
   const finalPlan = { ...remapped.plan, duration: base.duration };
+  resolveCustomElements(project, finalPlan);
   copyElementAssets(project.dir, finalPlan, path.join(engineDir, "assets"), "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile));
 
@@ -4430,7 +5276,6 @@ function buildHyperFrames(project, plan, args) {
 }
 
 function renderRemotionTsx(project, plan, theme, base) {
-  const projectName = JSON.stringify(project.config.name || project.slug);
   return `import {
   AbsoluteFill,
   Audio,
@@ -4443,7 +5288,6 @@ function renderRemotionTsx(project, plan, theme, base) {
 import { plan, theme, base } from "./data/plan";
 
 const fps = plan.format?.fps ?? 30;
-const projectName = ${projectName};
 
 const fade = (frame: number, start: number, end: number) => {
   const a = Math.max(0, start) * fps;
@@ -4456,7 +5300,22 @@ const fade = (frame: number, start: number, end: number) => {
   });
 };
 
-const textOf = (element: any) => element.text ?? element.description ?? "";
+const textOf = (element: any) => {
+  if (element.text) return element.text;
+  const data = element.data ?? {};
+  const parts = [
+    data.title,
+    data.name,
+    data.role,
+    data.command,
+    data.label,
+    data.sub,
+    ...(data.nodes ?? []),
+    ...(data.items ?? []),
+    ...(data.rows ?? []).map((row: any) => [row?.value, row?.label].filter(Boolean).join(" ")),
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : element.description ?? "";
+};
 
 const Element = ({ element, frame }: { element: any; frame: number }) => {
   const opacity = fade(frame, element.start, element.end);
@@ -4548,7 +5407,6 @@ export const RoosterVideo = () => {
         {base.kind === "video" ? <OffthreadVideo src={staticFile(base.path)} muted={!base.hasAudio} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
         {base.kind === "audio" ? <Audio src={staticFile(base.path)} /> : null}
       </div>
-      <div style={{ position: "absolute", left: 96, top: 72, color: theme.accent, fontSize: 28, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase" }}>{projectName}</div>
       {(plan.elements ?? []).map((element: any, index: number) => (
         <Element key={index} element={element} frame={frame} />
       ))}
@@ -4813,7 +5671,22 @@ function renderRemotionElementTsx() {
   useCurrentFrame,
 } from "remotion";
 
-const textOf = (element: any) => element.text ?? element.description ?? "";
+const textOf = (element: any) => {
+  if (element.text) return element.text;
+  const data = element.data ?? {};
+  const parts = [
+    data.title,
+    data.name,
+    data.role,
+    data.command,
+    data.label,
+    data.sub,
+    ...(data.nodes ?? []),
+    ...(data.items ?? []),
+    ...(data.rows ?? []).map((row: any) => [row?.value, row?.label].filter(Boolean).join(" ")),
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : element.description ?? "";
+};
 
 const fade = (frame: number, duration: number, fps: number) => {
   const end = Math.max(1, duration * fps);
@@ -5075,6 +5948,7 @@ function renderFilmCraftElements(project, plan, specs, theme, engine, args, path
       format: { width, height, fps },
       engine,
       engineVersion: info.version || "unknown",
+      toolVersion: VERSION,
       render: { format: "mov", alpha: true, proresProfile: "4444", asset: assetFingerprint },
     });
     const targetName = `${spec.id}-${hash.slice(0, 8)}.mov`;
@@ -5722,6 +6596,14 @@ function buildFilmCraft(project, plan, args) {
   const base = buildMediaCached(project, plan, remapped.keeps, paths.dir, args, "assets");
   const duration = Number(base.duration) || plannedDuration;
   const finalPlan = { ...remapped.plan, duration, format: { ...format, duration } };
+  const customElements = (finalPlan.elements || []).filter(isCustomElement);
+  if (customElements.length && engine !== "hyperframes") {
+    fail(
+      `Custom HTML/JS elements need --engine hyperframes; ${engine} cannot execute them. ` +
+        `Remove the custom element(s) or change the element engine.`
+    );
+  }
+  if (customElements.length) resolveCustomElements(project, finalPlan);
   const specs = elementSpecs(finalPlan, {
     projectSlug: project.slug,
     format: finalPlan.format,
@@ -5786,11 +6668,15 @@ function buildFilmCraft(project, plan, args) {
 
   const cachedCount = rendered.filter((item) => item.cached).length;
   const renderedSpecs = specs.filter((spec) => spec.renderable);
+  const skippedSpecs = specs.filter((spec) => !spec.renderable);
   const maxTrack = renderedSpecs.length ? Math.max(...renderedSpecs.map((spec) => spec.trackIndex)) : 1;
   heading(`Built FilmCraft timeline — ${project.slug}`);
   console.log(`  project:  ${paths.projectFile}`);
   console.log(`  base:     ${base.kind} · ${duration.toFixed(2)}s`);
-  console.log(`  elements: ${rendered.length} (${cachedCount} cached) · ${specs.filter((spec) => !spec.renderable).length} skipped`);
+  console.log(`  elements: ${rendered.length} (${cachedCount} cached) · ${skippedSpecs.length} skipped`);
+  if (skippedSpecs.length) {
+    console.log(`  skipped:  ${skippedSpecs.map((spec) => `${spec.id} (${spec.type})`).join(", ")}`);
+  }
   console.log(`  tracks:   V1${maxTrack >= 2 ? `–V${maxTrack}` : ""} · A1`);
   console.log(`  markers:  ${markers.length}`);
   console.log("\nNext:");
@@ -5809,9 +6695,54 @@ function buildCommand(args) {
   }
 
   const plan = readJson(planPath, null);
-  const { errors, warnings } = validatePlan(plan, project.dir);
+
+  const requestedTarget = typeof args.target === "string" ? args.target : null;
+  if (requestedTarget && !TARGET_IDS.includes(requestedTarget)) {
+    fail(`Unknown target "${requestedTarget}". Use auto, hyperframes, remotion, or filmcraft.`);
+  }
+  if (args.engine === "filmcraft" && !requestedTarget) args.target = "filmcraft";
+  const projectTimeline = project.config.timeline || "none";
+  const target =
+    requestedTarget && requestedTarget !== "auto"
+      ? requestedTarget
+      : projectTimeline === "filmcraft"
+        ? "filmcraft"
+        : null;
+
+  const validationEngine =
+    target === "filmcraft"
+      ? "filmcraft"
+      : typeof args.engine === "string" && args.engine !== "auto"
+        ? args.engine
+        : project.config.engine && project.config.engine !== "auto"
+          ? project.config.engine
+          : "hyperframes";
+  const { errors, warnings } = validatePlan(plan, project.dir, { engine: validationEngine });
+  const customIssues = customElementIssues(plan, project);
+  errors.push(...customIssues.errors);
+  warnings.push(...customIssues.warnings);
   if (errors.length) {
     fail(`The plan has ${errors.length} error(s):\n${errors.map((error) => `- ${error}`).join("\n")}`);
+  }
+  if (args["strict-plan"] && warnings.length) {
+    fail(
+      `The plan has ${warnings.length} quality warning(s). Fix them or drop --strict-plan:\n` +
+        warnings.map((warning) => `- ${warning}`).join("\n")
+    );
+  }
+  const unsupported = elementSupport(plan, validationEngine).unsupported;
+  if (unsupported.length) {
+    const message = unsupported
+      .map((item) => `- ${item.id || item.type} (${item.type}): ${item.reason}`)
+      .join("\n");
+    if (args["allow-skipped-elements"]) {
+      console.warn(`  ! ${unsupported.length} element(s) will not render in ${validationEngine}:\n${message}`);
+    } else {
+      fail(
+        `${unsupported.length} element(s) cannot render in ${validationEngine}:\n${message}\n` +
+          "Use --engine hyperframes/remotion, remove those elements, or pass --allow-skipped-elements to build without them."
+      );
+    }
   }
   const noVisualElements = warnings.find((warning) => warning.startsWith("plan: no visual elements"));
   if (noVisualElements && !args["allow-cut-only"]) {
@@ -5831,19 +6762,12 @@ function buildCommand(args) {
   if (missingMusic) {
     fail(`Music file not found. ${missingMusic}\nFix music.src in edit/plan.json before building.`);
   }
-
-  const requestedTarget = typeof args.target === "string" ? args.target : null;
-  if (requestedTarget && !TARGET_IDS.includes(requestedTarget)) {
-    fail(`Unknown target "${requestedTarget}". Use auto, hyperframes, remotion, or filmcraft.`);
+  const qualityWarnings = warnings.filter((warning) => warning.startsWith("plan: "));
+  if (qualityWarnings.length) {
+    console.warn(
+      `  ! ${qualityWarnings.length} plan quality warning(s). Run "plan ${project.slug} --check" and read qa/plan-review.md.`
+    );
   }
-  if (args.engine === "filmcraft" && !requestedTarget) args.target = "filmcraft";
-  const projectTimeline = project.config.timeline || "none";
-  const target =
-    requestedTarget && requestedTarget !== "auto"
-      ? requestedTarget
-      : projectTimeline === "filmcraft"
-        ? "filmcraft"
-        : null;
 
   if (target && target !== "filmcraft" && args.engine && args.engine !== target) {
     fail(`Conflicting build targets: --target ${target} and --engine ${args.engine}.`);
@@ -6937,7 +7861,7 @@ Commands:
   profile list|show|fork          Reusable visual identities
   digest <slug> [--from/--to]     Compact transcript summary
   transcribe [slug] [options]     Transcribe assets/source with Whisper
-  plan [slug] [--check|--show]    Validate, show, and write edit/plan.html
+  plan [slug] [--check]           Validate, show, and write edit/plan.html + qa/plan-review.md
   textcheck <slug>                Write qa/text-review.md with on-screen text
   styleproof <slug> [--open]      Write style/proof/index.html with 3 frames
   captions <slug> [options]       Generate SRT/VTT from the transcript
@@ -7073,8 +7997,12 @@ Build options:
   --crf <n>                       Quality (default: 20)
   --preset <id>                   Encoder preset (default: veryfast)
   --no-cuts                       Ignore plan cuts and use the original source
+  --cut-punch <scale>             Punch-in on uncovered silence cuts (default: 1.035)
+  --cut-fade <seconds>            Audio micro-fade at each cut (default: 0.035; 0 disables)
   --allow-cut-only                Allow a plan with no visual elements
   --allow-no-music                Allow a plan with no music decision
+  --allow-skipped-elements        Build even when the engine cannot render an element
+  --strict-plan                   Fail on any plan quality warning
   --sample <n>                    Build a short montage with n elements (default: 3)
 
 Render options:

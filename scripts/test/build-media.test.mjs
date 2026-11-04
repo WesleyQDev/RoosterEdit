@@ -371,6 +371,55 @@ test("buildBaseMediaArgs emits valid hardware encoder flags", () => {
   assert.ok(amf.includes("-qp_i"));
 });
 
+test("buildBaseMediaArgs adds punch-in and audio micro-fades at cut joins", () => {
+  const args = buildBaseMediaArgs({
+    source: "source.mp4",
+    keeps: [
+      { start: 0, end: 4 },
+      { start: 6, end: 10 },
+    ],
+    out: "base.mp4",
+    hasVideo: true,
+    hasAudio: true,
+    loudnorm: false,
+    punchKeeps: [false, true],
+    punchScale: 1.04,
+    frameWidth: 640,
+    frameHeight: 360,
+    cutFade: 0.04,
+  });
+  const graph = filterOf(args);
+  assert.match(
+    graph,
+    /\[0:v\]trim=start=6:end=10,scale=trunc\(iw\*1\.04\/2\)\*2:trunc\(ih\*1\.04\/2\)\*2,crop=640:360,setsar=1,setpts=PTS-STARTPTS\[bv1\]/
+  );
+  assert.equal(count(graph, "afade=t=in"), 1);
+  assert.equal(count(graph, "afade=t=out"), 1);
+  assert.match(graph, /\[0:a\]atrim=start=0:end=4,asetpts=PTS-STARTPTS,afade=t=out:st=3\.96:d=0\.04\[ba0\]/);
+  assert.match(graph, /\[0:a\]atrim=start=6:end=10,asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0\.04\[ba1\]/);
+});
+
+test("buildBaseMediaArgs applies punch only to flagged keeps", () => {
+  const args = buildBaseMediaArgs({
+    source: "source.mp4",
+    keeps: [
+      { start: 0, end: 4 },
+      { start: 6, end: 10 },
+      { start: 12, end: 16 },
+    ],
+    out: "base.mp4",
+    loudnorm: false,
+    punchKeeps: [false, true, false],
+    punchScale: 1.05,
+    frameWidth: 1920,
+    frameHeight: 1080,
+  });
+  const graph = filterOf(args);
+  assert.equal(count(graph, "scale=trunc"), 1);
+  assert.ok(!graph.includes("[0:v]trim=start=0:end=4,scale="));
+  assert.ok(!graph.includes("[0:v]trim=start=12:end=16,scale="));
+});
+
 test("buildBaseMediaArgs validates its inputs", () => {
   assert.throws(
     () => buildBaseMediaArgs({ source: "s.mp4", out: "x.mp4", hasVideo: false, hasAudio: false }),

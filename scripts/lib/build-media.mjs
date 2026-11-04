@@ -262,6 +262,13 @@ export function buildTimelineAudioArgs({
  * @param {number|null} [options.duration] Full source duration, used to detect
  *   a single full-length keep and skip the cut pass.
  * @param {number} [options.sampleRate=48000]
+ * @param {boolean[]} [options.punchKeeps] Per-keep punch-in flags. A punched
+ *   keep is scaled up slightly and center-cropped back to the source size.
+ * @param {number} [options.punchScale=1.035] Punch-in scale for punched keeps.
+ * @param {number} [options.frameWidth] Source frame width, required for punch.
+ * @param {number} [options.frameHeight] Source frame height, required for punch.
+ * @param {number} [options.cutFade=0] Audio fade in/out, in seconds, applied at
+ *   each keep boundary. Keeps clicks and hard consonants from sounding cut.
  * @returns {string[]} FFmpeg args, without the executable name.
  */
 export function buildBaseMediaArgs({
@@ -276,6 +283,11 @@ export function buildBaseMediaArgs({
   loudnorm = true,
   duration = null,
   sampleRate = 48000,
+  punchKeeps = [],
+  punchScale = 1.035,
+  frameWidth = 0,
+  frameHeight = 0,
+  cutFade = 0,
 } = {}) {
   if (typeof source !== "string" || !source.trim()) {
     throw new TypeError("buildBaseMediaArgs: source is required");
@@ -307,6 +319,14 @@ export function buildBaseMediaArgs({
   const quality = crf === undefined || crf === null || crf === "" ? 20 : crf;
   const speedPreset =
     preset === undefined || preset === null || preset === "" ? "veryfast" : preset;
+  const fade = Math.max(0, Number(cutFade) || 0);
+  const punch = Array.isArray(punchKeeps) ? punchKeeps : [];
+  const scale = Number(punchScale);
+  const punchFactor = Number.isFinite(scale) && scale > 1 && scale < 1.25 ? scale : 1.035;
+  const cropWidth = Math.floor(Number(frameWidth) / 2) * 2;
+  const cropHeight = Math.floor(Number(frameHeight) / 2) * 2;
+  const canPunch = video && cropWidth > 1 && cropHeight > 1;
+  const anyPunch = canPunch && cutList.some((_, index) => punch[index]);
   if (cutList.length && String(encoder).trim() === "copy") {
     throw new Error("buildBaseMediaArgs: encoder cannot be \"copy\" when applying cuts");
   }
@@ -334,17 +354,35 @@ export function buildBaseMediaArgs({
 
   cutList.forEach((keep, index) => {
     if (video) {
-      chains.push(
-        `[0:v]trim=start=${formatNumber(keep.start)}:end=${formatNumber(keep.end)},` +
-          `setpts=PTS-STARTPTS[bv${index}]`
-      );
+      let videoChain =
+        `[0:v]trim=start=${formatNumber(keep.start)}:end=${formatNumber(keep.end)}`;
+      if (punch[index] && canPunch) {
+        // A tiny punch-in reads as a second camera angle. The crop uses the
+        // probed source size so the punched and unpunched segments match for
+        // concat; the scale is rounded to even dimensions first.
+        videoChain +=
+          `,scale=trunc(iw*${punchFactor}/2)*2:trunc(ih*${punchFactor}/2)*2` +
+          `,crop=${cropWidth}:${cropHeight}`;
+      }
+      if (anyPunch) videoChain += `,setsar=1`;
+      videoChain += `,setpts=PTS-STARTPTS[bv${index}]`;
+      chains.push(videoChain);
       videoLabels.push(`[bv${index}]`);
     }
     if (audio) {
-      chains.push(
+      const keepDuration = keep.end - keep.start;
+      let audioChain =
         `[0:a]atrim=start=${formatNumber(keep.start)}:end=${formatNumber(keep.end)},` +
-          `asetpts=PTS-STARTPTS[ba${index}]`
-      );
+        `asetpts=PTS-STARTPTS`;
+      if (fade > 0 && index > 0) {
+        audioChain += `,afade=t=in:st=0:d=${formatNumber(Math.min(fade, keepDuration))}`;
+      }
+      if (fade > 0 && index < cutList.length - 1) {
+        const fadeStart = Math.max(0, keepDuration - fade);
+        audioChain += `,afade=t=out:st=${formatNumber(fadeStart)}:d=${formatNumber(Math.min(fade, keepDuration))}`;
+      }
+      audioChain += `[ba${index}]`;
+      chains.push(audioChain);
       audioLabels.push(`[ba${index}]`);
     }
   });

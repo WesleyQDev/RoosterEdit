@@ -40,34 +40,78 @@
     {
       "id": "el-001",
       "type": "letreiro",
+      "role": "chapter",
+      "template": "chapter",
       "start": 3.0,
       "end": 6.0,
       "text": "A virada",
-      "description": "Título com a promessa central do vídeo",
-      "style": "bold uppercase, cor de destaque"
+      "description": "Card de capítulo com a promessa central do vídeo"
     },
     {
       "id": "el-002",
       "type": "grafico",
+      "template": "diagram",
       "start": 32.0,
       "end": 38.0,
       "text": "3 decisões",
-      "description": "Diagrama de três passos aparece um item por vez"
+      "covers": "foram três decisões",
+      "data": {
+        "kicker": "processo",
+        "nodes": ["pedir demissão", "testar o produto", "escalar"],
+        "caption": "uma decisão por vez"
+      },
+      "description": "Diagrama de três nós, um por vez"
     },
     {
       "id": "el-003",
-      "type": "zoom",
-      "start": 52.0,
-      "end": 55.0,
-      "description": "Punch-in lento no rosto do entrevistado no insight principal"
+      "type": "grafico",
+      "template": "counter",
+      "start": 40.0,
+      "end": 45.0,
+      "text": "140 s → 20 s",
+      "covers": "cento e quarenta segundos",
+      "data": {
+        "kicker": "tempo",
+        "rows": [
+          { "value": "140 s", "label": "primeira instalação" },
+          { "value": "20 s", "label": "aberturas seguintes" }
+        ]
+      },
+      "description": "Comparação de tempo em dois números"
     },
     {
       "id": "el-004",
+      "type": "caption-emphasis",
+      "template": "emphasis",
+      "start": 52.0,
+      "end": 55.0,
+      "text": "não é um GPT",
+      "covers": "não é um GPT",
+      "data": { "strike": "GPT", "tag": "IA local" },
+      "description": "Risca GPT e destaca IA local"
+    },
+    {
+      "id": "el-005",
       "type": "broll",
+      "layout": "pip",
       "start": 58.0,
       "end": 64.0,
       "src": "assets/source/broll-office.mp4",
-      "description": "B-roll de escritório na fala sobre o primeiro cliente"
+      "covers": "na fala sobre o primeiro cliente",
+      "intent": "evidence",
+      "sourceTime": 210.0,
+      "description": "B-roll de escritório em PIP, mantendo o rosto visível"
+    },
+    {
+      "id": "el-006",
+      "type": "custom",
+      "template": "custom",
+      "start": 66.0,
+      "end": 70.0,
+      "html": "<div class=\"glow\"><span></span><strong>novo</strong></div>",
+      "css": ".glow{position:absolute;inset:0;display:grid;place-items:center;color:#f5f3ff;font:800 56px Inter,sans-serif}.glow span{position:absolute;width:220px;height:220px;border:6px solid #8b5cf6;border-radius:50%}",
+      "animation": "tl.fromTo(root.querySelector('span'), { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'back.out(1.7)' }, start + 0.1);",
+      "description": "Animação autoral inline; para reutilizar, salve como component"
     }
   ],
   "chapters": [

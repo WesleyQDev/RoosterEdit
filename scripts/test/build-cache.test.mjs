@@ -96,6 +96,10 @@ test("cutKey is stable and invalidates on cuts, encoder, format and loudnorm", (
   assert.notEqual(first, cutKey({ ...base, preset: "slow" }));
   assert.notEqual(first, cutKey({ ...base, format: { ...FORMAT, fps: 24 } }));
   assert.notEqual(first, cutKey({ ...base, loudnorm: false }));
+  assert.notEqual(first, cutKey({ ...base, punchKeeps: [false, true] }));
+  assert.notEqual(first, cutKey({ ...base, punchScale: 1.06 }));
+  assert.notEqual(first, cutKey({ ...base, cutFade: 0.05 }));
+  assert.notEqual(first, cutKey({ ...base, toolVersion: "9.9.9" }));
 
   // Rounded keeps mean sub-frame edits do not invalidate the key.
   assert.equal(

@@ -194,7 +194,7 @@ export function rankBroll({ files, transcriptText = "", tags = [] } = {}) {
  * @param {number} [options.startIndex=1] First numeric id suffix.
  * @param {number} [options.minDuration=2] Skip segments shorter than this.
  * @param {number} [options.maxDuration=6] Cap each suggestion to this length.
- * @returns {Array<{id:string,type:"broll",start:number,end:number,src:string,description:string}>}
+ * @returns {Array<{id:string,type:"broll",start:number,end:number,src:string,covers:string,intent:string,description:string}>}
  *   Suggestions sorted by start time, or an empty array when there is no
  *   usable transcript timing or keyword overlap.
  */
@@ -271,6 +271,8 @@ export function suggestBrollElements({
     start: candidate.start,
     end: candidate.end,
     src: planSource(candidate.entry, baseDir),
+    covers: candidate.text,
+    intent: "evidence",
     description: describe(candidate.entry, candidate.text, candidate.matches),
   }));
 }
