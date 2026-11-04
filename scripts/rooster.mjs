@@ -16,18 +16,62 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeCaptions, burnArgs } from "./features/captions.mjs";
 import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
 import { reframeArgs, targetDimensions } from "./features/reframe.mjs";
-import { listMediaFiles, rankBroll, suggestBrollElements } from "./features/broll.mjs";
+import { rankBroll, suggestBrollElements } from "./features/broll.mjs";
 import { mixAudioArgs } from "./features/audio.mjs";
 import { colorArgs, buildStabilizePasses } from "./features/color.mjs";
 import { hyperframesTransition, hyperframesZoom, remotionZoomValues, remotionTransitionValues } from "./features/motion.mjs";
 import { renderChartSvg, validateChart, chartSummary } from "./features/charts.mjs";
 import { splitScript, detectTtsProviders, buildTtsArgs, buildVoiceoverPlan } from "./features/tts.mjs";
 import { buildMulticamPlan, speedFilter, jlCutOffsets } from "./features/multicam.mjs";
+import { cacheClear, cacheGc, cacheInfo, cacheRoot, readCache, withCache } from "./lib/cache.mjs";
+import { runAsync, runPool } from "./lib/exec.mjs";
+import { detectCapabilities } from "./lib/capabilities.mjs";
+import { engineVersion } from "./lib/engines.mjs";
+import { buildProbeArgs, parseProbeJson, probeKey, sourceFingerprint } from "./lib/media.mjs";
+import {
+  hyperFramesRenderArgs,
+  parseRenderProgress,
+  readRenderMeta,
+  remotionRenderArgs,
+  renderKey,
+  runRender,
+  validateRenderProbe,
+  writeRenderMeta,
+} from "./lib/render.mjs";
+import { cutKey, elementKey, hashKey, htmlKey, musicKey, readBuildState, roundKeeps, voiceKey, writeBuildState } from "./lib/build-cache.mjs";
+import { buildBaseMediaArgs, preserveEngineCaches, restoreEngineCaches } from "./lib/build-media.mjs";
+import {
+  exportMedia as filmCraftExport,
+  filmCraftMcpSnippet,
+  filmCraftOnboardingPrompt,
+  filmCraftRun,
+  filmCraftStatus,
+  filmCraftVersion,
+  findFilmCraft,
+  secondsToTicks,
+  setupFilmCraftMcp,
+  ticksToSeconds,
+} from "./lib/filmcraft.mjs";
+import { elementSpecs, summarizeTimeline, timelineFromPlan, timelineMarkers } from "./features/timeline.mjs";
+import { getBrollIndex } from "./lib/broll-index.mjs";
+import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
+import { generateVoiceover } from "./lib/tts-runner.mjs";
+import {
+  fasterWhisperArgs,
+  hyperFramesTranscribeArgs,
+  normalizeLanguage,
+  pickAsrBackend,
+  shouldUseWords,
+  transcriptKey,
+  transcriptMeta,
+} from "./lib/asr.mjs";
+import { normalizeTranscript } from "./features/transcript.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SKILL_ROOT = path.resolve(__dirname, "..");
 const VERSION = "0.1.0";
+const REMOTION_VERSION = "4.0.540";
 
 const CWD = process.cwd();
 const WORKSPACE = process.env.ROOSTER_WORKSPACE
@@ -38,6 +82,8 @@ const ROOSTER_HOME = process.env.ROOSTER_HOME
   : path.join(os.homedir(), ".rooster");
 
 const ENGINE_IDS = ["auto", "hyperframes", "remotion", "ffmpeg"];
+const TARGET_IDS = ["auto", "hyperframes", "remotion", "filmcraft"];
+const TIMELINE_IDS = ["none", "filmcraft"];
 const SOURCE_IDS = ["live", "generated", "hybrid"];
 const VOICE_IDS = ["user", "tts", "none"];
 const STYLE_IDS = ["user", "profile", "ai", "reference"];
@@ -98,6 +144,42 @@ function slugify(value) {
 
 function shortHash(value) {
   return crypto.createHash("sha1").update(String(value)).digest("hex").slice(0, 8);
+}
+
+function parseByteSize(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return null;
+  const match = text.match(/^(\d+(?:[.,]\d+)?)\s*(b|kb|kib|mb|mib|gb|gib|tb|tib)?$/);
+  if (!match) return null;
+  const amount = Number(match[1].replace(",", "."));
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  const unit = match[2] || "b";
+  const factors = {
+    b: 1,
+    kb: 1024,
+    kib: 1024,
+    mb: 1024 ** 2,
+    mib: 1024 ** 2,
+    gb: 1024 ** 3,
+    gib: 1024 ** 3,
+    tb: 1024 ** 4,
+    tib: 1024 ** 4,
+  };
+  return Math.round(amount * (factors[unit] || 1));
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = value;
+  let index = -1;
+  do {
+    size /= 1024;
+    index += 1;
+  } while (size >= 1024 && index < units.length - 1);
+  return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[index]}`;
 }
 
 function parseArgs(argv) {
@@ -262,85 +344,22 @@ function checklist(value) {
 // doctor
 // ---------------------------------------------------------------------------
 
-function detectLocalPackage() {
-  const pkgPath = path.join(CWD, "package.json");
-  const pkg = readJson(pkgPath, null);
-  const deps = pkg ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) } : {};
-  const has = (name) => Boolean(deps[name] || exists(path.join(CWD, "node_modules", name)));
-  return {
-    packageJson: Boolean(pkg),
-    hyperframes: has("hyperframes") || exists(path.join(CWD, "node_modules", ".bin", "hyperframes")) ? "detected" : "not-detected",
-    remotion: has("remotion") ? "detected" : "not-detected",
-    three: has("three") ? "detected" : "not-detected",
-    remotionThree: has("@remotion/three") ? "detected" : "not-detected",
+async function doctor(args = {}) {
+  const cacheDir = cacheRoot(WORKSPACE);
+  const capabilityCache = {
+    dir: cacheDir,
+    read: () => readJson(path.join(cacheDir, "capabilities.json"), null),
+    write: (_key, value) => writeJson(path.join(cacheDir, "capabilities.json"), value),
   };
-}
-
-function detectTts() {
-  return {
-    openai: Boolean(process.env.OPENAI_API_KEY),
-    elevenlabs: Boolean(process.env.ELEVENLABS_API_KEY),
-    gemini: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
-    edgeTts: Boolean(versionOf("edge-tts", ["--version"])),
-    piper: Boolean(versionOf("piper", ["--version"])),
-  };
-}
-
-function detectWhisper() {
-  const candidates = [
-    ["whisper", ["--help"]],
-    ["whisper-cli", ["--help"]],
-    ["whisper-cpp", ["--help"]],
-    ["faster-whisper", ["--help"]],
-    ["mlx-whisper", ["--help"]],
-  ];
-  for (const [name, args] of candidates) {
-    const result = run(name, args, { timeout: 15000 });
-    if (result.ok || result.stdout || result.stderr) return name;
-  }
-  const py = run("python", ["-c", "import faster_whisper; print(getattr(faster_whisper, '__version__', 'detected'))"], { timeout: 15000 });
-  if (py.ok) return "faster-whisper (python)";
-  return null;
-}
-
-function doctor() {
-  const engines = detectLocalPackage();
-  const data = {
-    schema: "rooster.doctor/v1",
-    version: VERSION,
-    os: process.platform,
-    arch: process.arch,
-    cwd: CWD,
+  return detectCapabilities({
     workspace: WORKSPACE,
-    workspaceExists: exists(WORKSPACE),
-    roosterHome: ROOSTER_HOME,
-    node: process.version.replace(/^v/, ""),
-    npm: versionOf("npm", ["--version"]),
-    python: versionOf("python", ["--version"]) || versionOf("python3", ["--version"]),
-    git: versionOf("git", ["--version"]),
-    ffmpeg: versionOf("ffmpeg", ["-version"]),
-    ffprobe: versionOf("ffprobe", ["-version"]),
-    ytdlp: versionOf("yt-dlp", ["--version"]),
-    whisper: detectWhisper(),
-    hyperframesCli: versionOf("npx", ["--yes", "hyperframes", "--version"], { timeout: 60000 }),
-    gpu: versionOf("nvidia-smi", ["--query-gpu=name", "--format=csv,noheader"]),
-    engines,
-    tts: detectTts(),
-    browser: process.env.ROOSTER_BROWSER || "unknown",
-    subagents: "unknown",
-    env: {
-      roosterWorkspace: Boolean(process.env.ROOSTER_WORKSPACE),
-      roosterHome: Boolean(process.env.ROOSTER_HOME),
-      roosterProfile: process.env.ROOSTER_PROFILE || null,
-      roosterEngine: process.env.ROOSTER_ENGINE || null,
-    },
-  };
-
-  if (data.hyperframesCli && data.engines.hyperframes === "not-detected") {
-    data.engines.hyperframes = `npx ${data.hyperframesCli}`;
-  }
-
-  return data;
+    cwd: CWD,
+    home: ROOSTER_HOME,
+    deep: Boolean(args.deep),
+    refresh: Boolean(args.refresh),
+    runAsync: (name, commandArgs, options) => runAsync(name, commandArgs, options),
+    cache: capabilityCache,
+  });
 }
 
 function printDoctor(data) {
@@ -355,6 +374,42 @@ function printDoctor(data) {
   console.log(`  yt-dlp          ${data.ytdlp || "not found"}`);
   console.log(`  Whisper         ${data.whisper || "not found"}`);
   console.log(`  HyperFrames CLI ${data.hyperframesCli || "not found"}`);
+  if (data.filmcraft) {
+    const fc = data.filmcraft;
+    console.log(
+      `  FilmCraft CLI   ${
+        fc.installed
+          ? fc.cli
+            ? `${fc.cli}${fc.version ? ` (${fc.version})` : ""}`
+            : `app found, CLI missing${fc.app ? ` (${fc.app})` : ""}`
+          : "not found"
+      }`
+    );
+    if (fc.installed) {
+      const mcp = fc.mcp || {};
+      console.log(
+        `  FilmCraft MCP   ${
+          mcp.registered === true
+            ? `configured${mcp.client ? ` (${mcp.client})` : ""}`
+            : mcp.registered === false
+              ? "not configured"
+              : "no client config"
+        }`
+      );
+    }
+  }
+  if (data.parakeet) {
+    console.log(
+      `  Parakeet        ${
+        data.parakeet.installed
+          ? data.parakeet.model || "installed"
+          : data.parakeet.reason || "not installed"
+      }`
+    );
+  }
+  if (data.cache) {
+    console.log(`  Cache           ${data.cache.enabled ? data.cache.dir : "off"}${data.cache.hit ? " (hit)" : ""}`);
+  }
   console.log(`  GPU             ${data.gpu || "not detected"}`);
   console.log(`  Workspace       ${data.workspaceExists ? data.workspace : "not created"}`);
   console.log(`  Browser         ${data.browser}`);
@@ -733,9 +788,12 @@ function newProject(args) {
     typeof args.profile === "string"
       ? args.profile
       : channel.profile || workspaceDefaults.profile || process.env.ROOSTER_PROFILE || "minimal";
-  const engine = ENGINE_IDS.includes(args.engine)
+  const target = TARGET_IDS.includes(args.target) ? args.target : null;
+  let engine = ENGINE_IDS.includes(args.engine)
     ? args.engine
     : channel.engine || workspaceDefaults.engine || process.env.ROOSTER_ENGINE || "auto";
+  const timeline = target === "filmcraft" ? "filmcraft" : "none";
+  if (target && target !== "auto" && target !== "filmcraft") engine = target;
   const source = SOURCE_IDS.includes(args.source) ? args.source : channel.source || "hybrid";
   const voice = VOICE_IDS.includes(args.voice) ? args.voice : channel.voice || "none";
   const style = STYLE_IDS.includes(args.style)
@@ -772,7 +830,7 @@ function newProject(args) {
   const licensePolicy =
     channel.assets?.licensePolicy || workspaceConfig.assets?.licensePolicy || "strict";
 
-  const overrides = ["profile", "format", "source", "voice", "style", "autonomy", "engine", "assets", "language"].filter(
+  const overrides = ["profile", "format", "source", "voice", "style", "autonomy", "engine", "target", "assets", "language"].filter(
     (key) => args[key] !== undefined
   );
 
@@ -801,6 +859,7 @@ function newProject(args) {
     channel: channelId,
     profile,
     engine,
+    timeline,
     mode: { source, voice, style, autonomy },
     format,
     language,
@@ -1358,6 +1417,9 @@ function checkProject(args) {
     if (!config.profile) errors.push("project.json: missing profile");
     if (!config.format || !(config.format.duration > 0)) errors.push("project.json: invalid format.duration");
     if (config.engine && !ENGINE_IDS.includes(config.engine)) errors.push(`project.json: unknown engine "${config.engine}"`);
+    if (config.timeline && !TIMELINE_IDS.includes(config.timeline)) {
+      errors.push(`project.json: unknown timeline "${config.timeline}"`);
+    }
     if (config.status && !STATUS_IDS.includes(config.status)) warnings.push(`project.json: unknown status "${config.status}"`);
   }
 
@@ -1526,21 +1588,39 @@ function cutBoundaryWarnings(plan, dir) {
   if (!words.length) return [];
   const tolerance = 0.03;
   const warnings = [];
-  const wordAt = (time) =>
-    words.find(
+  const ordered = words
+    .filter(
       (word) =>
         typeof word.start === "number" &&
         typeof word.end === "number" &&
-        Number(word.start) + tolerance < time &&
-        time < Number(word.end) - tolerance
-    );
+        word.end > word.start
+    )
+    .map((word) => ({ ...word, start: Number(word.start), end: Number(word.end) }))
+    .sort((a, b) => a.start - b.start);
+  if (!ordered.length) return [];
+  const starts = ordered.map((word) => word.start);
+  const wordAt = (time) => {
+    let low = 0;
+    let high = starts.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (starts[mid] <= time) low = mid + 1;
+      else high = mid;
+    }
+    const center = Math.max(0, low - 1);
+    for (let index = Math.max(0, center - 2); index <= Math.min(ordered.length - 1, center + 2); index += 1) {
+      const word = ordered[index];
+      if (word.start + tolerance < time && time < word.end - tolerance) return word;
+    }
+    return undefined;
+  };
   for (const cut of plan.cuts || []) {
     if (typeof cut.start !== "number" || typeof cut.end !== "number") continue;
     for (const [label, time] of [["start", cut.start], ["end", cut.end]]) {
       const word = wordAt(time);
       if (word) {
         warnings.push(
-          `plan: cut "${cut.id || "?"}" ${label}s inside word "${word.text}" (${Number(word.start).toFixed(2)}–${Number(word.end).toFixed(2)})`
+          `plan: cut "${cut.id || "?"}" ${label}s inside word "${word.text}" (${word.start.toFixed(2)}–${word.end.toFixed(2)})`
         );
       }
     }
@@ -1792,13 +1872,35 @@ function planHtml(plan, project, transcript = null) {
     ? encodeURI(path.relative(path.join(project.dir, "edit"), sourcePath).replace(/\\/g, "/"))
     : null;
   const clipName = path.basename(String(plan.source || ""));
+  const contextSegments = segments
+    .map((segment) => ({
+      start: Number(segment.start) || 0,
+      end: Number(segment.end) || 0,
+      text: String(segment.text || "").trim(),
+    }))
+    .filter((segment) => segment.text)
+    .sort((a, b) => a.start - b.start);
+  const contextStarts = contextSegments.map((segment) => segment.start);
+  const contextLowerBound = (value) => {
+    let low = 0;
+    let high = contextStarts.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (contextStarts[mid] < value) low = mid + 1;
+      else high = mid;
+    }
+    return low;
+  };
   const contextFor = (start, end) => {
     const from = Math.max(0, Number(start) || 0);
     const to = Math.max(from, Number(end) || from);
-    const overlapping = segments
-      .filter((segment) => Number(segment.end) > from && Number(segment.start) < to)
-      .map((segment) => String(segment.text || "").trim())
-      .filter(Boolean);
+    let index = contextLowerBound(from);
+    if (index > 0 && contextSegments[index - 1].end > from) index -= 1;
+    const overlapping = [];
+    for (; index < contextSegments.length && contextSegments[index].start < to; index += 1) {
+      const segment = contextSegments[index];
+      if (segment.end > from) overlapping.push(segment.text);
+    }
     const text = overlapping.join(" ").replace(/\s+/g, " ").trim();
     if (!text) return "";
     return text.length > 180 ? `${text.slice(0, 177)}…` : text;
@@ -1886,7 +1988,6 @@ function planHtml(plan, project, transcript = null) {
 `;
 }
 
-let hyperframesAvailable = null;
 
 // ---------------------------------------------------------------------------
 // style proof
@@ -2037,90 +2138,124 @@ function styleProofHtml(project, profile, theme, format, styleText) {
 `;
 }
 
-function hasHyperFrames() {
-  if (hyperframesAvailable !== null) return hyperframesAvailable;
-  const result = run("npx", ["--yes", "hyperframes", "--version"], { timeout: 2 * 60 * 1000 });
-  hyperframesAvailable = result.ok && /\d+\.\d+\.\d+/.test(result.stdout);
-  return hyperframesAvailable;
-}
-
-function hasFasterWhisper() {
-  return run("python", ["-c", "import faster_whisper"], { timeout: 30000 }).ok;
-}
-
-function groupWordsIntoSegments(words, maxWords = 14, maxGap = 0.8) {
-  const segments = [];
-  let current = [];
-
-  const flush = () => {
-    if (!current.length) return;
-    const text = current
-      .map((word) => word.text)
-      .join(" ")
-      .replace(/\s+([,.!?;:])/g, "$1")
-      .trim();
-    segments.push({
-      id: segments.length,
-      start: current[0].start,
-      end: current[current.length - 1].end,
-      text,
+function runHyperFramesTranscribe({ bin, input, outDir, backend, language, model, words }) {
+  const workDir = path.join(outDir, ".transcribe");
+  ensureDir(workDir);
+  try {
+    const hfArgs = hyperFramesTranscribeArgs({
+      input,
+      dir: workDir,
+      engine: backend === "parakeet" ? "parakeet" : "auto",
+      language,
+      model: backend === "parakeet" ? undefined : model,
+      words,
+      toSrt: path.join(workDir, "transcript.srt"),
     });
-    current = [];
-  };
+    const result = run("node", [bin, ...hfArgs], {
+      cwd: workDir,
+      timeout: 2 * 60 * 60 * 1000,
+    });
 
-  for (const word of words) {
-    if (current.length) {
-      const previous = current[current.length - 1];
-      if (word.start - previous.end > maxGap || current.length >= maxWords) flush();
+    const transcriptPath = path.join(workDir, "transcript.json");
+    let raw = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
+    if (!raw && result.stdout) {
+      for (const line of result.stdout.split(/\r?\n/).filter(Boolean)) {
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.type === "words" && Array.isArray(parsed.words)) raw = parsed.words;
+        } catch {
+          // Ignore non-JSON progress lines.
+        }
+      }
     }
-    current.push(word);
-    if (/[.!?]$/.test(String(word.text || "").trim())) flush();
+    if (!result.ok || !raw) {
+      return { error: result.stderr || result.stdout || "hyperframes transcribe failed" };
+    }
+
+    const srt = path.join(workDir, "transcript.srt");
+    if (exists(srt)) fs.copyFileSync(srt, path.join(outDir, "captions", "transcript.srt"));
+    return { raw };
+  } finally {
+    try {
+      fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Windows can keep the directory handle briefly; it is safe to leave it.
+    }
   }
-  flush();
-  return segments;
 }
 
-function normalizeTranscript(raw, source, language) {
-  const words = Array.isArray(raw)
-    ? raw
-    : Array.isArray(raw.words)
-      ? raw.words
-      : [];
-
-  const rawSegments = !Array.isArray(raw) && Array.isArray(raw.segments) ? raw.segments : [];
-  const segments = rawSegments.length
-    ? rawSegments.map((segment, index) => ({
-        id: segment.id ?? index,
-        start: segment.start,
-        end: segment.end,
-        text: (segment.text || "").trim(),
-      }))
-    : groupWordsIntoSegments(words);
-
-  const text =
-    (!Array.isArray(raw) && raw.text) ||
-    words.map((word) => word.text).join(" ") ||
-    segments.map((segment) => segment.text).join(" ");
-
-  return {
-    schema: "rooster.transcript/v1",
-    source,
-    language: (!Array.isArray(raw) && raw.language) || language,
-    text: String(text).replace(/\s+([,.!?;:])/g, "$1").trim(),
-    segments,
-    words: words.length
-      ? words.map((word, index) => ({
-          id: word.id ?? `w${index}`,
-          text: word.text,
-          start: word.start,
-          end: word.end,
-        }))
-      : undefined,
-    createdAt: now(),
-  };
+function runFasterWhisperTranscribe({ input, outDir, projectDir, language, model, beam, words, args }) {
+  const fasterOut = path.join(outDir, ".transcribe-faster.json");
+  try {
+    const ffArgs = fasterWhisperArgs({
+      script: path.join(SKILL_ROOT, "scripts", "transcribe_faster.py"),
+      input,
+      output: fasterOut,
+      language,
+      model,
+      beam,
+      words,
+      device: args.device || "auto",
+      computeType: args["compute-type"] || "auto",
+      vad: true,
+      verbose: Boolean(args.verbose),
+    });
+    const result = run("python", ffArgs, {
+      cwd: projectDir,
+      timeout: 2 * 60 * 60 * 1000,
+    });
+    if (!result.ok) {
+      return { error: result.stderr || result.stdout || "faster-whisper failed" };
+    }
+    const raw = readJson(fasterOut, null);
+    if (!raw) return { error: "faster-whisper finished but transcript.json is invalid" };
+    return { raw };
+  } finally {
+    try {
+      fs.rmSync(fasterOut, { force: true });
+    } catch {
+      // Best effort.
+    }
+  }
 }
 
-function transcribeCommand(args) {
+function runWhisperCliTranscribe({ input, outDir, projectDir, language, model }) {
+  const workDir = path.join(outDir, ".transcribe-whisper");
+  ensureDir(workDir);
+  try {
+    const result = run(
+      "whisper",
+      [
+        input,
+        "--model", model,
+        "--language", language,
+        "--output_format", "json",
+        "--output_dir", workDir,
+        "--verbose", "False",
+      ],
+      { cwd: projectDir, timeout: 2 * 60 * 60 * 1000 }
+    );
+    if (!result.ok) return { error: result.stderr || result.stdout || "whisper failed" };
+    const base = path.parse(input).name;
+    const candidates = [
+      path.join(workDir, `${base}.json`),
+      ...(exists(workDir)
+        ? fs.readdirSync(workDir).filter((file) => file.endsWith(".json")).map((file) => path.join(workDir, file))
+        : []),
+    ];
+    const jsonPath = candidates.find((file) => exists(file));
+    if (!jsonPath) return { error: "whisper finished but no JSON output was found" };
+    return { raw: readJson(jsonPath, null) };
+  } finally {
+    try {
+      fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // Best effort.
+    }
+  }
+}
+
+async function transcribeCommand(args) {
   const project = resolveProject(args._[0]);
   if (!exists(project.dir)) fail(`Project directory not found: ${project.dir}`);
 
@@ -2132,157 +2267,225 @@ function transcribeCommand(args) {
   const outDir = path.join(project.dir, "edit");
   ensureDir(outDir);
   ensureDir(path.join(outDir, "captions"));
+  const transcriptPath = path.join(outDir, "transcript.json");
 
-  const model = typeof args.model === "string" ? args.model : "small";
-  const language = typeof args.language === "string" ? args.language : "pt";
+  const explicitOptions = ["engine", "model", "language", "words", "quality"].filter(
+    (key) => args[key] !== undefined
+  );
+  if (
+    !args.refresh &&
+    explicitOptions.length === 0 &&
+    exists(transcriptPath) &&
+    fs.statSync(transcriptPath).mtimeMs >= fs.statSync(input).mtimeMs
+  ) {
+    const existing = readJson(transcriptPath, null);
+    if (existing) {
+      heading("Transcript reused");
+      console.log(`  ${transcriptPath}`);
+      console.log(`  Source unchanged; use --refresh to transcribe again.`);
+      console.log(`  ${existing.segments?.length || 0} segments`);
+      return;
+    }
+  }
+
+  const quality = String(args.quality || "fast").toLowerCase();
+  if (!["fast", "balanced", "accurate"].includes(quality)) {
+    fail(`Unknown --quality "${quality}". Use fast, balanced, or accurate.`);
+  }
+  const language = normalizeLanguage(
+    typeof args.language === "string" ? args.language : project.config.language || "pt"
+  );
+  const model =
+    typeof args.model === "string"
+      ? args.model
+      : quality === "accurate"
+        ? "medium"
+        : quality === "balanced"
+          ? "small"
+          : "base";
+  const beam = Number(args["beam-size"]) > 0 ? Number(args["beam-size"]) : quality === "fast" ? 1 : 5;
+  const words = shouldUseWords({
+    project: project.config,
+    requested: args.words === undefined ? "auto" : args.words,
+  });
   const requestedEngine = typeof args.engine === "string" ? args.engine : "auto";
 
   heading(`Transcribing ${path.basename(input)}`);
-  console.log(`  Model: ${model}`);
   console.log(`  Language: ${language}`);
+  console.log(`  Quality:  ${quality} (${model}, beam ${beam}${words ? ", words" : ""})`);
 
+  const capabilities = await doctor({ deep: true });
+  const selected = pickAsrBackend({
+    requested: requestedEngine,
+    language,
+    capabilities,
+  });
+
+  const hasFaster =
+    Boolean(capabilities.fasterWhisper) ||
+    String(capabilities.whisper || "").includes("faster-whisper");
+  const candidates = [];
+  const addCandidate = (backend) => {
+    if (backend && !candidates.includes(backend)) candidates.push(backend);
+  };
+  addCandidate(selected.backend);
+  if (requestedEngine === "auto") {
+    if (capabilities.parakeet?.installed && capabilities.hyperframes?.bin) addCandidate("parakeet");
+    if (hasFaster) addCandidate("faster-whisper");
+    if (capabilities.hyperframes?.bin) addCandidate("whisper");
+  } else if (requestedEngine === "faster-whisper") {
+    if (hasFaster) addCandidate("faster-whisper");
+    addCandidate("whisper");
+  } else {
+    if (capabilities.hyperframes?.bin) addCandidate("parakeet");
+    addCandidate("whisper");
+  }
+
+  const sourceKey = sourceFingerprint(input, { full: false });
+  const sourceHash = JSON.stringify(sourceKey);
+  const errors = [];
   let raw = null;
   let used = null;
-  const errors = [];
+  let finalKey = null;
+  let finalMeta = null;
+  let cacheHit = false;
 
-  // Prefer HyperFrames when available. It can use Parakeet (English) or
-  // whisper.cpp (other languages) and writes a word-level transcript.
-  if (requestedEngine !== "whisper" && requestedEngine !== "faster-whisper" && hasHyperFrames()) {
-    const workDir = path.join(outDir, ".transcribe");
-    ensureDir(workDir);
-    const hfResult = run(
-      "npx",
-      [
-        "--yes", "hyperframes", "transcribe", input,
-        "--dir", workDir,
-        "--engine", "auto",
-        "--language", language,
-        "--model", model,
-        "--json",
-        "--to", "srt",
-        "-o", path.join(workDir, "transcript.srt"),
-      ],
-      { cwd: workDir, timeout: 2 * 60 * 60 * 1000 }
-    );
+  for (const backend of candidates) {
+    const backendModel = backend === "parakeet" ? "parakeet" : model;
+    const backendVersion =
+      backend === "parakeet" || backend === "hyperframes"
+        ? capabilities.hyperframes?.version || null
+        : backend === "faster-whisper"
+          ? String(capabilities.whisper || "faster-whisper")
+          : "whisper";
+    const key = transcriptKey({
+      sourceHash,
+      backend,
+      model: backendModel,
+      language,
+      beam,
+      vad: true,
+      words,
+      backendVersion,
+    });
 
-    const transcriptPath = path.join(workDir, "transcript.json");
-    let hfRaw = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
-
-    // HyperFrames also prints word-level JSON lines to stdout. Use them if
-    // the transcript file was not written for any reason.
-    if (!hfRaw && hfResult.stdout) {
-      for (const line of hfResult.stdout.split(/\r?\n/).filter(Boolean)) {
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.type === "words" && Array.isArray(parsed.words)) hfRaw = parsed.words;
-        } catch {
-          // Ignore non-JSON progress lines.
-        }
-      }
-    }
-
-    if (hfResult.ok && hfRaw) {
-      raw = hfRaw;
-      used = "hyperframes";
-      const srt = path.join(workDir, "transcript.srt");
-      if (exists(srt)) fs.copyFileSync(srt, path.join(outDir, "captions", "transcript.srt"));
-    } else {
-      errors.push(hfResult.stderr || hfResult.stdout || "hyperframes transcribe failed");
-    }
-    try {
-      fs.rmSync(workDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-    } catch {
-      // Windows can keep the directory handle briefly; it is safe to leave it.
-    }
-  }
-
-  // Prefer faster-whisper when available. It is lighter than the OpenAI
-  // whisper CLI and handles Portuguese accents better with the base model.
-  if (!raw && (requestedEngine === "auto" || requestedEngine === "faster-whisper") && hasFasterWhisper()) {
-    const scriptPath = path.join(SKILL_ROOT, "scripts", "transcribe_faster.py");
-    const fasterOut = path.join(outDir, "transcript.json");
-    const result = run(
-      "python",
-      [
-        scriptPath,
-        "--input", input,
-        "--output", fasterOut,
-        "--language", language,
-        "--model", model,
-        ...(args.verbose ? ["--verbose"] : []),
-      ],
-      { cwd: project.dir, timeout: 2 * 60 * 60 * 1000 }
-    );
-    if (result.ok) {
-      const parsed = readJson(fasterOut, null);
-      if (parsed) {
-        raw = parsed;
-        used = "faster-whisper";
-      } else {
-        errors.push("faster-whisper finished but transcript.json is invalid");
-      }
-    } else {
-      errors.push(result.stderr || result.stdout || "faster-whisper failed");
-    }
-  }
-
-  // Fallback to the OpenAI whisper CLI when HyperFrames is unavailable or
-  // explicitly disabled.
-  if (!raw && requestedEngine !== "hyperframes" && requestedEngine !== "faster-whisper") {
-    const whisper = detectWhisper();
-    if (whisper === "whisper") {
-      const result = run(
-        "whisper",
-        [
-          input,
-          "--model", model,
-          "--language", language,
-          "--output_format", "all",
-          "--output_dir", outDir,
-          "--verbose", "False",
-        ],
-        { cwd: project.dir, timeout: 2 * 60 * 60 * 1000 }
+    if (!args["no-cache"] && !args.refresh) {
+      const cached = readCache(
+        "transcripts",
+        key,
+        ".json",
+        (file) => {
+          const data = readJson(file, null);
+          return Boolean(data && Array.isArray(data.segments));
+        },
+        WORKSPACE
       );
-      if (result.ok) {
-        const base = path.parse(input).name;
-        const candidates = [
-          path.join(outDir, `${base}.json`),
-          ...fs.readdirSync(outDir)
-            .filter((file) => file.endsWith(".json") && !["plan.json", "transcript.json"].includes(file))
-            .map((file) => path.join(outDir, file)),
-        ];
-        const jsonPath = candidates.find((file) => exists(file));
-        if (jsonPath) {
-          raw = readJson(jsonPath, null);
-          used = "whisper";
-          const srt = path.join(outDir, `${base}.srt`);
-          if (exists(srt)) fs.copyFileSync(srt, path.join(outDir, "captions", "transcript.srt"));
-        } else {
-          errors.push("whisper finished but no JSON output was found");
+      if (cached) {
+        const data = readJson(cached, null);
+        if (data) {
+          raw = data;
+          used = backend;
+          finalKey = key;
+          finalMeta = { backend, model: backendModel, language, beam, vad: true, words, backendVersion };
+          cacheHit = true;
+          break;
         }
-      } else {
-        errors.push(result.stderr || result.stdout || "whisper failed");
       }
-    } else if (whisper && whisper !== "faster-whisper (python)") {
-      errors.push(`Detected "${whisper}", but the fallback wraps the OpenAI whisper CLI.`);
     }
+
+    let attempt = null;
+    if (backend === "parakeet" || backend === "hyperframes") {
+      if (!capabilities.hyperframes?.bin) {
+        errors.push("HyperFrames binary not found");
+        continue;
+      }
+      attempt = runHyperFramesTranscribe({
+        bin: capabilities.hyperframes.bin,
+        input,
+        outDir,
+        backend,
+        language,
+        model,
+        words,
+      });
+    } else if (backend === "faster-whisper") {
+      attempt = runFasterWhisperTranscribe({
+        input,
+        outDir,
+        projectDir: project.dir,
+        language,
+        model,
+        beam,
+        words,
+        args,
+      });
+    } else if (backend === "whisper") {
+      attempt = runWhisperCliTranscribe({
+        input,
+        outDir,
+        projectDir: project.dir,
+        language,
+        model,
+      });
+    } else {
+      errors.push(`Unsupported ASR backend "${backend}"`);
+      continue;
+    }
+
+    if (attempt?.raw) {
+      raw = attempt.raw;
+      used = backend;
+      finalKey = key;
+      finalMeta = { backend, model: backendModel, language, beam, vad: true, words, backendVersion };
+      break;
+    }
+    errors.push(`${backend}: ${attempt?.error || "failed"}`);
   }
 
   if (!raw) {
     fail(
       "Transcription failed.\n" +
         (errors.length ? errors.join("\n") + "\n" : "") +
-        "Install HyperFrames (npx hyperframes), faster-whisper (python -m pip install --user -U faster-whisper), or Whisper (python -m pip install --user -U openai-whisper)."
+        "Install HyperFrames (npx hyperframes) or faster-whisper (python -m pip install --user -U faster-whisper)."
     );
   }
 
-  const transcript = normalizeTranscript(raw, path.relative(project.dir, input).replace(/\\/g, "/"), language);
-  writeJson(path.join(outDir, "transcript.json"), transcript);
+  const transcript = normalizeTranscript(
+    raw,
+    path.relative(project.dir, input).replace(/\\/g, "/"),
+    language
+  );
+  writeJson(transcriptPath, transcript);
+  writeJson(path.join(outDir, "transcript.meta.json"), {
+    schema: "rooster.transcript-meta/v1",
+    ...transcriptMeta(finalMeta),
+    cacheKey: finalKey,
+    cacheHit,
+    source: sourceKey,
+    createdAt: now(),
+  });
+
+  if (!args["no-cache"] && finalKey) {
+    try {
+      withCache({
+        kind: "transcripts",
+        key: finalKey,
+        ext: ".json",
+        workspace: WORKSPACE,
+        refresh: Boolean(args.refresh),
+        produce: (tmp) => fs.copyFileSync(transcriptPath, tmp),
+        meta: { ...finalMeta, source: sourceKey },
+      });
+    } catch (error) {
+      console.warn(`  ! Could not write the transcript cache: ${error.message}`);
+    }
+  }
 
   heading("Transcript ready");
-  console.log(`  ${path.join(outDir, "transcript.json")}`);
-  console.log(`  Engine: ${used}`);
+  console.log(`  ${transcriptPath}`);
+  console.log(`  Engine: ${used}${cacheHit ? " (cache)" : ""}`);
   console.log(`  ${transcript.segments.length} segments`);
+  console.log(`  key: ${finalKey}`);
   console.log("\nNext: read the transcript and style.md, write edit/plan.json, and show the plan for approval.");
 }
 
@@ -2310,8 +2513,19 @@ function planCommand(args) {
     const transcript = exists(transcriptPath) ? readJson(transcriptPath, null) : null;
     writeText(markdownPath, planMarkdown(plan));
     writeText(htmlPath, planHtml(plan, project, transcript));
+    const remapped = planForBuild(plan, {});
+    const timeline = timelineFromPlan(remapped.plan, {
+      projectSlug: project.slug,
+      format: remapped.plan.format || project.config.format,
+      keeps: remapped.keeps,
+      duration: remapped.duration,
+      engine: project.config.engine,
+    });
+    const timelinePath = path.join(project.dir, "edit", "timeline.json");
+    writeJson(timelinePath, timeline);
     console.log(`\n  Artifact: ${htmlPath}`);
     console.log(`  Markdown: ${markdownPath}`);
+    console.log(`  Timeline: ${timelinePath} (${summarizeTimeline(timeline).clips} clip(s))`);
   }
 
   heading("Validation");
@@ -2455,7 +2669,14 @@ function captionsCommand(args) {
     const out = args["out-video"]
       ? path.resolve(CWD, String(args["out-video"]))
       : path.join(project.dir, "renders", "captioned.mp4");
-    const burn = burnArgs({ video, srt: result.files.srt, out });
+    const draft = Boolean(args.draft);
+    const burn = burnArgs({
+      video,
+      srt: result.files.srt,
+      out,
+      preset: args.preset || (draft ? "veryfast" : "medium"),
+      crf: Number(args.crf) || (draft ? 23 : 18),
+    });
     if (args["dry-run"]) {
       console.log("\nBurn command:");
       console.log(`  ${burn.command}`);
@@ -2605,7 +2826,14 @@ function brollCommand(args) {
     path.join(project.dir, "assets", "licensed"),
     path.join(WORKSPACE, "library", "broll"),
   ].filter(Boolean);
-  const files = listMediaFiles(dirs).filter(
+  const indexPath = path.join(
+    cacheRoot(WORKSPACE),
+    "broll",
+    `index-${shortHash(dirs.map((dir) => path.resolve(dir)).join("|"))}.json`
+  );
+  const index = getBrollIndex({ dirs, indexPath, refresh: Boolean(args.refresh) });
+  for (const warning of index.warnings || []) console.warn(`  ! ${warning}`);
+  const files = index.files.filter(
     (file) =>
       file !== sourcePath &&
       !/^(reframed-|base-|voiceover-|music-)/i.test(path.basename(file))
@@ -2651,6 +2879,140 @@ function brollCommand(args) {
       console.log(`\n  Added ${added.length} suggestion(s) to ${planPath}`);
     }
   }
+}
+
+function cacheCommand(args) {
+  const action = String(args._[0] || "info").toLowerCase();
+  const root = cacheRoot(WORKSPACE);
+
+  if (action === "path") {
+    if (args.json) console.log(JSON.stringify({ root }, null, 2));
+    else console.log(root);
+    return;
+  }
+
+  if (action === "info") {
+    const info = cacheInfo(WORKSPACE);
+    if (args.json) {
+      console.log(JSON.stringify(info, null, 2));
+      return;
+    }
+    heading("Cache");
+    console.log(`  ${info.root}`);
+    if (!info.exists) {
+      console.log("  (empty)");
+      return;
+    }
+    console.log(`  ${info.artifacts} artifact(s) · ${info.files} file(s) · ${formatBytes(info.bytes)}`);
+    for (const [kind, entry] of Object.entries(info.byKind).sort(([a], [b]) => a.localeCompare(b))) {
+      console.log(`  ${kind.padEnd(18)} ${formatBytes(entry.bytes).padStart(10)}  ${entry.files} file(s)`);
+    }
+    return;
+  }
+
+  if (action === "clear") {
+    const kind = args._[1] ? String(args._[1]) : undefined;
+    const report = cacheClear(WORKSPACE, kind);
+    if (args.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    heading("Cache cleared");
+    console.log(`  ${report.removed} file(s), ${formatBytes(report.bytes)} freed`);
+    if (kind) console.log(`  kind: ${kind}`);
+    return;
+  }
+
+  if (action === "gc") {
+    const maxSizeArg = args["max-size"] !== undefined ? String(args["max-size"]) : "20GB";
+    const maxBytes = parseByteSize(maxSizeArg);
+    if (maxBytes === null) fail(`Invalid --max-size "${maxSizeArg}". Use e.g. 20GB or 500MB.`);
+
+    let maxAgeMs;
+    if (args["max-age"] !== undefined) {
+      const match = String(args["max-age"]).trim().match(/^(\d+(?:[.,]\d+)?)\s*(m|h|d|w)?$/i);
+      if (!match) fail(`Invalid --max-age "${args["max-age"]}". Use e.g. 30d or 12h.`);
+      const amount = Number(match[1].replace(",", "."));
+      const unit = (match[2] || "d").toLowerCase();
+      const factor = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 }[unit];
+      maxAgeMs = Math.round(amount * factor);
+    }
+
+    const report = cacheGc(WORKSPACE, { maxBytes, maxAgeMs });
+    if (args.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    heading("Cache GC");
+    console.log(`  removed ${report.removed} file(s), freed ${formatBytes(report.bytesFreed)}`);
+    console.log(`  remaining ${formatBytes(report.bytesRemaining)} (limit ${formatBytes(maxBytes)})`);
+    return;
+  }
+
+  fail("Usage: cache info | path | clear [kind] | gc [--max-size 20GB] [--max-age 30d]");
+}
+
+function framesCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
+
+  const plan = exists(path.join(project.dir, "edit", "plan.json"))
+    ? readJson(path.join(project.dir, "edit", "plan.json"), {})
+    : {};
+  const candidates = [
+    args.video ? path.resolve(CWD, String(args.video)) : null,
+    path.join(project.dir, "renders", "final.mp4"),
+    path.join(project.dir, "renders", "draft.mp4"),
+    plan.source ? path.resolve(project.dir, plan.source) : null,
+  ].filter((candidate) => candidate && exists(candidate));
+  const video = candidates[0];
+  if (!video) fail("No video found. Render a draft/final, pass --video <path>, or set plan.source.");
+
+  const probe = probeMedia(video) || {};
+  if (probe.error) fail(`Could not probe ${video}: ${probe.error}`);
+
+  const outDir = args.out ? path.resolve(CWD, String(args.out)) : path.join(project.dir, "qa", "frames");
+  ensureDir(outDir);
+
+  const count = Math.max(1, Math.min(60, Number(args.count) || 12));
+  const cols = Math.max(1, Math.min(8, Number(args.cols) || 4));
+  const scale = Math.max(120, Math.min(1280, Number(args.scale) || 480));
+  const duration = Number(probe.duration) || undefined;
+
+  const sheet = contactSheetArgs({
+    video,
+    out: path.join(outDir, "contact.jpg"),
+    count,
+    cols,
+    scale,
+    duration,
+  });
+  const sheetResult = run("ffmpeg", sheet.args, { timeout: 30 * 60 * 1000 });
+  if (!sheetResult.ok) {
+    fail(`Contact sheet failed:\n${sheetResult.stderr || sheetResult.stdout || "unknown error"}`);
+  }
+
+  const files = [sheet.out];
+  if (!args["sheet-only"]) {
+    const framesDir = path.join(outDir, "stills");
+    ensureDir(framesDir);
+    const frames = extractFramesArgs({ video, outDir: framesDir, count, scale, duration });
+    const framesResult = run("ffmpeg", frames.args, { timeout: 30 * 60 * 1000 });
+    if (!framesResult.ok) {
+      fail(`Frame extraction failed:\n${framesResult.stderr || framesResult.stdout || "unknown error"}`);
+    }
+    files.push(frames.pattern);
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify({ video, outDir, sheet: sheet.out, files, count, cols, scale, duration }, null, 2));
+    return;
+  }
+
+  heading("QA frames");
+  console.log(`  ${sheet.out}`);
+  if (!args["sheet-only"]) console.log(`  ${path.join(outDir, "stills")}`);
+  console.log(`  ${count} frame(s) · ${cols} columns · ${scale}px`);
 }
 
 function audioCommand(args) {
@@ -2754,7 +3116,7 @@ function colorCommand(args) {
   }
 }
 
-function ttsCommand(args) {
+async function ttsCommand(args) {
   const slug = projectSlugFromArg(args);
   const project = resolveProject(slug);
   if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
@@ -2813,52 +3175,56 @@ function ttsCommand(args) {
     fail(`TTS provider "${provider}" is not available. Run without --generate to inspect the plan.`);
   }
 
-  let cursor = 0;
-  let generated = 0;
-  for (const line of manifest.lines) {
-    const output = path.resolve(project.dir, line.audio);
-    ensureDir(path.dirname(output));
-    const command = buildTtsArgs({
-      provider,
-      text: line.text,
-      voice,
-      out: output,
-      rate: args.rate,
-      language,
-    });
-    if (!command.command) {
-      console.warn(`  ! ${line.id}: provider has no shell command`);
-      continue;
-    }
-    const result = spawnSync(command.command, command.args, {
-      encoding: "utf8",
-      timeout: 5 * 60 * 1000,
-      windowsHide: true,
-    });
-    if (result.status !== 0) {
-      console.warn(`  ! ${line.id}: ${result.stderr || result.stdout || "TTS failed"}`);
-      continue;
-    }
-    const probe = probeMedia(output);
-    const duration = Number(probe?.duration) || 0;
-    line.duration = duration || null;
-    line.measured = duration > 0;
-    line.timing = duration > 0 ? "measured" : "unmeasured";
-    line.start = cursor;
-    cursor += duration;
-    line.end = cursor;
-    generated += 1;
-  }
-  manifest.duration = cursor;
+  const concurrency = Math.max(1, Math.min(8, Number(args.concurrency) || 3));
+  const summary = await generateVoiceover({
+    manifest,
+    projectDir: project.dir,
+    provider,
+    voice,
+    rate: args.rate,
+    language,
+    concurrency,
+    refresh: Boolean(args.refresh),
+    cachePath: path.join(project.dir, "edit", "voiceover.cache.json"),
+    run: (descriptor) => {
+      const result = run(descriptor.command, descriptor.args, {
+        cwd: descriptor.cwd,
+        timeout: 5 * 60 * 1000,
+      });
+      const transient =
+        Boolean(result.error && /timeout|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(result.error)) ||
+        /ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|\b429\b|\b503\b/i.test(result.stderr || "");
+      return { ...result, transient };
+    },
+    runPool,
+    probe: (file) => probeMedia(file),
+    onProgress: (event) => {
+      if (event.type === "ok") {
+        console.log(`  ✓ ${event.id} (${event.attempts} attempt(s))`);
+      } else if (event.type === "skip" && event.reason === "cached") {
+        console.log(`  = ${event.id} (cache)`);
+      } else if (event.type === "retry") {
+        console.warn(`  ~ ${event.id}: retry ${event.attempts}`);
+      } else if (event.type === "error") {
+        console.warn(`  ! ${event.id}: ${event.error}`);
+      }
+    },
+  });
+
   manifest.generatedAt = now();
   writeJson(manifestPath, manifest);
 
   heading("Voiceover generated");
-  console.log(`  ${generated}/${manifest.lines.length} line(s)`);
+  console.log(
+    `  ${summary.generated} generated · ${summary.skipped} cached · ${summary.failed} failed · ${manifest.lines.length} line(s)`
+  );
+  if (summary.cachePath) console.log(`  cache: ${summary.cachePath}`);
   console.log(`  ${manifestPath}`);
+  for (const warning of summary.warnings || []) console.warn(`  ! ${warning}`);
+  if (!summary.ok) process.exitCode = 1;
 }
 
-function multicamCommand(args) {
+async function multicamCommand(args) {
   const slug = projectSlugFromArg(args);
   const project = resolveProject(slug);
   if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
@@ -2889,11 +3255,11 @@ function multicamCommand(args) {
   (source.cuts || []).forEach((cut, index) => {
     settingsById.set(cut.id || `cut-${String(index + 1).padStart(3, "0")}`, cut);
   });
-  const parts = [];
-
-  for (const [index, segment] of (result.segments || []).entries()) {
+  const jobs = (result.segments || []).map((segment, index) => ({ segment, index }));
+  const concurrency = Math.max(1, Math.min(4, os.cpus()?.length || 2));
+  const outcomes = await runPool(jobs, concurrency, async ({ segment, index }) => {
     const cameraSource = path.resolve(project.dir, segment.src);
-    if (!exists(cameraSource)) fail(`Camera source not found: ${cameraSource}`);
+    if (!exists(cameraSource)) throw new Error(`Camera source not found: ${cameraSource}`);
     const part = path.join(tempDir, `part-${String(index).padStart(3, "0")}.mp4`);
     const settings = settingsById.get(segment.cutId) || {};
     const offsets = jlCutOffsets({
@@ -2932,12 +3298,18 @@ function multicamCommand(args) {
       "-b:a", "192k",
       part
     );
-    const partResult = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+    const partResult = await runAsync("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
     if (!partResult.ok) {
-      fail(`Multicam segment ${index + 1} failed:\n${partResult.stderr || partResult.stdout || "unknown error"}`);
+      throw new Error(
+        `Multicam segment ${index + 1} failed: ${partResult.stderr || partResult.stdout || "unknown error"}`
+      );
     }
-    parts.push(part);
-  }
+    return part;
+  });
+
+  const failed = outcomes.find((outcome) => outcome.status === "rejected");
+  if (failed) fail(String(failed.reason?.message || failed.reason));
+  const parts = outcomes.map((outcome) => outcome.value);
 
   const listPath = path.join(tempDir, "concat.txt");
   writeText(listPath, `${parts.map((part) => `file '${part.replace(/\\/g, "/").replace(/'/g, "'\\''")}'`).join("\n")}\n`);
@@ -3131,7 +3503,128 @@ function samplePlan(plan, count) {
   };
 }
 
+function sampleWindow(element, duration, { padding = 0.75, maxWindow = 8 } = {}) {
+  const total = Math.max(0, Number(duration) || 0);
+  const start = Math.max(0, (Number(element.start) || 0) - padding);
+  let end = Math.min(total, (Number(element.end) || start + 1) + padding);
+  if (end <= start) end = Math.min(total, start + 1);
+  if (end - start > maxWindow) {
+    const center = ((Number(element.start) || 0) + (Number(element.end) || start)) / 2;
+    let left = Math.max(0, center - maxWindow / 2);
+    let right = Math.min(total, left + maxWindow);
+    left = Math.max(0, right - maxWindow);
+    return { start: Number(left.toFixed(3)), end: Number(right.toFixed(3)) };
+  }
+  return { start: Number(start.toFixed(3)), end: Number(end.toFixed(3)) };
+}
+
+function mergeSampleWindows(windows, gap = 0.5) {
+  const sorted = windows
+    .filter((window) => window.end > window.start)
+    .map((window) => ({ ...window }))
+    .sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const window of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && window.start <= last.end + gap) {
+      last.end = Math.max(last.end, window.end);
+    } else {
+      merged.push(window);
+    }
+  }
+  return merged;
+}
+
+function splitWindowByKeeps(window, keeps) {
+  const segments = [];
+  let cursor = 0;
+  for (const keep of keeps) {
+    const length = keep.end - keep.start;
+    const keepStart = cursor;
+    const keepEnd = cursor + length;
+    cursor = keepEnd;
+    const start = Math.max(window.start, keepStart);
+    const end = Math.min(window.end, keepEnd);
+    if (end - start <= 0.001) continue;
+    segments.push({
+      sourceStart: keep.start + (start - keepStart),
+      sourceEnd: keep.start + (end - keepStart),
+      timelineStart: start,
+      timelineEnd: end,
+    });
+  }
+  return segments;
+}
+
+function buildSamplePlan(plan, count, args) {
+  const remapped = planForBuild(plan, args);
+  const timelinePlan = remapped.plan;
+  const total = Number(timelinePlan.duration) || 0;
+  const selected = samplePlan(timelinePlan, count).elements || [];
+  if (!selected.length || total <= 0) return samplePlan(plan, count);
+
+  const keeps = remapped.keeps?.length ? remapped.keeps : keepsFromPlan(timelinePlan);
+  const windows = mergeSampleWindows(selected.map((element) => sampleWindow(element, total)));
+  const sampleKeeps = [];
+  const windowMap = [];
+  let cursor = 0;
+
+  for (const window of windows) {
+    const segments = splitWindowByKeeps(window, keeps);
+    if (!segments.length) continue;
+    const sampleStart = cursor;
+    for (const segment of segments) {
+      sampleKeeps.push({
+        start: Number(segment.sourceStart.toFixed(3)),
+        end: Number(segment.sourceEnd.toFixed(3)),
+      });
+      cursor += segment.sourceEnd - segment.sourceStart;
+    }
+    windowMap.push({ ...window, sampleStart, sampleEnd: cursor });
+  }
+
+  if (!sampleKeeps.length) return samplePlan(plan, count);
+  const sampleDuration = Number(cursor.toFixed(3));
+  const sampleElements = selected
+    .map((element) => {
+      const window = windowMap.find(
+        (candidate) => (Number(element.end) || 0) > candidate.start && (Number(element.start) || 0) < candidate.end
+      );
+      if (!window) return null;
+      const start = Math.max(
+        window.sampleStart,
+        window.sampleStart + ((Number(element.start) || 0) - window.start)
+      );
+      const end = Math.min(
+        sampleDuration,
+        window.sampleStart + ((Number(element.end) || start) - window.start)
+      );
+      return {
+        ...element,
+        start: Number(start.toFixed(3)),
+        end: Number(Math.max(start + 0.1, end).toFixed(3)),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    ...timelinePlan,
+    duration: sampleDuration,
+    cuts: [],
+    keeps: sampleKeeps,
+    elements: sampleElements,
+    sample: true,
+    notes: [
+      ...(timelinePlan.notes || []),
+      `sample: ${sampleElements.length} element(s) in ${windowMap.length} window(s)`,
+    ],
+  };
+}
+
 function planForBuild(plan, args) {
+  if (plan.sample === true) {
+    return { plan, cuts: [], keeps: plan.keeps || [], duration: Number(plan.duration) || 0 };
+  }
   if (args["no-cuts"]) {
     const duration = Number(plan.duration) || 0;
     return { plan, cuts: [], keeps: [{ start: 0, end: duration }], duration };
@@ -3198,91 +3691,47 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
   const hasAudio = Boolean(probe.audio);
   const kind = image ? "image" : hasVideo ? "video" : "audio";
 
-  const needsCut =
-    !args["no-cuts"] &&
-    !image &&
-    keeps.length > 0 &&
-    !(keeps.length === 1 && keeps[0].start <= 0.001 && keeps[0].end >= (Number(plan.duration) || 0) - 0.001);
-
-  if (!needsCut) {
-    const target = path.join(assetsDir, `base${hasVideo ? ".mp4" : hasAudio ? ".m4a" : sourceExt || ".png"}`);
-
-    // Even without cuts, normalize the audio to the delivery target. Copying
-    // the video stream keeps this fast (audio-only re-encode).
-    if (hasAudio && !image && versionOf("ffmpeg", ["-version"])) {
-      const ffArgs = [
-        "-y", "-i", source,
-        ...(hasVideo ? ["-map", "0:v:0"] : []),
-        "-map", "0:a:0",
-        ...(hasVideo ? ["-c:v", "copy"] : []),
-        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
-        "-c:a", "aac", "-b:a", "192k",
-        target,
-      ];
-      const result = run("ffmpeg", ffArgs, { timeout: 30 * 60 * 1000 });
-      if (result.ok) {
-        return {
-          path: `assets/${path.basename(target)}`,
-          duration: Number(plan.duration) || 0,
-          hasVideo,
-          hasAudio,
-          kind,
-        };
-      }
-    }
-
+  if (image) {
+    const target = path.join(assetsDir, `base${sourceExt || ".png"}`);
     linkOrCopy(source, target);
     return {
       path: `assets/${path.basename(target)}`,
       duration: Number(plan.duration) || 0,
-      hasVideo,
-      hasAudio,
+      hasVideo: false,
+      hasAudio: false,
       kind,
     };
   }
 
-  if (!versionOf("ffmpeg", ["-version"])) {
-    fail("FFmpeg is required to apply the plan's cuts. Install FFmpeg or run build with --no-cuts.");
-  }
-
-  const filters = [];
-  keeps.forEach((keep, index) => {
-    if (hasVideo) filters.push(`[0:v]trim=start=${keep.start}:end=${keep.end},setpts=PTS-STARTPTS[v${index}]`);
-    if (hasAudio) filters.push(`[0:a]atrim=start=${keep.start}:end=${keep.end},asetpts=PTS-STARTPTS[a${index}]`);
+  const targetExt = hasVideo ? ".mp4" : ".m4a";
+  const target = path.join(assetsDir, `base${targetExt}`);
+  const cutKeeps = args["no-cuts"] ? [] : keeps;
+  const ffArgs = buildBaseMediaArgs({
+    source,
+    keeps: cutKeeps,
+    out: target,
+    hasVideo,
+    hasAudio,
+    encoder: args.encoder || "libx264",
+    crf: Number(args.crf) || 20,
+    preset: args.preset || "veryfast",
+    loudnorm: true,
+    duration: Number(plan.duration) || null,
   });
 
-  let concatFilter = "";
-  let maps = [];
-  if (hasVideo && hasAudio) {
-    const inputs = keeps.map((_, index) => `[v${index}][a${index}]`).join("");
-    concatFilter = `${inputs}concat=n=${keeps.length}:v=1:a=1[v][a];[a]loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
-    maps = ["-map", "[v]", "-map", "[aout]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k"];
-  } else if (hasVideo) {
-    const inputs = keeps.map((_, index) => `[v${index}]`).join("");
-    concatFilter = `${inputs}concat=n=${keeps.length}:v=1:a=0[v]`;
-    maps = ["-map", "[v]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20"];
-  } else {
-    const inputs = keeps.map((_, index) => `[a${index}]`).join("");
-    concatFilter = `${inputs}concat=n=${keeps.length}:v=0:a=1[a];[a]loudnorm=I=-14:TP=-1.5:LRA=11[aout]`;
-    maps = ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"];
-  }
-
-  const target = path.join(assetsDir, `base${hasVideo ? ".mp4" : ".m4a"}`);
-  const result = run(
-    "ffmpeg",
-    ["-y", "-i", source, "-filter_complex", [...filters, concatFilter].join(";"), ...maps, target],
-    { timeout: 30 * 60 * 1000 }
-  );
+  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
   if (!result.ok) {
-    fail(`FFmpeg failed to apply the plan's cuts:\n${result.stderr || result.stdout || "unknown error"}`);
+    fail(`FFmpeg failed to prepare the base media:\n${result.stderr || result.stdout || "unknown error"}`);
   }
 
   return {
     path: `assets/${path.basename(target)}`,
-    duration: keeps.reduce((sum, keep) => sum + (keep.end - keep.start), 0),
+    duration: cutKeeps.length
+      ? cutKeeps.reduce((sum, keep) => sum + (keep.end - keep.start), 0)
+      : Number(plan.duration) || Number(probe.duration) || 0,
     hasVideo,
     hasAudio,
-    kind: hasVideo ? "video" : "audio",
+    kind,
   };
 }
 
@@ -3290,6 +3739,146 @@ function buildBaseMedia(project, plan, keeps, engineDir, args, assetsSubdir = "a
   const base = buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir);
   const voiced = applyVoiceover(project, plan, base, engineDir, assetsSubdir);
   return applyMusic(project, plan, voiced, engineDir, assetsSubdir);
+}
+
+function planMediaKey(project, plan, keeps, args) {
+  const source = path.resolve(project.dir, plan.source);
+  const format = plan.format || project.config.format || {};
+  const fps = Number(format.fps) || 30;
+  const encoder = args.encoder || "libx264";
+  const crf = Number(args.crf) || 20;
+  const preset = args.preset || "veryfast";
+  const sourceKey = sourceFingerprint(source, { full: false });
+  const alignedKeeps = roundKeeps(keeps, fps);
+  const baseCutKey = cutKey({
+    sourceKey,
+    keeps: alignedKeeps,
+    format,
+    encoder,
+    crf,
+    preset,
+    loudnorm: true,
+  });
+
+  const voiceoverPath = path.join(project.dir, "edit", "voiceover.json");
+  const voiceover = exists(voiceoverPath) ? readJson(voiceoverPath, null) : null;
+  const voiceFiles = (voiceover?.lines || [])
+    .map((line) => {
+      if (!line?.audio) return null;
+      try {
+        return sourceFingerprint(path.resolve(project.dir, line.audio), { full: false });
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  const baseVoiceKey = voiceKey({ cutKey: baseCutKey, voiceover, voiceFiles });
+
+  const fingerprint = (value) => {
+    try {
+      return sourceFingerprint(path.resolve(project.dir, value), { full: false });
+    } catch {
+      return null;
+    }
+  };
+  const musicEntry = plan.music?.src
+    ? { ...plan.music, src: path.resolve(project.dir, plan.music.src), fingerprint: fingerprint(plan.music.src) }
+    : null;
+  const sfxEntries = (plan.sfx || [])
+    .filter((clip) => clip?.src)
+    .map((clip) => ({
+      ...clip,
+      src: path.resolve(project.dir, clip.src),
+      fingerprint: fingerprint(clip.src),
+    }));
+  const mediaKey = musicKey({ voiceKey: baseVoiceKey, music: musicEntry, sfx: sfxEntries });
+
+  return {
+    mediaKey,
+    sourceKey,
+    alignedKeeps,
+    format,
+    fps,
+    encoder,
+    crf,
+    preset,
+    voiceover,
+    musicEntry,
+    sfxEntries,
+  };
+}
+
+function buildMediaCached(project, plan, keeps, engineDir, args, assetsSubdir = "assets") {
+  const { mediaKey, sourceKey, alignedKeeps, format, encoder, crf, preset } = planMediaKey(
+    project,
+    plan,
+    keeps,
+    args
+  );
+
+  const assetsDir = path.join(engineDir, assetsSubdir);
+  ensureDir(assetsDir);
+  const useCache = !args["no-cache"];
+
+  if (useCache) {
+    for (const ext of [".mp4", ".m4a", ".wav", ".mov"]) {
+      const hit = readCache("build", mediaKey, ext, undefined, WORKSPACE);
+      if (!hit) continue;
+      const meta = readJson(`${hit}.meta.json`, null);
+      if (!meta?.base) continue;
+      const targetName = `base${ext}`;
+      linkOrCopy(hit, path.join(assetsDir, targetName));
+      return { ...meta.base, path: `assets/${targetName}` };
+    }
+  }
+
+  const stageDir = path.join(cacheRoot(WORKSPACE), "build", `stage-${process.pid}-${Date.now()}`);
+  ensureDir(stageDir);
+  try {
+    const built = buildBaseMedia(project, plan, keeps, stageDir, args, "assets");
+    const builtPath = path.join(stageDir, built.path);
+    if (!exists(builtPath)) fail(`Build did not produce the base media at ${builtPath}`);
+    const ext = path.extname(builtPath) || ".mp4";
+    const targetName = `base${ext}`;
+    const targetPath = path.join(assetsDir, targetName);
+
+    if (!useCache) {
+      linkOrCopy(builtPath, targetPath);
+      return { ...built, path: `assets/${targetName}` };
+    }
+
+    const cachePath = withCache({
+      kind: "build",
+      key: mediaKey,
+      ext,
+      workspace: WORKSPACE,
+      refresh: Boolean(args["rebuild-media"]),
+      validate: (file) => fs.statSync(file).size > 0,
+      produce: (tmp) => fs.renameSync(builtPath, tmp),
+      meta: {
+        source: sourceKey,
+        keeps: alignedKeeps,
+        format,
+        encoder,
+        crf,
+        preset,
+        base: {
+          kind: built.kind,
+          hasVideo: built.hasVideo,
+          hasAudio: built.hasAudio,
+          duration: built.duration,
+        },
+      },
+    });
+    linkOrCopy(cachePath, targetPath);
+    return { ...built, path: `assets/${targetName}` };
+  } finally {
+    try {
+      fs.rmSync(stageDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+      // The stage is inside the cache; a leftover folder is harmless.
+    }
+  }
 }
 
 function applyVoiceover(project, plan, base, engineDir, assetsSubdir = "assets") {
@@ -3486,6 +4075,128 @@ function renderHyperFramesElement(element, index, theme = {}) {
   }
 }
 
+/**
+ * Shared CSS for HyperFrames compositions.
+ *
+ * `transparent: true` removes the page and root background so the render can
+ * carry an alpha channel (MOV ProRes 4444 / WebM). Element clips use it;
+ * the full-film composition keeps the themed background.
+ */
+function hyperFramesCss(theme, width, height, { transparent = false, extraCss = "" } = {}) {
+  return `
+      :root {
+        --bg: ${theme.bg};
+        --fg: ${theme.fg};
+        --muted: ${theme.muted};
+        --accent: ${theme.accent};
+        --accent2: ${theme.accent2};
+        --display: "${theme.display}", sans-serif;
+        --body: "${theme.body}", sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: ${width}px; height: ${height}px;
+        overflow: hidden;
+        background: ${transparent ? "transparent" : "var(--bg)"};
+        font-family: var(--body);
+      }
+      #root {
+        position: relative;
+        width: 100%; height: 100%;
+        overflow: hidden;
+        background: ${
+          transparent
+            ? "transparent"
+            : `radial-gradient(circle at 70% 30%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%),
+          radial-gradient(circle at 20% 80%, color-mix(in srgb, var(--accent2) 12%, transparent), transparent 40%),
+          var(--bg)`
+        };
+      }
+      #base { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+      #brand, .title, .caption, .card, .lower-third, .end-card { z-index: 2; position: absolute; }
+      #brand {
+        position: absolute; left: 96px; top: 72px;
+        color: var(--accent); font-family: var(--display);
+        font-size: 28px; font-weight: 700; letter-spacing: 0.18em;
+        text-transform: uppercase;
+        background: rgba(6, 9, 19, 0.78);
+        padding: 10px 16px;
+        border-radius: 8px;
+      }
+      .title {
+        position: absolute; left: 96px; top: 240px; width: 1600px;
+        color: var(--fg); font-family: var(--display);
+        font-size: 104px; font-weight: 700; line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+      .title::after {
+        content: attr(data-description);
+        display: block;
+        margin-top: 18px;
+        color: var(--muted);
+        font-family: var(--body);
+        font-size: 28px;
+        font-weight: 500;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
+      .caption {
+        position: absolute; left: 96px; bottom: 170px; width: 1500px;
+        color: var(--fg); font-family: var(--display);
+        font-size: 68px; font-weight: 700; line-height: 1.08;
+        letter-spacing: -0.03em;
+      }
+      .caption::before {
+        content: attr(data-description);
+        display: block;
+        margin-bottom: 18px;
+        color: var(--accent);
+        font-family: var(--body);
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      .card {
+        position: absolute; left: 200px; right: 200px; top: 300px;
+        padding: 48px; border: 1px solid var(--accent); border-radius: 18px;
+        background: rgba(0, 0, 0, 0.28); color: var(--fg);
+      }
+      .card-kicker {
+        display: block; color: var(--accent); font-size: 22px;
+        letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 18px;
+      }
+      .card strong { display: block; font-family: var(--display); font-size: 56px; line-height: 1.05; }
+      .card p { margin-top: 18px; color: var(--muted); font-size: 28px; line-height: 1.35; }
+      .lower-third {
+        position: absolute; left: 96px; bottom: 96px;
+        padding: 18px 24px; border-left: 6px solid var(--accent); color: var(--fg);
+        background: rgba(6, 9, 19, 0.84);
+        border-radius: 0 12px 12px 0;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      }
+      .lower-third strong { display: block; font-family: var(--display); font-size: 34px; }
+      .lower-third span { display: block; margin-top: 6px; color: var(--muted); font-size: 28px; }
+      .end-card {
+        position: absolute; inset: 0; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; text-align: center; color: var(--fg);
+      }
+      .end-card::after {
+        content: attr(data-description);
+        display: block;
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 28px;
+        font-weight: 500;
+      }
+      .broll { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .chart { position: absolute; inset: 80px; z-index: 2; }
+      .chart svg { width: 100%; height: 100%; }
+      ${extraCss}
+  `;
+}
+
 function renderHyperFramesHtml(project, plan, theme, base) {
   const width = plan.format?.width || 1920;
   const height = plan.format?.height || 1080;
@@ -3570,114 +4281,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
     <meta name="viewport" content="width=${width}, height=${height}" />
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
     <style>
-      :root {
-        --bg: ${theme.bg};
-        --fg: ${theme.fg};
-        --muted: ${theme.muted};
-        --accent: ${theme.accent};
-        --accent2: ${theme.accent2};
-        --display: "${theme.display}", sans-serif;
-        --body: "${theme.body}", sans-serif;
-      }
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
-        width: ${width}px; height: ${height}px;
-        overflow: hidden;
-        background: var(--bg);
-        font-family: var(--body);
-      }
-      #root {
-        position: relative;
-        width: 100%; height: 100%;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at 70% 30%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%),
-          radial-gradient(circle at 20% 80%, color-mix(in srgb, var(--accent2) 12%, transparent), transparent 40%),
-          var(--bg);
-      }
-      #base { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
-      #brand, .title, .caption, .card, .lower-third, .end-card { z-index: 2; position: absolute; }
-      #brand {
-        position: absolute; left: 96px; top: 72px;
-        color: var(--accent); font-family: var(--display);
-        font-size: 28px; font-weight: 700; letter-spacing: 0.18em;
-        text-transform: uppercase;
-        background: rgba(6, 9, 19, 0.78);
-        padding: 10px 16px;
-        border-radius: 8px;
-      }
-      .title {
-        position: absolute; left: 96px; top: 240px; width: 1600px;
-        color: var(--fg); font-family: var(--display);
-        font-size: 104px; font-weight: 700; line-height: 1.02;
-        letter-spacing: -0.04em;
-      }
-      .title::after {
-        content: attr(data-description);
-        display: block;
-        margin-top: 18px;
-        color: var(--muted);
-        font-family: var(--body);
-        font-size: 28px;
-        font-weight: 500;
-        line-height: 1.35;
-        letter-spacing: 0;
-      }
-      .caption {
-        position: absolute; left: 96px; bottom: 170px; width: 1500px;
-        color: var(--fg); font-family: var(--display);
-        font-size: 68px; font-weight: 700; line-height: 1.08;
-        letter-spacing: -0.03em;
-      }
-      .caption::before {
-        content: attr(data-description);
-        display: block;
-        margin-bottom: 18px;
-        color: var(--accent);
-        font-family: var(--body);
-        font-size: 22px;
-        font-weight: 700;
-        line-height: 1.2;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-      }
-      .card {
-        position: absolute; left: 200px; right: 200px; top: 300px;
-        padding: 48px; border: 1px solid var(--accent); border-radius: 18px;
-        background: rgba(0, 0, 0, 0.28); color: var(--fg);
-      }
-      .card-kicker {
-        display: block; color: var(--accent); font-size: 22px;
-        letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 18px;
-      }
-      .card strong { display: block; font-family: var(--display); font-size: 56px; line-height: 1.05; }
-      .card p { margin-top: 18px; color: var(--muted); font-size: 28px; line-height: 1.35; }
-      .lower-third {
-        position: absolute; left: 96px; bottom: 96px;
-        padding: 18px 24px; border-left: 6px solid var(--accent); color: var(--fg);
-        background: rgba(6, 9, 19, 0.84);
-        border-radius: 0 12px 12px 0;
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-      }
-      .lower-third strong { display: block; font-family: var(--display); font-size: 34px; }
-      .lower-third span { display: block; margin-top: 6px; color: var(--muted); font-size: 28px; }
-      .end-card {
-        position: absolute; inset: 0; display: flex; flex-direction: column;
-        align-items: center; justify-content: center; text-align: center; color: var(--fg);
-      }
-      .end-card::after {
-        content: attr(data-description);
-        display: block;
-        margin-top: 24px;
-        color: var(--muted);
-        font-size: 28px;
-        font-weight: 500;
-      }
-      .broll { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-      .chart { position: absolute; inset: 80px; z-index: 2; }
-      .chart svg { width: 100%; height: 100%; }
-      ${motionCss}
-      ${panelCss}
+      ${hyperFramesCss(theme, width, height, { extraCss: `${motionCss}\n${panelCss}` })}
     </style>
   </head>
   <body>
@@ -3710,16 +4314,86 @@ function renderHyperFramesHtml(project, plan, theme, base) {
 `;
 }
 
+function renderHyperFramesElementDocument(project, plan, element, spec, theme) {
+  const width = plan.format?.width || 1920;
+  const height = plan.format?.height || 1080;
+  const fps = plan.format?.fps || 30;
+  const duration = Math.max(0.1, Number(spec.duration) || Number(element.end) - Number(element.start) || 1);
+  const local = { ...element, start: 0, end: duration };
+  let elementHtml = "";
+  let extraCss = "";
+  let tween = "";
+
+  if (local.type === "transition") {
+    const transition = hyperframesTransition(local, theme, { id: "el-0", trackIndex: 0, zIndex: 60 });
+    elementHtml = transition.html;
+    extraCss = transition.css;
+    tween = transition.tween;
+  } else {
+    elementHtml = renderHyperFramesElement(local, 0, theme);
+    tween = `
+      tl.fromTo("#el-0", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0);
+      tl.to("#el-0", { opacity: 0, duration: 0.25, ease: "power2.in" }, ${Math.max(0.5, duration - 0.25).toFixed(3)});`;
+  }
+  if (!elementHtml) return null;
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=${width}, height=${height}" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      ${hyperFramesCss(theme, width, height, { transparent: true, extraCss })}
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="element"
+      data-start="0"
+      data-duration="${duration.toFixed(3)}"
+      data-fps="${fps}"
+      data-width="${width}"
+      data-height="${height}"
+    >
+      ${elementHtml}
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      tl.seek(0);
+      ${tween}
+      window.__timelines["element"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
+`;
+}
+
 function buildHyperFrames(project, plan, args) {
   const engineDir = path.join(project.dir, "engine", "hyperframes");
   if (exists(engineDir) && !args.force) {
     fail(`HyperFrames project already exists at ${engineDir}. Use --force to rebuild it.`);
   }
-  if (exists(engineDir)) removeDirRobust(engineDir);
+  const engineCacheDir = path.join(cacheRoot(WORKSPACE), "engine-cache", project.slug);
+  if (exists(engineDir)) {
+    try {
+      preserveEngineCaches(engineDir, engineCacheDir);
+    } catch (error) {
+      console.warn(`  ! Could not preserve engine caches: ${error.message}`);
+    }
+    removeDirRobust(engineDir);
+  }
   ensureDir(engineDir);
+  try {
+    restoreEngineCaches(engineDir, engineCacheDir);
+  } catch (error) {
+    console.warn(`  ! Could not restore engine caches: ${error.message}`);
+  }
 
   const remapped = planForBuild(plan, args);
-  const base = buildBaseMedia(project, plan, remapped.keeps, engineDir, args);
+  const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args);
   const finalPlan = { ...remapped.plan, duration: base.duration };
   copyElementAssets(project.dir, finalPlan, path.join(engineDir, "assets"), "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile));
@@ -3888,12 +4562,25 @@ function buildRemotion(project, plan, args) {
   if (exists(engineDir) && !args.force) {
     fail(`Remotion project already exists at ${engineDir}. Use --force to rebuild it.`);
   }
-  if (exists(engineDir)) removeDirRobust(engineDir);
+  const engineCacheDir = path.join(cacheRoot(WORKSPACE), "engine-cache", `${project.slug}-remotion`);
+  if (exists(engineDir)) {
+    try {
+      preserveEngineCaches(engineDir, engineCacheDir);
+    } catch (error) {
+      console.warn(`  ! Could not preserve engine caches: ${error.message}`);
+    }
+    removeDirRobust(engineDir);
+  }
   ensureDir(engineDir);
+  try {
+    restoreEngineCaches(engineDir, engineCacheDir);
+  } catch (error) {
+    console.warn(`  ! Could not restore engine caches: ${error.message}`);
+  }
 
   const assetsDir = path.join(engineDir, "public", "assets");
   const remapped = planForBuild(plan, args);
-  const base = buildBaseMedia(project, plan, remapped.keeps, engineDir, args, "public/assets");
+  const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args, "public/assets");
   const finalPlan = { ...remapped.plan, duration: base.duration };
   copyElementAssets(project.dir, finalPlan, assetsDir, "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile));
@@ -3964,9 +4651,10 @@ export const RemotionRoot = () => (
     path.join(engineDir, "src", "index.ts"),
     `import { registerRoot } from "remotion";\nimport { RemotionRoot } from "./Root";\n\nregisterRoot(RemotionRoot);\n`
   );
+  const has3d = (finalPlan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
   writeText(
     path.join(engineDir, "remotion.config.ts"),
-    `import { Config } from "@remotion/cli/config";\n\nConfig.setVideoImageFormat("jpeg");\nConfig.setOverwriteOutput(true);\n`
+    `import { Config } from "@remotion/cli/config";\n\nConfig.setVideoImageFormat("jpeg");\nConfig.setOverwriteOutput(true);\n${has3d ? 'Config.setChromiumOpenGlRenderer("angle");\n' : ""}`
   );
   writeText(
     path.join(engineDir, "tsconfig.json"),
@@ -3997,14 +4685,14 @@ export const RemotionRoot = () => (
       render: "remotion render src/index.ts RoosterVideo out/final.mp4",
     },
     dependencies: {
-      "@remotion/cli": "^4.0.0",
-      react: "^19.0.0",
-      "react-dom": "^19.0.0",
-      remotion: "^4.0.0",
+      "@remotion/cli": REMOTION_VERSION,
+      react: "19.0.0",
+      "react-dom": "19.0.0",
+      remotion: REMOTION_VERSION,
     },
     devDependencies: {
-      "@types/react": "^19.0.0",
-      typescript: "^5.9.0",
+      "@types/react": "19.0.0",
+      typescript: "5.9.3",
     },
   });
   writeText(
@@ -4013,6 +4701,1101 @@ export const RemotionRoot = () => (
   );
 
   return { engineDir, base, duration: base.duration };
+}
+
+// ---------------------------------------------------------------------------
+// FilmCraft (optional timeline target)
+// ---------------------------------------------------------------------------
+
+function filmCraftPaths(project) {
+  const dir = path.join(project.dir, "engine", "filmcraft");
+  return {
+    dir,
+    projectFile: path.join(dir, `${project.slug}.fcproj`),
+    assetsDir: path.join(dir, "assets"),
+    elementsDir: path.join(dir, "elements"),
+    hyperframesDir: path.join(dir, "hyperframes"),
+    remotionDir: path.join(dir, "remotion"),
+    archiveDir: path.join(dir, "archive"),
+    statePath: path.join(project.dir, "work", "filmcraft.json"),
+  };
+}
+
+function filmCraftCliOrFail() {
+  const found = findFilmCraft({
+    env: process.env,
+    platform: process.platform,
+    home: os.homedir(),
+    cwd: CWD,
+  });
+  if (!found.cli) {
+    fail(
+      "FilmCraft CLI not found.\n" +
+        "Install FilmCraft from https://getartcraft.com/apps/filmcraft (MIT/Apache-2.0), or set ROOSTER_FILMCRAFT_CLI to filmcraft-cli.\n" +
+        "To keep the current workflow, use --target hyperframes or --target remotion."
+    );
+  }
+  return found;
+}
+
+function filmCraftElementEngine(args, plan, project) {
+  let engine = args.engine && args.engine !== "filmcraft" ? args.engine : project.config.engine || "auto";
+  if (engine === "auto") {
+    const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
+    engine = has3d ? "remotion" : "hyperframes";
+  }
+  if (!["hyperframes", "remotion"].includes(engine)) {
+    fail(`FilmCraft elements need HyperFrames or Remotion; got "${engine}".`);
+  }
+  return engine;
+}
+
+function filmCraftCaptionsFile(project) {
+  const dir = path.join(project.dir, "edit", "captions");
+  if (!exists(dir)) return null;
+  const files = fs
+    .readdirSync(dir)
+    .filter((file) => /\.(srt|vtt)$/i.test(file))
+    .sort((a, b) => (/\.srt$/i.test(a) ? -1 : 0) - (/\.srt$/i.test(b) ? -1 : 0) || a.localeCompare(b));
+  return files.length ? path.join(dir, files[0]) : null;
+}
+
+function ensureFilmCraftHyperFramesProject(project, plan, theme, specs, paths) {
+  ensureDir(paths.hyperframesDir);
+  ensureDir(path.join(paths.hyperframesDir, "assets"));
+  writeJson(path.join(paths.hyperframesDir, "hyperframes.json"), {
+    $schema: "https://hyperframes.heygen.com/schema/hyperframes.json",
+    registry: "https://raw.githubusercontent.com/heygen-com/hyperframes/main/registry",
+    paths: { blocks: "compositions", components: "compositions/components", assets: "assets" },
+    media: { autoProxy: true },
+  });
+  writeJson(path.join(paths.hyperframesDir, "package.json"), {
+    name: `${project.slug}-filmcraft-elements`,
+    private: true,
+    type: "module",
+    scripts: { render: "npx --yes hyperframes render" },
+  });
+  writeJson(path.join(paths.hyperframesDir, "meta.json"), {
+    id: `${project.slug}-filmcraft-elements`,
+    name: `${project.config.name || project.slug} elements`,
+    createdAt: now(),
+  });
+
+  const renderPlan = {
+    ...plan,
+    elements: specs.map((spec) => JSON.parse(JSON.stringify(spec.element))),
+  };
+  copyElementAssets(project.dir, renderPlan, path.join(paths.hyperframesDir, "assets"), "assets/");
+
+  const documents = new Map();
+  specs.forEach((spec, index) => {
+    const element = renderPlan.elements[index];
+    const html = renderHyperFramesElementDocument(project, plan, element, spec, theme);
+    if (!html) {
+      console.warn(`  ! ${spec.id} (${spec.type}) cannot be rendered as a standalone clip; skipped.`);
+      return;
+    }
+    const file = path.join(paths.hyperframesDir, `element-${spec.id}.html`);
+    writeText(file, html);
+    documents.set(spec.id, file);
+  });
+  return documents;
+}
+
+function renderRemotionElementTsx() {
+  return `import {
+  AbsoluteFill,
+  Img,
+  OffthreadVideo,
+  interpolate,
+  staticFile,
+  useCurrentFrame,
+} from "remotion";
+
+const textOf = (element: any) => element.text ?? element.description ?? "";
+
+const fade = (frame: number, duration: number, fps: number) => {
+  const end = Math.max(1, duration * fps);
+  const out = Math.max(1, end - 0.25 * fps);
+  return interpolate(frame, [0, Math.min(0.35 * fps, out - 1), out, end], [0, 1, 1, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+};
+
+export const RoosterElement = ({ entry }: { entry: any }) => {
+  const frame = useCurrentFrame();
+  const element = entry.element ?? {};
+  const fps = entry.fps ?? 30;
+  const duration = entry.duration ?? 1;
+  const opacity = fade(frame, duration, fps);
+  if (opacity <= 0.001) return null;
+  const text = textOf(element);
+  const common = { position: "absolute" as const, opacity };
+  const theme = entry.theme ?? {};
+
+  switch (element.type) {
+    case "letreiro":
+      return <div style={{ ...common, left: 96, top: 240, width: 1600, fontSize: 104, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em" }}>{text}</div>;
+    case "caption-emphasis":
+      return <div style={{ ...common, left: 96, bottom: 170, width: 1500, fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
+    case "grafico":
+    case "lista":
+      if (element.chartSvg) {
+        return <div style={{ ...common, left: 80, right: 80, top: 80, bottom: 80 }} dangerouslySetInnerHTML={{ __html: element.chartSvg }} />;
+      }
+      return (
+        <div style={{ ...common, left: 200, right: 200, top: 300, padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
+          <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 18 }}>{element.type}</div>
+          <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.05 }}>{text}</div>
+          <div style={{ marginTop: 18, color: theme.muted, fontSize: 28, lineHeight: 1.35 }}>{element.description ?? ""}</div>
+        </div>
+      );
+    case "zoom":
+      return null;
+    case "transition": {
+      if (!element.motion) return null;
+      const value = interpolate(frame, element.motion.inputRange, element.motion.outputRange, {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      });
+      if (element.motion.slide) {
+        const transform = element.motion.property === "xPercent" ? \`translateX(\${value}%)\` : \`translateY(\${value}%)\`;
+        return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, transform }} />;
+      }
+      return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, opacity: value }} />;
+    }
+    case "lower-third":
+      return (
+        <div style={{ ...common, left: 96, bottom: 96, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
+          <div style={{ fontSize: 34, fontWeight: 700 }}>{text}</div>
+          <div style={{ marginTop: 6, color: theme.muted, fontSize: 24 }}>{element.description ?? ""}</div>
+        </div>
+      );
+    case "end-card":
+      return (
+        <div style={{ ...common, inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
+          <div style={{ fontSize: 88, fontWeight: 700 }}>{text}</div>
+          <div style={{ marginTop: 24, color: theme.muted, fontSize: 28 }}>{element.description ?? ""}</div>
+        </div>
+      );
+    case "broll": {
+      const src = element.src || element.asset;
+      if (!src) return null;
+      if (/\\.(png|jpe?g|webp|gif|svg)$/i.test(src)) {
+        return <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity }} />;
+      }
+      if (/\\.(mp4|webm|mov|m4v)$/i.test(src)) {
+        return <OffthreadVideo src={staticFile(src)} muted style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity }} />;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+};
+`;
+}
+
+function ensureFilmCraftRemotionProject(project, plan, theme, specs, format, paths) {
+  const fps = Number(format.fps) || 30;
+  const width = Number(format.width) || 1920;
+  const height = Number(format.height) || 1080;
+  ensureDir(paths.remotionDir);
+  const assetsDir = path.join(paths.remotionDir, "public", "assets");
+  ensureDir(assetsDir);
+
+  const renderPlan = {
+    ...plan,
+    elements: specs.map((spec) => JSON.parse(JSON.stringify(spec.element))),
+  };
+  copyElementAssets(project.dir, renderPlan, assetsDir, "assets/");
+
+  const entries = specs.map((spec, index) => {
+    let element = renderPlan.elements[index];
+    if (element.type === "grafico" && element.chart) {
+      element = { ...element, chartSvg: renderChartSvg(element, theme) };
+    }
+    if (element.type === "transition") {
+      const transition = remotionTransitionValues(element, fps, { theme });
+      element = {
+        ...element,
+        motion: {
+          type: "transition",
+          inputRange: transition.inputRange,
+          outputRange: transition.outputRange,
+          property: transition.property,
+          color: transition.color,
+          slide: transition.slide,
+        },
+      };
+    }
+    return {
+      id: spec.id,
+      duration: spec.duration,
+      fps,
+      width,
+      height,
+      element,
+      theme,
+    };
+  });
+
+  writeJson(path.join(paths.remotionDir, "src", "data", "elements.json"), entries);
+  writeText(path.join(paths.remotionDir, "src", "Element.tsx"), renderRemotionElementTsx());
+  writeText(
+    path.join(paths.remotionDir, "src", "Root.tsx"),
+    `import { Composition } from "remotion";
+import { RoosterElement } from "./Element";
+import elements from "./data/elements.json";
+
+export const RemotionRoot = () => (
+  <>
+    {elements.map((entry: any) => (
+      <Composition
+        key={entry.id}
+        id={entry.id}
+        component={RoosterElement}
+        durationInFrames={Math.max(1, Math.ceil(entry.duration * entry.fps))}
+        fps={entry.fps}
+        width={entry.width}
+        height={entry.height}
+        defaultProps={{ entry }}
+      />
+    ))}
+  </>
+);
+`
+  );
+  writeText(
+    path.join(paths.remotionDir, "src", "index.ts"),
+    `import { registerRoot } from "remotion";\nimport { RemotionRoot } from "./Root";\n\nregisterRoot(RemotionRoot);\n`
+  );
+  writeText(
+    path.join(paths.remotionDir, "remotion.config.ts"),
+    `import { Config } from "@remotion/cli/config";\n\nConfig.setVideoImageFormat("png");\nConfig.setOverwriteOutput(true);\n`
+  );
+  writeText(
+    path.join(paths.remotionDir, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2020",
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          jsx: "react-jsx",
+          strict: false,
+          skipLibCheck: true,
+          esModuleInterop: true,
+          allowSyntheticDefaultImports: true,
+          resolveJsonModule: true,
+        },
+        include: ["src"],
+      },
+      null,
+      2
+    )
+  );
+  writeJson(path.join(paths.remotionDir, "package.json"), {
+    name: `${project.slug}-filmcraft-elements`,
+    version: "1.0.0",
+    private: true,
+    scripts: { studio: "remotion studio" },
+    dependencies: {
+      "@remotion/cli": REMOTION_VERSION,
+      react: "19.0.0",
+      "react-dom": "19.0.0",
+      remotion: REMOTION_VERSION,
+    },
+    devDependencies: {
+      "@types/react": "19.0.0",
+      typescript: "5.9.3",
+    },
+  });
+  return entries;
+}
+
+function runEngineBinary(bin, args, options = {}) {
+  if (/\.(mjs|cjs|js)$/i.test(String(bin))) {
+    return run(process.execPath, [bin, ...args], options);
+  }
+  return run(bin, args, options);
+}
+
+function renderFilmCraftElements(project, plan, specs, theme, engine, args, paths) {
+  const renderable = specs.filter((spec) => spec.renderable);
+  if (!renderable.length) return [];
+
+  const format = plan.format || project.config.format || {};
+  const width = Number(format.width) || 1920;
+  const height = Number(format.height) || 1080;
+  const fps = Number(format.fps) || 30;
+  const engineDir = engine === "hyperframes" ? paths.hyperframesDir : paths.remotionDir;
+  if (engine === "remotion") {
+    ensureFilmCraftRemotionProject(project, plan, theme, renderable, format, paths);
+  }
+  const info = engineVersion(engine, {
+    workspace: WORKSPACE,
+    cwd: engineDir,
+    home: ROOSTER_HOME,
+    projectDir: engineDir,
+  });
+  if (!info || !info.bin) {
+    if (engine === "hyperframes") {
+      fail("HyperFrames not found. Install it with `npm install --prefix <workspace>/cache/tools hyperframes` or use --engine remotion.");
+    }
+    fail(`Remotion not found in ${engineDir}. Run npm install there, or use --engine hyperframes.`);
+  }
+
+  const documents =
+    engine === "hyperframes"
+      ? ensureFilmCraftHyperFramesProject(project, plan, theme, renderable, paths)
+      : null;
+
+  ensureDir(paths.elementsDir);
+  ensureDir(paths.assetsDir);
+  const validate = (file) => fs.statSync(file).size > 0;
+  const rendered = [];
+
+  for (const spec of renderable) {
+    const renderElement = { ...spec.element, start: 0, end: spec.duration };
+    const assetPath = renderElement.src || renderElement.asset;
+    let assetFingerprint = null;
+    if (assetPath) {
+      try {
+        assetFingerprint = sourceFingerprint(path.resolve(project.dir, assetPath), { full: false });
+      } catch {
+        assetFingerprint = null;
+      }
+    }
+    const hash = elementKey({
+      element: renderElement,
+      theme,
+      format: { width, height, fps },
+      engine,
+      engineVersion: info.version || "unknown",
+      render: { format: "mov", alpha: true, proresProfile: "4444", asset: assetFingerprint },
+    });
+    const targetName = `${spec.id}-${hash.slice(0, 8)}.mov`;
+    const targetPath = path.join(paths.elementsDir, targetName);
+    let cached = false;
+
+    if (!args["no-cache"] && !args["rebuild-media"]) {
+      const hit = readCache("elements", hash, ".mov", validate, WORKSPACE);
+      if (hit) {
+        linkOrCopy(hit, targetPath);
+        cached = true;
+      }
+    }
+
+    if (!cached) {
+      const renderTo = (tmp) => {
+        const timeout = Math.max(5 * 60 * 1000, (Number(spec.duration) || 1) * 60 * 1000);
+        let result;
+        if (engine === "hyperframes") {
+          const document = documents?.get(spec.id);
+          if (!document) {
+            throw new Error(`${spec.id}: no HyperFrames document was generated`);
+          }
+          result = runEngineBinary(
+            info.bin,
+            [
+              "render",
+              paths.hyperframesDir,
+              "--composition",
+              path.basename(document),
+              "--format",
+              "mov",
+              "--prores-profile",
+              "4444",
+              "--quality",
+              "delivery",
+              "-o",
+              tmp,
+            ],
+            { timeout }
+          );
+        } else {
+          const invocation = remotionRenderArgs({
+            bin: info.bin,
+            entry: "src/index.ts",
+            composition: spec.id,
+            out: tmp,
+            quality: "final",
+            concurrency: args.concurrency,
+            codec: "prores",
+            proresProfile: "4444",
+            imageFormat: "png",
+            pixelFormat: "yuva444p10le",
+          });
+          result = runEngineBinary(invocation.command, invocation.args, {
+            cwd: paths.remotionDir,
+            timeout,
+          });
+        }
+        if (!result.ok) {
+          throw new Error(
+            `Element ${spec.id} (${spec.type}) failed to render:\n${(result.stderr || result.stdout || result.error || "unknown error").slice(-2000)}`
+          );
+        }
+      };
+
+      const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "rooster-element-"));
+      const stageFile = path.join(stageDir, `${spec.id}.mov`);
+      try {
+        renderTo(stageFile);
+        if (args["no-cache"]) {
+          fs.rmSync(targetPath, { force: true });
+          fs.copyFileSync(stageFile, targetPath);
+        } else {
+          const cachePath = withCache({
+            kind: "elements",
+            key: hash,
+            ext: ".mov",
+            workspace: WORKSPACE,
+            refresh: Boolean(args["rebuild-media"]),
+            validate,
+            produce: (tmp) => fs.copyFileSync(stageFile, tmp),
+            meta: {
+              project: project.slug,
+              element: spec.id,
+              type: spec.type,
+              engine,
+              engineVersion: info.version || null,
+              format: { width, height, fps },
+            },
+          });
+          linkOrCopy(cachePath, targetPath);
+        }
+      } catch (error) {
+        fail(error.message);
+      } finally {
+        try {
+          fs.rmSync(stageDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+        } catch {
+          // A leftover temp dir is harmless.
+        }
+      }
+    }
+
+    rendered.push({ spec, file: targetPath, hash, cached });
+  }
+
+  return rendered;
+}
+
+function filmCraftPlaceCommand(item, track, start, sourceIn, duration, options = {}) {
+  const params = {
+    item,
+    track,
+    time: secondsToTicks(start),
+    duration: secondsToTicks(duration),
+  };
+  if (sourceIn !== null && sourceIn !== undefined) params.sourceIn = secondsToTicks(sourceIn);
+  if (options.video !== undefined) params.video = Boolean(options.video);
+  if (options.audio !== undefined) params.audio = Boolean(options.audio);
+  return { id: "timeline.place", params };
+}
+
+function filmCraftMarkerCommands(markers) {
+  return (markers || [])
+    .filter((marker) => Number.isFinite(Number(marker.time)) && Number(marker.time) >= 0)
+    .map((marker) => ({
+      id: "markers.add",
+      params: {
+        target: "program",
+        time: secondsToTicks(marker.time),
+        name: String(marker.label || marker.kind || "marker"),
+        comment: marker.kind ? `rooster:${marker.kind}` : "rooster",
+      },
+    }));
+}
+
+function syncFilmCraftProject({
+  project,
+  plan,
+  keeps,
+  base,
+  baseKey,
+  rendered,
+  specs,
+  format,
+  fps,
+  duration,
+  markers,
+  captionsFile,
+  cli,
+  paths,
+  state,
+  args,
+}) {
+  const sourcePath = plan.source ? path.resolve(project.dir, plan.source) : null;
+  const basePath = path.resolve(paths.dir, base.path);
+  const hasSourceVideo = Boolean(sourcePath) && exists(sourcePath) && base.kind !== "audio";
+  const hasAudio = Boolean(base.hasAudio) && exists(basePath);
+  const maxTrack = Math.max(3, ...specs.map((spec) => Number(spec.trackIndex) || 2));
+
+  if (!state) {
+    const created = filmCraftRun(
+      cli,
+      null,
+      [
+        {
+          id: "file.newSequence",
+          params: {
+            name: project.config.name || project.slug,
+            width: Number(format.width) || 1920,
+            height: Number(format.height) || 1080,
+            fps: Number(fps) || 30,
+            video: maxTrack,
+            audio: 3,
+          },
+        },
+      ],
+      { saveAs: paths.projectFile }
+    );
+    if (!created.ok) {
+      fail(`FilmCraft could not create the project:\n${created.error || created.stderr || created.stdout || "unknown error"}`);
+    }
+    const sequence = created.results?.[0]?.result?.sequence ?? null;
+
+    const importPaths = [];
+    const importKeys = [];
+    if (hasSourceVideo) {
+      importPaths.push(sourcePath);
+      importKeys.push("source");
+    }
+    if (hasAudio) {
+      importPaths.push(basePath);
+      importKeys.push("audio");
+    }
+    for (const item of rendered) {
+      importPaths.push(item.file);
+      importKeys.push(item.spec.id);
+    }
+
+    const items = {};
+    if (importPaths.length) {
+      const imported = filmCraftRun(
+        cli,
+        paths.projectFile,
+        [{ id: "file.import", params: { paths: importPaths } }],
+        { save: true }
+      );
+      if (!imported.ok) {
+        fail(`FilmCraft could not import the media:\n${imported.error || imported.stderr || imported.stdout || "unknown error"}`);
+      }
+      const list = imported.results?.[0]?.result?.items || [];
+      importKeys.forEach((key, index) => {
+        if (list[index] !== undefined) items[key] = list[index];
+      });
+      for (const key of importKeys) {
+        if (items[key] === undefined) {
+          fail(`FilmCraft did not return an item id for "${key}". Check the media path and try again.`);
+        }
+      }
+    }
+
+    const commands = [];
+    const meta = [];
+    const cuts = [];
+    let cursor = 0;
+    if (hasSourceVideo) {
+      if (base.kind === "image") {
+        commands.push(filmCraftPlaceCommand(items.source, "V1", 0, null, duration, { video: true, audio: false }));
+        meta.push({ kind: "cut", index: 0, item: items.source, start: 0, sourceIn: 0, duration });
+        cuts.push({ index: 0, item: items.source, start: 0, sourceIn: 0, duration });
+      } else {
+        keeps.forEach((keep, index) => {
+          const length = Math.max(0, keep.end - keep.start);
+          if (length <= 0) return;
+          commands.push(
+            filmCraftPlaceCommand(items.source, "V1", cursor, keep.start, length, {
+              video: true,
+              audio: false,
+            })
+          );
+          meta.push({ kind: "cut", index, item: items.source, start: cursor, sourceIn: keep.start, duration: length });
+          cuts.push({ index, item: items.source, start: cursor, sourceIn: keep.start, duration: length });
+          cursor += length;
+        });
+      }
+    }
+    if (hasAudio) {
+      commands.push(
+        filmCraftPlaceCommand(items.audio, "A1", 0, 0, duration, { video: false, audio: true })
+      );
+      meta.push({ kind: "audio", item: items.audio, start: 0, sourceIn: 0, duration });
+    }
+    for (const item of rendered) {
+      const spec = item.spec;
+      commands.push(
+        filmCraftPlaceCommand(items[spec.id], `V${spec.trackIndex}`, spec.start, null, spec.duration, {
+          video: true,
+          audio: false,
+        })
+      );
+      meta.push({
+        kind: "element",
+        id: spec.id,
+        item: items[spec.id],
+        start: spec.start,
+        duration: spec.duration,
+        track: `V${spec.trackIndex}`,
+        hash: item.hash,
+        file: item.file,
+      });
+    }
+    const placed = filmCraftRun(cli, paths.projectFile, commands, { save: true });
+    if (!placed.ok) {
+      fail(`FilmCraft could not place the timeline:\n${placed.error || placed.stderr || placed.stdout || "unknown error"}`);
+    }
+
+    const markerCommands = filmCraftMarkerCommands(markers);
+    if (markerCommands.length) {
+      const marked = filmCraftRun(cli, paths.projectFile, markerCommands, {
+        save: true,
+        keepGoing: true,
+      });
+      if (!marked.ok) {
+        console.warn(
+          `  ! Could not add all markers: ${marked.error || marked.stderr || "unknown error"}`
+        );
+      }
+    }
+
+    const elements = {};
+    const cutState = [];
+    let audioState = null;
+    (placed.results || []).forEach((result, index) => {
+      const entry = meta[index];
+      if (!entry) return;
+      const clip = result.result?.clips?.[0] ?? null;
+      if (entry.kind === "cut") cutState.push({ ...entry, clip });
+      else if (entry.kind === "audio") audioState = { ...entry, clip };
+      else if (entry.kind === "element") {
+        elements[entry.id] = {
+          hash: entry.hash,
+          file: entry.file,
+          item: entry.item,
+          clip,
+          track: entry.track,
+          start: entry.start,
+          duration: entry.duration,
+        };
+      }
+    });
+
+    if (captionsFile) {
+      const captions = filmCraftRun(
+        cli,
+        paths.projectFile,
+        [{ id: "captions.import", params: { path: captionsFile } }],
+        { save: true, keepGoing: true }
+      );
+      if (!captions.ok) {
+        console.warn(`  ! Could not import captions: ${captions.error || captions.stderr || "unknown error"}`);
+      }
+    }
+
+    return {
+      schema: "rooster.filmcraft/v1",
+      key: null,
+      projectFile: paths.projectFile,
+      sequence,
+      tracks: { video: maxTrack, audio: 3 },
+      format: { width: Number(format.width) || 1920, height: Number(format.height) || 1080, fps: Number(fps) || 30 },
+      base: {
+        key: baseKey,
+        kind: base.kind,
+        duration,
+        path: basePath,
+        fingerprint: sourceFingerprint(basePath, { full: false }),
+      },
+      source: sourcePath
+        ? { path: sourcePath, item: items.source, fingerprint: sourceFingerprint(sourcePath, { full: false }) }
+        : null,
+      cuts: cutState,
+      audio: audioState,
+      elements,
+      markers: markers || [],
+      createdAt: now(),
+      updatedAt: now(),
+    };
+  }
+
+  // Incremental update: touch only the base/audio when they changed and the
+  // element clips whose content hash changed. Everything else is user work and
+  // stays where it is.
+  state.elements = state.elements || {};
+  state.cuts = state.cuts || [];
+  const commands = [];
+  const imports = [];
+  const importKeys = [];
+  const importKey = (key, file) => {
+    imports.push(file);
+    importKeys.push(key);
+    return key;
+  };
+
+  const baseChanged = state.base?.key !== baseKey;
+  if (baseChanged) {
+    const deleteClips = [
+      ...(state.cuts || []).map((cut) => cut.clip),
+      state.audio?.clip,
+    ].filter((clip) => clip !== null && clip !== undefined);
+    if (deleteClips.length) {
+      commands.push({ id: "timeline.delete", params: { clips: deleteClips, ripple: false } });
+    }
+  }
+
+  const currentIds = new Set(rendered.map((item) => item.spec.id));
+  const removed = Object.keys(state.elements || {}).filter((id) => !currentIds.has(id));
+  for (const id of removed) {
+    const clip = state.elements[id]?.clip;
+    if (clip !== null && clip !== undefined) {
+      commands.push({ id: "timeline.delete", params: { clips: [clip], ripple: false } });
+    }
+  }
+
+  const neededVideoTracks = Math.max(3, ...specs.map((spec) => Number(spec.trackIndex) || 2));
+  const currentVideoTracks = Number(state.tracks?.video) || 3;
+  if (neededVideoTracks > currentVideoTracks) {
+    commands.push({
+      id: "sequence.addTracks",
+      params: { video: neededVideoTracks - currentVideoTracks },
+    });
+    state.tracks = { ...(state.tracks || {}), video: neededVideoTracks, audio: state.tracks?.audio || 3 };
+  }
+
+  const elementActions = [];
+  for (const item of rendered) {
+    const spec = item.spec;
+    const previous = state.elements?.[spec.id];
+    if (previous && previous.hash === item.hash && previous.clip !== null && previous.clip !== undefined) {
+      continue;
+    }
+    if (previous && previous.clip !== null && previous.clip !== undefined) {
+      const sameWindow =
+        Math.abs(Number(previous.start) - Number(spec.start)) < 0.001 &&
+        Math.abs(Number(previous.duration) - Number(spec.duration)) < 0.001;
+      if (sameWindow) {
+        const key = importKey(`replace:${spec.id}`, item.file);
+        elementActions.push({ kind: "replace", spec, key, clip: previous.clip, hash: item.hash, file: item.file });
+      } else {
+        commands.push({ id: "timeline.delete", params: { clips: [previous.clip], ripple: false } });
+        const key = importKey(`place:${spec.id}`, item.file);
+        elementActions.push({ kind: "place", spec, key, hash: item.hash, file: item.file });
+      }
+    } else {
+      const key = importKey(`place:${spec.id}`, item.file);
+      elementActions.push({ kind: "place", spec, key, hash: item.hash, file: item.file });
+    }
+  }
+
+  const sourceChanged =
+    !state.source || state.source.path !== sourcePath || state.source.fingerprint !== (sourcePath ? sourceFingerprint(sourcePath, { full: false }) : null);
+  const audioChanged =
+    !state.audio || state.base?.fingerprint !== (exists(basePath) ? sourceFingerprint(basePath, { full: false }) : null);
+
+  if (baseChanged && hasSourceVideo) {
+    if (sourceChanged) importKey("source", sourcePath);
+  }
+  if (baseChanged && hasAudio) {
+    if (audioChanged) importKey("audio", basePath);
+  }
+
+  const importedItems = {};
+  if (imports.length) {
+    const imported = filmCraftRun(
+      cli,
+      paths.projectFile,
+      [{ id: "file.import", params: { paths: imports } }],
+      { save: true }
+    );
+    if (!imported.ok) {
+      fail(`FilmCraft could not import the updated media:\n${imported.error || imported.stderr || imported.stdout || "unknown error"}`);
+    }
+    const list = imported.results?.[0]?.result?.items || [];
+    importKeys.forEach((key, index) => {
+      if (list[index] !== undefined) importedItems[key] = list[index];
+    });
+  }
+
+  let cursor = 0;
+  const nextCuts = [];
+  if (baseChanged && hasSourceVideo) {
+    if (base.kind === "image") {
+      commands.push(filmCraftPlaceCommand(importedItems.source ?? state.source?.item, "V1", 0, null, duration, { video: true, audio: false }));
+      nextCuts.push({ index: 0, item: importedItems.source ?? state.source?.item, start: 0, sourceIn: 0, duration, clip: null });
+    } else {
+      keeps.forEach((keep, index) => {
+        const length = Math.max(0, keep.end - keep.start);
+        if (length <= 0) return;
+        commands.push(
+          filmCraftPlaceCommand(importedItems.source ?? state.source?.item, "V1", cursor, keep.start, length, {
+            video: true,
+            audio: false,
+          })
+        );
+        nextCuts.push({ index, item: importedItems.source ?? state.source?.item, start: cursor, sourceIn: keep.start, duration: length, clip: null });
+        cursor += length;
+      });
+    }
+  }
+
+  let nextAudio = state.audio || null;
+  if (baseChanged && hasAudio) {
+    commands.push(
+      filmCraftPlaceCommand(importedItems.audio ?? state.audio?.item, "A1", 0, 0, duration, { video: false, audio: true })
+    );
+    nextAudio = { item: importedItems.audio ?? state.audio?.item, start: 0, sourceIn: 0, duration, clip: null };
+  } else if (baseChanged) {
+    nextAudio = null;
+  }
+
+  for (const action of elementActions) {
+    const item = importedItems[action.key];
+    if (action.kind === "replace") {
+      commands.push({ id: "clip.replaceFromBin", params: { clips: [action.clip], item, keepSourceIn: true } });
+    } else {
+      commands.push(
+        filmCraftPlaceCommand(item, `V${action.spec.trackIndex}`, action.spec.start, null, action.spec.duration, {
+          video: true,
+          audio: false,
+        })
+      );
+    }
+  }
+
+  if (commands.length) {
+    const result = filmCraftRun(cli, paths.projectFile, commands, { save: true });
+    if (!result.ok) {
+      fail(`FilmCraft could not update the timeline:\n${result.error || result.stderr || result.stdout || "unknown error"}`);
+    }
+    // Map newly placed clips back to the state. Replacements keep their clip id.
+    let commandIndex = 0;
+    for (const command of commands) {
+      const outcome = result.results?.[commandIndex];
+      const clip = outcome?.result?.clips?.[0] ?? null;
+      if (command.id === "timeline.place") {
+        const params = command.params;
+        if (params.track === "V1") {
+          const cut = nextCuts.find((entry) => entry.clip === null && Math.abs(entry.start - ticksToSeconds(params.time)) < 0.002);
+          if (cut) cut.clip = clip;
+        } else if (params.track === "A1" && nextAudio) {
+          nextAudio.clip = clip;
+        } else {
+          const action = elementActions.find((entry) => entry.kind === "place" && `V${entry.spec.trackIndex}` === params.track && Math.abs(entry.spec.start - ticksToSeconds(params.time)) < 0.002);
+          if (action) {
+            state.elements[action.spec.id] = {
+              hash: action.hash,
+              file: action.file,
+              item: importedItems[action.key],
+              clip,
+              track: `V${action.spec.trackIndex}`,
+              start: action.spec.start,
+              duration: action.spec.duration,
+            };
+          }
+        }
+      } else if (command.id === "clip.replaceFromBin") {
+        const action = elementActions.find((entry) => entry.kind === "replace" && entry.clip === command.params.clips[0]);
+        if (action) {
+          state.elements[action.spec.id] = {
+            hash: action.hash,
+            file: action.file,
+            item: importedItems[action.key],
+            clip: command.params.clips[0],
+            track: `V${action.spec.trackIndex}`,
+            start: action.spec.start,
+            duration: action.spec.duration,
+          };
+        }
+      }
+      commandIndex += 1;
+    }
+  }
+
+  if (baseChanged) {
+    state.cuts = nextCuts;
+    state.audio = nextAudio;
+    state.base = {
+      key: baseKey,
+      kind: base.kind,
+      duration,
+      path: basePath,
+      fingerprint: exists(basePath) ? sourceFingerprint(basePath, { full: false }) : null,
+    };
+    state.source = sourcePath
+      ? { path: sourcePath, item: importedItems.source ?? state.source?.item, fingerprint: sourceFingerprint(sourcePath, { full: false }) }
+      : null;
+  }
+  for (const id of removed) delete state.elements[id];
+  state.updatedAt = now();
+  return state;
+}
+
+function buildFilmCraft(project, plan, args) {
+  const found = filmCraftCliOrFail();
+  const cli = found.cli;
+  const paths = filmCraftPaths(project);
+  ensureDir(paths.dir);
+  ensureDir(paths.assetsDir);
+  ensureDir(paths.elementsDir);
+
+  const remapped = planForBuild(plan, args);
+  const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const engine = filmCraftElementEngine(args, plan, project);
+  const format = remapped.plan.format || project.config.format || {};
+  const fps = Number(format.fps) || 30;
+  const plannedDuration = Number(remapped.duration) || Number(format.duration) || 0;
+  const baseKey = planMediaKey(project, plan, remapped.keeps, args).mediaKey;
+  const filmcraftVersion = filmCraftVersion(cli);
+  const elementEngineDir = engine === "hyperframes" ? paths.hyperframesDir : paths.remotionDir;
+  const elementEngineInfo = engineVersion(engine, {
+    workspace: WORKSPACE,
+    cwd: elementEngineDir,
+    home: ROOSTER_HOME,
+    projectDir: elementEngineDir,
+  });
+  const elementEngineVersion = elementEngineInfo?.version || "missing";
+
+  let state = exists(paths.statePath) ? readJson(paths.statePath, null) : null;
+  if (state && state.schema !== "rooster.filmcraft/v1") state = null;
+  if (exists(paths.projectFile) && !state) {
+    ensureDir(paths.archiveDir);
+    const archived = path.join(paths.archiveDir, `${project.slug}-${Date.now()}.fcproj`);
+    try {
+      fs.renameSync(paths.projectFile, archived);
+      console.warn(`  ! Existing FilmCraft project had no Rooster state; archived to ${archived}`);
+    } catch (error) {
+      fail(`Could not archive the existing FilmCraft project (close FilmCraft and retry): ${error.message}`);
+    }
+  }
+  if (args.force) {
+    if (exists(paths.projectFile)) {
+      ensureDir(paths.archiveDir);
+      const archived = path.join(paths.archiveDir, `${project.slug}-${Date.now()}.fcproj`);
+      try {
+        fs.renameSync(paths.projectFile, archived);
+        console.warn(`  ! Archived the previous FilmCraft project to ${archived}`);
+      } catch (error) {
+        fail(`Could not archive the previous FilmCraft project (close FilmCraft and retry): ${error.message}`);
+      }
+    }
+    state = null;
+  }
+
+  const stateKey = hashKey([
+    "rooster.filmcraft/v1",
+    htmlKey({
+      plan,
+      theme,
+      version: VERSION,
+      engine,
+      engineVersion: `${engine}-${elementEngineVersion};filmcraft-${filmcraftVersion || "unknown"}`,
+    }),
+    baseKey,
+    { width: Number(format.width) || 1920, height: Number(format.height) || 1080, fps, duration: plannedDuration },
+  ]);
+  const stateFilesOk = state
+    ? [state.base?.path, ...Object.values(state.elements || {}).map((element) => element.file)]
+        .filter(Boolean)
+        .every((file) => exists(file))
+    : false;
+  if (
+    args["if-needed"] &&
+    !args.force &&
+    !args["rebuild-media"] &&
+    state?.key === stateKey &&
+    stateFilesOk &&
+    exists(paths.projectFile)
+  ) {
+    heading(`Build up to date — ${project.slug}`);
+    console.log(`  ${paths.projectFile}`);
+    console.log("  Use --force or --rebuild-media to rebuild anyway.");
+    return;
+  }
+
+  const base = buildMediaCached(project, plan, remapped.keeps, paths.dir, args, "assets");
+  const duration = Number(base.duration) || plannedDuration;
+  const finalPlan = { ...remapped.plan, duration, format: { ...format, duration } };
+  const specs = elementSpecs(finalPlan, {
+    projectSlug: project.slug,
+    format: finalPlan.format,
+    engine,
+    duration,
+  });
+  const markers = timelineMarkers(finalPlan, {
+    keeps: roundKeeps(remapped.keeps, fps),
+    duration,
+  }).filter((marker) => Number(marker.time) >= 0 && Number(marker.time) <= duration + 0.001);
+
+  const rendered = renderFilmCraftElements(project, finalPlan, specs, theme, engine, args, paths);
+  const captionsFile = filmCraftCaptionsFile(project);
+  const nextState = syncFilmCraftProject({
+    project,
+    plan: finalPlan,
+    keeps: roundKeeps(remapped.keeps, fps),
+    base,
+    baseKey,
+    rendered,
+    specs: specs.filter((spec) => spec.renderable),
+    format: finalPlan.format,
+    fps,
+    duration,
+    markers,
+    captionsFile,
+    cli,
+    paths,
+    state,
+    args,
+  });
+  nextState.key = stateKey;
+  writeJson(paths.statePath, nextState);
+
+  const timeline = timelineFromPlan(finalPlan, {
+    projectSlug: project.slug,
+    format: finalPlan.format,
+    keeps: roundKeeps(remapped.keeps, fps),
+    duration,
+    engine,
+  });
+  writeJson(path.join(project.dir, "edit", "timeline.json"), timeline);
+
+  writeBuildState(project.dir, {
+    key: stateKey,
+    engine: "filmcraft",
+    engineVersion: filmcraftVersion || null,
+    sample: Boolean(plan.sample),
+    media: { kind: base.kind, duration },
+    createdAt: now(),
+  });
+
+  const updated = {
+    ...project.config,
+    engine,
+    timeline: "filmcraft",
+    status: "preview",
+    updatedAt: now(),
+    pipeline: Array.from(new Set([...(project.config.pipeline || []), "plan", engine, "filmcraft"])),
+  };
+  writeJson(path.join(project.dir, "project.json"), updated);
+
+  const cachedCount = rendered.filter((item) => item.cached).length;
+  const renderedSpecs = specs.filter((spec) => spec.renderable);
+  const maxTrack = renderedSpecs.length ? Math.max(...renderedSpecs.map((spec) => spec.trackIndex)) : 1;
+  heading(`Built FilmCraft timeline — ${project.slug}`);
+  console.log(`  project:  ${paths.projectFile}`);
+  console.log(`  base:     ${base.kind} · ${duration.toFixed(2)}s`);
+  console.log(`  elements: ${rendered.length} (${cachedCount} cached) · ${specs.filter((spec) => !spec.renderable).length} skipped`);
+  console.log(`  tracks:   V1${maxTrack >= 2 ? `–V${maxTrack}` : ""} · A1`);
+  console.log(`  markers:  ${markers.length}`);
+  console.log("\nNext:");
+  console.log(`  node "${path.join(SKILL_ROOT, "scripts", "rooster.mjs")}" timeline ${project.slug} --open`);
+  console.log(`  node "${path.join(SKILL_ROOT, "scripts", "rooster.mjs")}" render ${project.slug} --draft`);
+  console.log(`  node "${path.join(SKILL_ROOT, "scripts", "rooster.mjs")}" build ${project.slug} --if-needed   # only changed elements`);
 }
 
 function buildCommand(args) {
@@ -4048,7 +5831,33 @@ function buildCommand(args) {
     fail(`Music file not found. ${missingMusic}\nFix music.src in edit/plan.json before building.`);
   }
 
-  let engine = typeof args.engine === "string" ? args.engine : project.config.engine || "auto";
+  const requestedTarget = typeof args.target === "string" ? args.target : null;
+  if (requestedTarget && !TARGET_IDS.includes(requestedTarget)) {
+    fail(`Unknown target "${requestedTarget}". Use auto, hyperframes, remotion, or filmcraft.`);
+  }
+  if (args.engine === "filmcraft" && !requestedTarget) args.target = "filmcraft";
+  const projectTimeline = project.config.timeline || "none";
+  const target =
+    requestedTarget && requestedTarget !== "auto"
+      ? requestedTarget
+      : projectTimeline === "filmcraft"
+        ? "filmcraft"
+        : null;
+
+  if (target && target !== "filmcraft" && args.engine && args.engine !== target) {
+    fail(`Conflicting build targets: --target ${target} and --engine ${args.engine}.`);
+  }
+
+  const sampleWanted = args.sample === true ? 3 : Number(args.sample);
+  const isSample = Number.isFinite(sampleWanted) && sampleWanted > 0;
+  const buildPlan = isSample ? buildSamplePlan(plan, sampleWanted, args) : plan;
+
+  if (target === "filmcraft") {
+    buildFilmCraft(project, buildPlan, args);
+    return;
+  }
+
+  let engine = target || (typeof args.engine === "string" ? args.engine : project.config.engine || "auto");
   if (engine === "auto") {
     const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
     engine = has3d ? "remotion" : "hyperframes";
@@ -4057,15 +5866,47 @@ function buildCommand(args) {
     fail(`Engine "${engine}" is not a creative build target. Use hyperframes or remotion (FFmpeg is a media utility).`);
   }
 
-  const sampleWanted = args.sample === true ? 3 : Number(args.sample);
-  const isSample = Number.isFinite(sampleWanted) && sampleWanted > 0;
-  const buildPlan = isSample ? samplePlan(plan, sampleWanted) : plan;
+  const engineDir = path.join(project.dir, "engine", engine);
+  const theme = themeFromProfile(resolveProfile(project.config.profile));
+  const resolvedEngine = engineVersion(engine, {
+    workspace: WORKSPACE,
+    cwd: engineDir,
+    home: ROOSTER_HOME,
+    projectDir: engineDir,
+  });
+  const stateKey = `${htmlKey({
+    plan: buildPlan,
+    theme,
+    version: VERSION,
+    engine,
+    engineVersion: resolvedEngine?.version || "unknown",
+  })}:${planMediaKey(project, buildPlan, planForBuild(buildPlan, args).keeps, args).mediaKey}`;
+
+  if (args["if-needed"]) {
+    const state = readBuildState(project.dir);
+    if (!args.force && state?.key === stateKey && exists(engineDir)) {
+      heading(`Build up to date — ${project.slug}`);
+      console.log(`  ${engineDir}`);
+      console.log("  Use --force or --rebuild-media to rebuild anyway.");
+      return;
+    }
+    args.force = true;
+  }
 
   const result = engine === "hyperframes" ? buildHyperFrames(project, buildPlan, args) : buildRemotion(project, buildPlan, args);
+  writeBuildState(project.dir, {
+    key: stateKey,
+    engine,
+    engineVersion: resolvedEngine?.version || null,
+    sample: isSample,
+    media: { kind: result.base.kind, duration: result.duration },
+    createdAt: now(),
+  });
 
   const updated = {
     ...project.config,
     engine,
+    timeline: "none",
     status: "preview",
     updatedAt: now(),
     pipeline: Array.from(new Set([...(project.config.pipeline || []), "plan", engine])),
@@ -4097,36 +5938,56 @@ function buildCommand(args) {
 // ingest
 // ---------------------------------------------------------------------------
 
-function probeMedia(file) {
-  const result = run("ffprobe", [
-    "-v", "error",
-    "-show_entries", "format=duration,size,bit_rate,format_name",
-    "-show_entries", "stream=codec_type,codec_name,width,height,r_frame_rate,channels,sample_rate",
-    "-of", "json",
-    file,
-  ]);
-  if (!result.ok) return { error: result.stderr || "ffprobe failed" };
-  try {
-    const data = JSON.parse(result.stdout);
-    const video = (data.streams || []).find((s) => s.codec_type === "video") || {};
-    const audio = (data.streams || []).find((s) => s.codec_type === "audio") || {};
-    const [num, den] = String(video.r_frame_rate || "0/1").split("/").map(Number);
-    return {
-      duration: Number(data.format?.duration) || null,
-      bytes: Number(data.format?.size) || null,
-      bitRate: Number(data.format?.bit_rate) || null,
-      format: data.format?.format_name || null,
-      width: video.width || null,
-      height: video.height || null,
-      fps: den ? Number((num / den).toFixed(3)) : null,
-      codec: video.codec_name || null,
-      audio: Boolean(audio.codec_name),
-      channels: audio.channels || null,
-      sampleRate: audio.sample_rate ? Number(audio.sample_rate) : null,
-    };
-  } catch (error) {
-    return { error: `Could not parse ffprobe output: ${error.message}` };
+let ffprobeVersionMemo;
+
+function ffprobeVersion() {
+  if (ffprobeVersionMemo === undefined) {
+    ffprobeVersionMemo = versionOf("ffprobe", ["-version"]);
   }
+  return ffprobeVersionMemo;
+}
+
+function probeMedia(file, options = {}) {
+  const resolved = path.resolve(String(file));
+  const key = probeKey(resolved, { ffprobeVersion: ffprobeVersion() });
+  if (!key) return { error: `Could not stat ${resolved}` };
+
+  if (!options.refresh) {
+    const hit = readCache(
+      "probes",
+      key,
+      ".json",
+      (candidate) => {
+        const data = readJson(candidate, null);
+        return Boolean(data && !data.error);
+      },
+      WORKSPACE
+    );
+    if (hit) {
+      const data = readJson(hit, null);
+      if (data) return data;
+    }
+  }
+
+  const result = run("ffprobe", buildProbeArgs(resolved));
+  if (!result.ok) return { error: result.stderr || "ffprobe failed" };
+
+  const data = parseProbeJson(result.stdout);
+  if (!data.error) {
+    try {
+      withCache({
+        kind: "probes",
+        key,
+        ext: ".json",
+        workspace: WORKSPACE,
+        produce: (tmp) => fs.writeFileSync(tmp, JSON.stringify(data) + "\n", "utf8"),
+        meta: { file: resolved, ffprobeVersion: ffprobeVersion() },
+      });
+    } catch {
+      // A probe cache failure must not break the command.
+    }
+  }
+  return data;
 }
 
 function addManifestAsset(projectDir, asset) {
@@ -4317,7 +6178,11 @@ function preview(args) {
   const engineDir = path.join(project.dir, "engine");
   const hyperframes = path.join(engineDir, "hyperframes");
   const remotion = path.join(engineDir, "remotion");
-  if (exists(hyperframes)) {
+  const filmcraft = filmCraftPaths(project);
+  if (exists(filmcraft.projectFile)) {
+    console.log(`\n  Timeline: ${filmcraft.projectFile}`);
+    console.log(`  Open:     node "<skill>/scripts/rooster.mjs" timeline ${project.slug} --open`);
+  } else if (exists(hyperframes)) {
     console.log(`\n  Native preview: cd "${hyperframes}" && npx hyperframes preview`);
   } else if (exists(remotion)) {
     console.log(`\n  Native preview: cd "${remotion}" && npx remotion studio`);
@@ -4331,7 +6196,7 @@ function preview(args) {
 function previewHtml(project, plan, timeline, validation, manifest) {
   const name = project.config.name || project.slug;
   const format = timeline?.format || project.config.format || plan?.format || {};
-  const duration = Number(plan?.duration || format.duration) || 0;
+  const duration = Number(timeline?.format?.duration || plan?.duration || format.duration) || 0;
   const fps = Number(format.fps) || 30;
   const previewDir = path.join(project.dir, "preview");
   const mediaCandidates = [
@@ -4640,11 +6505,13 @@ function fcpxmlText(project, plan, keeps, fps) {
   const formatId = "r1";
   const clipName = path.basename(String(plan.source || "source"));
   const mediaUrl = pathToFileURL(source).href;
+  let recordStart = 0;
   const clips = keeps
-    .map((keep, index) => {
-      const recordStart = keeps.slice(0, index).reduce((sum, item) => sum + (item.end - item.start), 0);
+    .map((keep) => {
       const duration = keep.end - keep.start;
-      return `            <asset-clip ref="${assetId}" offset="${fcpxmlTime(recordStart, fps)}" start="${fcpxmlTime(keep.start, fps)}" duration="${fcpxmlTime(duration, fps)}" name="${xmlEscape(clipName)}" />`;
+      const line = `            <asset-clip ref="${assetId}" offset="${fcpxmlTime(recordStart, fps)}" start="${fcpxmlTime(keep.start, fps)}" duration="${fcpxmlTime(duration, fps)}" name="${xmlEscape(clipName)}" />`;
+      recordStart += duration;
+      return line;
     })
     .join("\n");
 
@@ -4708,25 +6575,340 @@ node "<skill>/scripts/rooster.mjs" build ${project.slug} --engine hyperframes
 }
 
 
-function render(args) {
-  const slug = projectSlugFromArg(args);
-  const { dir, config } = findProject(slug);
-  if (!exists(dir) || !config) fail(`Project "${slug}" not found.`);
+function renderFilmCraftTimeline(project, plan, args, paths) {
+  const found = filmCraftCliOrFail();
+  const cli = found.cli;
+  const config = project.config || {};
 
-  const quality = args.final ? "final" : "draft";
-  heading(`Render ${quality} — ${slug}`);
-  const engineDir = path.join(dir, "engine", config.engine === "auto" ? "" : config.engine);
-  console.log("  Rendering is delegated to the engine. Use:");
-  if (exists(path.join(engineDir, "hyperframes")) || config.engine === "hyperframes") {
-    console.log(`    cd "${path.join(dir, "engine", "hyperframes")}" && npx hyperframes render --quality ${quality === "final" ? "delivery" : "draft"} -o ../../renders/${quality}.mp4`);
-  } else if (exists(path.join(engineDir, "remotion")) || config.engine === "remotion") {
-    console.log(`    cd "${path.join(dir, "engine", "remotion")}" && npx remotion render <composition-id> ../../renders/${quality}.mp4`);
-  } else if (exists(path.join(engineDir, "ffmpeg")) || config.engine === "ffmpeg") {
-    console.log(`    cd "${path.join(dir, "engine", "ffmpeg")}" && bash build.sh`);
-  } else {
-    console.log("  No engine project found. Build one first.");
+  const quality = String(args.quality || (args.final ? "final" : "draft")).toLowerCase();
+  if (!["draft", "final", "delivery", "high"].includes(quality)) {
+    fail(`Unknown --quality "${quality}". Use draft or final.`);
   }
-  console.log("\n  The automated render wrapper is planned for the next phase.");
+  const normalizedQuality = quality === "final" || quality === "delivery" || quality === "high" ? "final" : "draft";
+  const scale = normalizedQuality === "draft" ? 0.5 : 1;
+  const format = plan.format || config.format || {};
+  const fps = Number(format.fps) || 30;
+  const width = Number(format.width) || 1920;
+  const height = Number(format.height) || 1080;
+  const state = readJson(paths.statePath, null);
+  const duration = Number(state?.base?.duration) || Number(plan.duration) || 0;
+  const outWidth = Math.max(2, Math.round(width * scale));
+  const outHeight = Math.max(2, Math.round(height * scale));
+
+  const out = args.out
+    ? path.resolve(CWD, String(args.out))
+    : path.join(project.dir, "renders", `${normalizedQuality}.mp4`);
+  const metaPath = path.join(project.dir, "renders", `render-${normalizedQuality}.json`);
+  const stat = fs.statSync(paths.projectFile);
+  const version = filmCraftVersion(cli);
+  const key = renderKey({
+    htmlKey: hashKey([state?.key || "", stat.size, stat.mtimeMs, plan, normalizedQuality]),
+    quality: normalizedQuality,
+    fps,
+    width: outWidth,
+    height: outHeight,
+    engine: "filmcraft",
+    engineVersion: version || "unknown",
+  });
+
+  const existing = readRenderMeta(metaPath);
+  if (!args.force && existing?.key === key && exists(out)) {
+    heading(`Render ${normalizedQuality} — cache hit`);
+    console.log(`  ${out}`);
+    console.log(`  key: ${key}`);
+    if (args.json) console.log(JSON.stringify({ ...existing, cached: true }, null, 2));
+    return;
+  }
+
+  heading(`Render ${normalizedQuality} — ${project.slug}`);
+  console.log(`  engine: filmcraft ${version || ""}`.trim());
+  console.log(`  project: ${paths.projectFile}`);
+  console.log(`  out:    ${out}`);
+
+  const started = Date.now();
+  const exported = filmCraftExport(cli, paths.projectFile, out, {
+    format: "h264",
+    range: "entire",
+    scale,
+    quality: normalizedQuality === "draft" ? 65 : 90,
+    audio: true,
+    wait: true,
+  });
+  if (exported?.ok === false || exported?.error) {
+    fail(`FilmCraft export failed:\n${exported.error || exported.stderr || exported.stdout || "unknown error"}`);
+  }
+
+  const probe = probeMedia(out) || { error: "probe failed" };
+  const validation = validateRenderProbe(probe, {
+    width: outWidth,
+    height: outHeight,
+    fps,
+    duration: duration || undefined,
+    requireAudio: false,
+  });
+  for (const issue of validation.issues) console.warn(`  ! ${issue}`);
+
+  const bytes = exists(out) ? fs.statSync(out).size : 0;
+  const meta = {
+    schema: "rooster.render/v1",
+    key,
+    quality: normalizedQuality,
+    engine: "filmcraft",
+    engineVersion: version || null,
+    projectFile: paths.projectFile,
+    out,
+    bytes,
+    duration: Number(probe.duration) || null,
+    elapsedMs: Date.now() - started,
+    logPath: null,
+    probe,
+    validation,
+    createdAt: now(),
+  };
+  writeRenderMeta(metaPath, meta);
+
+  const status = normalizedQuality === "final" ? "done" : "preview";
+  writeJson(path.join(project.dir, "project.json"), {
+    ...config,
+    status,
+    updatedAt: now(),
+    pipeline: Array.from(new Set([...(config.pipeline || []), "filmcraft", "render"])),
+  });
+
+  heading(`Rendered ${normalizedQuality}`);
+  console.log(`  ${out}`);
+  console.log(`  ${formatBytes(bytes)} · ${Number(probe.duration)?.toFixed(2) || "?"}s · ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  console.log(`  ${metaPath}`);
+  if (args.json) console.log(JSON.stringify(meta, null, 2));
+}
+
+async function render(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(project.dir)) fail(`Project "${project.slug}" not found.`);
+
+  const config = project.config || {};
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, null) : null;
+  if (!plan) fail(`No edit/plan.json at ${planPath}. Run build first.`);
+
+  const filmcraftPaths = filmCraftPaths(project);
+  const wantsFilmCraft =
+    config.timeline === "filmcraft" || args.target === "filmcraft" || args.engine === "filmcraft";
+  if (wantsFilmCraft) {
+    if (!exists(filmcraftPaths.projectFile)) {
+      fail(
+        `FilmCraft timeline not found at ${filmcraftPaths.projectFile}.\n` +
+          `Run build ${project.slug} --target filmcraft first.`
+      );
+    }
+    renderFilmCraftTimeline(project, plan, args, filmcraftPaths);
+    return;
+  }
+
+  const hfDir = path.join(project.dir, "engine", "hyperframes");
+  const remotionDir = path.join(project.dir, "engine", "remotion");
+  let engine = typeof args.engine === "string" ? args.engine : config.engine || "auto";
+  if (engine === "auto") {
+    engine = exists(hfDir) ? "hyperframes" : exists(remotionDir) ? "remotion" : null;
+  }
+  if (!engine) {
+    fail("No engine project found. Run build <slug> first (or pass --engine hyperframes|remotion).");
+  }
+  if (!["hyperframes", "remotion"].includes(engine)) {
+    fail(`Engine "${engine}" cannot render here. Use hyperframes or remotion.`);
+  }
+
+  const engineDir = path.join(project.dir, "engine", engine);
+  if (!exists(engineDir)) {
+    fail(`Engine project not found at ${engineDir}. Run build ${project.slug} --engine ${engine}.`);
+  }
+
+  const quality = String(args.quality || (args.final ? "final" : "draft")).toLowerCase();
+  if (!["draft", "final", "delivery", "high"].includes(quality)) {
+    fail(`Unknown --quality "${quality}". Use draft or final.`);
+  }
+  const normalizedQuality = quality === "final" || quality === "delivery" || quality === "high" ? "final" : "draft";
+
+  const format = plan.format || config.format || {};
+  const fps = Number(format.fps) || 30;
+  const width = Number(format.width) || 1920;
+  const height = Number(format.height) || 1080;
+  const duration = Number(plan.duration) || 0;
+
+  const profile = resolveProfile(config.profile);
+  const theme = themeFromProfile(profile);
+  const info = engineVersion(engine, {
+    workspace: WORKSPACE,
+    cwd: engineDir,
+    home: ROOSTER_HOME,
+    projectDir: engineDir,
+  });
+  if (!info || !info.bin) {
+    if (engine === "hyperframes") {
+      fail("HyperFrames not found. Install it with `npm install --prefix <workspace>/cache/tools hyperframes` or use npx once.");
+    }
+    fail(`Remotion not found in ${engineDir}. Run npm install in that directory.`);
+  }
+
+  const sourceKey = htmlKey({
+    plan,
+    theme,
+    version: VERSION,
+    engine,
+    engineVersion: info.version || "unknown",
+  });
+  const buildState = readBuildState(project.dir);
+  const compositionKey = buildState?.key || sourceKey;
+  const key = renderKey({
+    htmlKey: compositionKey,
+    quality: normalizedQuality,
+    fps,
+    width,
+    height,
+    engine,
+    engineVersion: info.version || "unknown",
+  });
+  const expectedDuration =
+    Number(buildState?.media?.duration) > 0 ? Number(buildState.media.duration) : duration;
+
+  const out = args.out
+    ? path.resolve(CWD, String(args.out))
+    : path.join(project.dir, "renders", `${normalizedQuality}.mp4`);
+  const metaPath = path.join(project.dir, "renders", `render-${normalizedQuality}.json`);
+  const existing = readRenderMeta(metaPath);
+  if (!args.force && existing?.key === key && exists(out)) {
+    heading(`Render ${normalizedQuality} — cache hit`);
+    console.log(`  ${out}`);
+    console.log(`  key: ${key}`);
+    if (args.json) {
+      console.log(JSON.stringify({ ...existing, cached: true }, null, 2));
+    }
+    return;
+  }
+
+  const logPath = path.join(project.dir, "work", "logs", `render-${normalizedQuality}.log`);
+  const framesCacheDir =
+    typeof args["frames-cache-dir"] === "string"
+      ? path.resolve(CWD, args["frames-cache-dir"])
+      : path.join(cacheRoot(WORKSPACE), "hyperframes-frames");
+
+  let command;
+  let commandArgs;
+  if (engine === "hyperframes") {
+    const invocation = hyperFramesRenderArgs({
+      bin: info.bin,
+      out,
+      quality: normalizedQuality,
+      workers: args.workers !== undefined ? args.workers : "auto",
+      resume: Boolean(args.resume),
+      gpu: Boolean(args.gpu),
+      framesCacheDir,
+      videoFrameFormat: args["video-frame-format"],
+      start: args.start !== undefined ? Number(args.start) : undefined,
+      end: args.end !== undefined ? Number(args.end) : undefined,
+    });
+    command = invocation.command;
+    commandArgs = invocation.args;
+  } else {
+    const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
+    const invocation = remotionRenderArgs({
+      bin: info.bin,
+      entry: args.entry || "src/index.ts",
+      composition: args.composition || "RoosterVideo",
+      out,
+      quality: normalizedQuality,
+      concurrency: args.concurrency,
+      gl: args.gl || (has3d ? "angle" : undefined),
+      frames: args.frames,
+      log: args.log,
+    });
+    command = invocation.command;
+    commandArgs = invocation.args;
+  }
+
+  if (args.print) {
+    console.log([command, ...commandArgs].map((part) => (/\s/.test(String(part)) ? `"${part}"` : part)).join(" "));
+    return;
+  }
+
+  ensureDir(path.dirname(out));
+  ensureDir(path.dirname(logPath));
+
+  heading(`Render ${normalizedQuality} — ${project.slug}`);
+  console.log(`  engine: ${engine} ${info.version || ""}`.trim());
+  console.log(`  out:    ${out}`);
+  console.log(`  log:    ${logPath}`);
+
+  let lastPercent = -10;
+  const timeout =
+    Number(args.timeout) > 0
+      ? Number(args.timeout)
+      : Math.max(10 * 60 * 1000, (expectedDuration || 60) * 4 * 1000);
+
+  const result = await runRender({
+    command,
+    args: commandArgs,
+    cwd: engineDir,
+    logPath,
+    timeout,
+    onProgress: (line) => {
+      const progress = parseRenderProgress(line);
+      if (!progress) return;
+      if (progress.percent !== null && progress.percent >= lastPercent + 5) {
+        lastPercent = progress.percent;
+        console.log(`  ${progress.stage ? `${progress.stage} ` : ""}${progress.percent.toFixed(0)}%`);
+      }
+    },
+  });
+
+  if (!result.ok) {
+    const tail = (result.stderr || result.stdout || "").split(/\r?\n/).slice(-12).join("\n");
+    if (tail) console.error(tail);
+    fail(`Render failed${result.timedOut ? " (timeout)" : ""}:\n  ${result.error || "unknown error"}\n  log: ${logPath}`);
+  }
+
+  const probe = probeMedia(out) || { error: "probe failed" };
+  const validation = validateRenderProbe(probe, {
+    width,
+    height,
+    fps,
+    duration: expectedDuration || undefined,
+    requireAudio: false,
+  });
+  for (const issue of validation.issues) console.warn(`  ! ${issue}`);
+
+  const bytes = exists(out) ? fs.statSync(out).size : 0;
+  const meta = {
+    schema: "rooster.render/v1",
+    key,
+    quality: normalizedQuality,
+    engine,
+    engineVersion: info.version || null,
+    engineDir,
+    out,
+    bytes,
+    duration: Number(probe.duration) || null,
+    elapsedMs: result.elapsedMs,
+    logPath,
+    probe,
+    validation,
+    createdAt: now(),
+  };
+  writeRenderMeta(metaPath, meta);
+
+  const status = normalizedQuality === "final" ? "done" : "preview";
+  writeJson(path.join(project.dir, "project.json"), {
+    ...config,
+    status,
+    updatedAt: now(),
+    pipeline: Array.from(new Set([...(config.pipeline || []), "render"])),
+  });
+
+  heading(`Rendered ${normalizedQuality}`);
+  console.log(`  ${out}`);
+  console.log(`  ${formatBytes(bytes)} · ${Number(probe.duration)?.toFixed(2) || "?"}s · ${(result.elapsedMs / 1000).toFixed(1)}s`);
+  console.log(`  ${metaPath}`);
+  if (args.json) console.log(JSON.stringify(meta, null, 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -4741,7 +6923,7 @@ Usage:
   node scripts/rooster.mjs <command> [options]
 
 Commands:
-  doctor [--json]                 Detect tools, engines, TTS, and workspace
+  doctor [--json] [--deep]        Detect tools, engines, TTS, and workspace
   init [--dir <path>] [--force]   Create a workspace
   new <slug> [options]            Create a project inside a channel
   open <slug> [--project] [--print] Open assets/source or the project folder
@@ -4765,12 +6947,16 @@ Commands:
   color <slug> [options]          Apply plan.color filters to the source
   tts <slug> [options]            Build (and optionally generate) a voiceover
   multicam <slug> [options]       Normalize cameras, J/L cuts, and speed ramps
-  build <slug> [options]          Build a HyperFrames or Remotion project from the plan
+  build <slug> [options]          Build a HyperFrames, Remotion, or FilmCraft timeline from the plan
+  timeline <slug> [--open]        Show or open the FilmCraft project
+  filmcraft status|setup|open     Detect FilmCraft, connect MCP, open a timeline
   export <slug> [options]         Export cuts to EDL/FCPXML for DaVinci or Premiere
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
   preview <slug> [--open]         Write preview/index.html with player and timeline
-  render <slug> [--draft|--final] Show the render command for the engine
+  frames <slug> [options]         Extract QA frames and a contact sheet
+  cache info|path|clear|gc        Inspect or clean the workspace cache
+  render <slug> [--draft|--final] Render with the engine (cache-aware)
 
 Ingest options:
   --confirm-rights                Required for --url; confirms you have rights
@@ -4781,10 +6967,21 @@ Ingest options:
 
 Transcribe options:
   --input <path>                  Override the media file
-  --engine <id>                   auto | hyperframes | whisper | faster-whisper (default: auto)
-  --model <name>                  Whisper model (default: small)
-  --language <code>               Language (default: pt)
+  --engine <id>                   auto | parakeet | hyperframes | faster-whisper | whisper
+  --quality <id>                  fast (base/beam1) | balanced (small) | accurate (medium)
+  --model <name>                  Override the Whisper model
+  --language <code>               Language (default: project language)
+  --words <mode>                  auto | always | never (default: auto)
+  --beam-size <n>                 Whisper beam size (default: 1 on fast, 5 otherwise)
+  --device <id>                   auto | cpu | cuda (faster-whisper)
+  --compute-type <id>             auto | int8 | float16 | float32 | int8_float16
+  --refresh                       Ignore the transcript cache
+  --no-cache                      Do not read or write the cache
   --verbose                       Print every transcript segment
+
+Doctor options:
+  --deep                          Probe Parakeet and deep engine details
+  --refresh                       Ignore the capabilities cache
 
 Plan options:
   --check                         Validate only
@@ -4797,6 +6994,9 @@ Captions options:
   --max-lines <n>                 Max lines per cue (default: 2)
   --burn <video>                  Burn captions into this video
   --out-video <path>              Output for the burned video
+  --draft                         Fast burn preset (veryfast, CRF 23)
+  --preset <id>                   x264 preset (default: medium; draft: veryfast)
+  --crf <n>                       Burn quality (default: 18; draft: 23)
   --dry-run                       Print the burn command without running it
 
 Delivery options:
@@ -4819,6 +7019,21 @@ B-roll options:
   --max <n>                       Maximum suggested elements (default: 3)
   --limit <n>                     Maximum candidates printed (default: 10)
   --write                         Append suggestions to edit/plan.json
+  --refresh                       Rebuild the cached b-roll index
+
+Frames options:
+  --video <path>                  Video to sample (default: final/draft/plan.source)
+  --out <dir>                     Output directory (default: qa/frames)
+  --count <n>                     Number of frames (default: 12)
+  --cols <n>                      Contact-sheet columns (default: 4)
+  --scale <px>                    Frame width (default: 480)
+  --sheet-only                    Write only the contact sheet
+  --json                          Machine-readable output
+
+Cache options:
+  --max-size <size>               GC limit, e.g. 20GB (default: 20GB)
+  --max-age <age>                 GC max age, e.g. 30d or 12h
+  --json                          Machine-readable output
 
 Audio mix options:
   --input <path>                  Source (default: plan.source)
@@ -4837,6 +7052,8 @@ TTS options:
   --rate <value>                  Rate, e.g. 1.1x or +10%
   --language <code>               Language (default: project language)
   --generate                      Execute TTS after explicit approval
+  --concurrency <n>               Parallel provider calls (default: 3)
+  --refresh                       Regenerate every line, ignoring cache
 
 Multicam options:
   --file <path>                   JSON with cameras/cuts (default: plan.multicam)
@@ -4844,12 +7061,35 @@ Multicam options:
   --update-plan                   Point plan.source at the multicam render
 
 Build options:
-  --engine <id>                   hyperframes | remotion (default: auto)
-  --force                         Rebuild an existing engine project
+  --target <id>                   auto | hyperframes | remotion | filmcraft (default: project)
+  --engine <id>                   Renderer: hyperframes | remotion (default: auto)
+  --force                         Rebuild an existing engine project (archives FilmCraft)
+  --if-needed                     Skip if the build state is unchanged
+  --rebuild-media                 Re-run FFmpeg and element renders, ignoring the cache
+  --no-cache                      Do not read or write the cache
+  --encoder <id>                  libx264 | h264_amf | h264_nvenc | h264_qsv | ...
+  --crf <n>                       Quality (default: 20)
+  --preset <id>                   Encoder preset (default: veryfast)
   --no-cuts                       Ignore plan cuts and use the original source
   --allow-cut-only                Allow a plan with no visual elements
   --allow-no-music                Allow a plan with no music decision
-  --sample <n>                    Build only n representative elements (default: 3)
+  --sample <n>                    Build a short montage with n elements (default: 3)
+
+Render options:
+  --draft | --final               Quality tier (default: draft)
+  --quality <id>                  draft | final (alias for the flags above)
+  --out <path>                    Output (default: renders/<quality>.mp4)
+  --force                         Re-render even if the cache key matches
+  --workers <n|auto>              HyperFrames workers (default: auto)
+  --concurrency <n|auto>          Remotion concurrency
+  --gpu                           HyperFrames hardware encoding
+  --resume                        HyperFrames segmented resume
+  --frames <start-end>            Remotion frame range
+  --gl <id>                       Remotion renderer (angle, swangle, ...)
+  --frames-cache-dir <path>       Persistent HyperFrames frame cache
+  --print                         Print the command without running it
+  --json                          Machine-readable result
+  --timeout <ms>                  Render timeout
 
 Export options:
   --format <id>                   edl | fcpxml | both (default: both)
@@ -4865,6 +7105,7 @@ New project options:
   --channel <id>                  Channel (default: workspace default)
   --name <name>                   Display name
   --profile <id>                  Profile (default: channel profile)
+  --target <id>                   auto | hyperframes | remotion | filmcraft
   --engine <id>                   auto | hyperframes | remotion | ffmpeg
   --format <aspect>               16:9 | 9:16 | 1:1 | 4:5 (default: channel)
   --duration <seconds>            Target duration for this project (default: 60)
@@ -4900,6 +7141,7 @@ Environment:
   ROOSTER_HOME                    Global library (default: ~/.rooster)
   ROOSTER_PROFILE                 Default profile
   ROOSTER_ENGINE                  Default engine
+  ROOSTER_FILMCRAFT_CLI           Path to filmcraft-cli (optional)
   ROOSTER_TTS_PROVIDER            Default TTS provider
   ROOSTER_BROWSER                 available | unavailable | unknown
 
@@ -4916,6 +7158,9 @@ Examples:
   node scripts/rooster.mjs transcribe en-tech/video-x --model small --language en
   node scripts/rooster.mjs plan en-tech/video-x --show
   node scripts/rooster.mjs build en-tech/video-x --engine hyperframes
+  node scripts/rooster.mjs filmcraft status
+  node scripts/rooster.mjs build en-tech/video-x --target filmcraft
+  node scripts/rooster.mjs timeline en-tech/video-x --open
 `);
 }
 
@@ -4923,7 +7168,158 @@ Examples:
 // main
 // ---------------------------------------------------------------------------
 
-function main() {
+// ---------------------------------------------------------------------------
+// timeline / filmcraft
+// ---------------------------------------------------------------------------
+
+function timelineCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
+  const paths = filmCraftPaths(project);
+  if (!exists(paths.projectFile)) {
+    fail(
+      `No FilmCraft timeline at ${paths.projectFile}.\n` +
+        `Run build ${project.slug} --target filmcraft first.`
+    );
+  }
+  const state = readJson(paths.statePath, null);
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          project: project.slug,
+          projectFile: paths.projectFile,
+          sequence: state?.sequence ?? null,
+          elements: state?.elements ? Object.keys(state.elements).length : 0,
+          updatedAt: state?.updatedAt ?? null,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  heading(`Timeline — ${project.slug}`);
+  console.log(`  ${paths.projectFile}`);
+  if (state?.sequence !== undefined) console.log(`  sequence: ${state.sequence}`);
+  if (state?.elements) console.log(`  elements: ${Object.keys(state.elements).length}`);
+  console.log("\n  Open it in FilmCraft:");
+  console.log(`  node "<skill>/scripts/rooster.mjs" timeline ${project.slug} --open`);
+  if (args.open) openPath(paths.projectFile);
+}
+
+function filmcraftCommand(args) {
+  const sub = typeof args._[0] === "string" ? args._[0] : "status";
+  const client = args.client === "claude" ? "claude" : "opencode";
+
+  if (sub === "status") {
+    const status = filmCraftStatus({
+      cwd: CWD,
+      home: os.homedir(),
+      env: process.env,
+      platform: process.platform,
+    });
+    const prompt = filmCraftOnboardingPrompt(status);
+    if (args.json) {
+      console.log(JSON.stringify({ ...status, prompt }, null, 2));
+      return;
+    }
+    heading("FilmCraft");
+    console.log(`  installed: ${status.installed ? "yes" : "no"}`);
+    if (status.cli) console.log(`  cli:       ${status.cli}`);
+    if (status.app) console.log(`  app:       ${status.app}`);
+    if (status.version) console.log(`  version:   ${status.version}`);
+    console.log(`  source:    ${status.source || "unknown"}`);
+    const mcp = status.mcp || {};
+    console.log(
+      `  mcp:       ${
+        mcp.registered === true
+          ? `configured (${mcp.client || "client"}${mcp.path ? `: ${mcp.path}` : ""})`
+          : mcp.registered === false
+            ? "not configured"
+            : "no client config found"
+      }`
+    );
+    if (mcp.registered === true) console.log("             restart the agent after connecting MCP");
+    if (!status.installed) {
+      console.log("\n  Install: https://getartcraft.com/apps/filmcraft");
+      console.log("  Or continue with HyperFrames/Remotion: build <slug> --target hyperframes|remotion");
+    }
+    console.log(`\n  ${prompt.questionPt || prompt.question}`);
+    for (const option of prompt.optionsPt?.length ? prompt.optionsPt : prompt.options) {
+      console.log(`   - ${option}`);
+    }
+    return;
+  }
+
+  if (sub === "mcp-config" || sub === "setup") {
+    const found = findFilmCraft({
+      env: process.env,
+      platform: process.platform,
+      home: os.homedir(),
+      cwd: CWD,
+    });
+    if (!found.cli) {
+      fail(
+        "FilmCraft CLI not found. Install it from https://getartcraft.com/apps/filmcraft, " +
+          "or set ROOSTER_FILMCRAFT_CLI to the filmcraft-cli path."
+      );
+    }
+    const snippet = filmCraftMcpSnippet({ client, cli: found.cli });
+    if (args.json) {
+      console.log(
+        JSON.stringify(
+          {
+            client,
+            cli: found.cli,
+            snippet,
+            restartRequired: true,
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+    heading(`FilmCraft MCP — ${client}`);
+    console.log(`  Project config: ${client === "claude" ? path.join(CWD, ".mcp.json") : path.join(CWD, "opencode.json")}`);
+    if (path.resolve(CWD) === path.resolve(SKILL_ROOT)) {
+      console.log("  ! You are in the skill repository. Run this from your project/workspace to write its config.");
+    }
+    console.log(snippet);
+    if (sub === "setup" && args.write) {
+      const result = setupFilmCraftMcp({
+        client,
+        cli: found.cli,
+        write: true,
+        cwd: CWD,
+        home: os.homedir(),
+        env: process.env,
+        platform: process.platform,
+      });
+      if (!result.ok) fail(result.error || "Could not write the MCP config.");
+      console.log(
+        result.changed
+          ? `\n  Wrote: ${result.path}`
+          : `\n  Already configured: ${result.path}`
+      );
+      console.log("  Restart the agent now.");
+    } else if (sub === "setup") {
+      console.log("\n  Add the snippet to your client config, or run with --write.");
+    }
+    return;
+  }
+
+  if (sub === "open") {
+    timelineCommand({ ...args, _: args._.slice(1), open: true });
+    return;
+  }
+
+  fail(`Unknown filmcraft subcommand "${sub}". Use status, setup, mcp-config, or open.`);
+}
+
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._.shift();
 
@@ -4939,7 +7335,7 @@ function main() {
 
   switch (command) {
     case "doctor": {
-      const data = doctor();
+      const data = await doctor(args);
       if (args.json) console.log(JSON.stringify(data, null, 2));
       else printDoctor(data);
       return;
@@ -4976,7 +7372,7 @@ function main() {
       else checkRoot(args);
       return;
     case "transcribe":
-      transcribeCommand(args);
+      await transcribeCommand(args);
       return;
     case "plan":
       planCommand(args);
@@ -5006,13 +7402,19 @@ function main() {
       colorCommand(args);
       return;
     case "tts":
-      ttsCommand(args);
+      await ttsCommand(args);
       return;
     case "multicam":
-      multicamCommand(args);
+      await multicamCommand(args);
       return;
     case "build":
       buildCommand(args);
+      return;
+    case "timeline":
+      timelineCommand(args);
+      return;
+    case "filmcraft":
+      filmcraftCommand(args);
       return;
     case "export":
       exportCommand(args);
@@ -5023,16 +7425,20 @@ function main() {
     case "preview":
       preview(args);
       return;
+    case "cache":
+      cacheCommand(args);
+      return;
+    case "frames":
+      framesCommand(args);
+      return;
     case "render":
-      render(args);
+      await render(args);
       return;
     default:
       fail(`Unknown command "${command}". Run with --help for usage.`);
   }
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   fail(error?.stack || String(error));
-}
+});

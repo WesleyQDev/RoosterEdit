@@ -9,7 +9,8 @@
   "scripts": {
     "doctor": "node scripts/rooster.mjs doctor",
     "sync": "node scripts/sync-skill.mjs",
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs",
+    "test": "node --test scripts/test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"
