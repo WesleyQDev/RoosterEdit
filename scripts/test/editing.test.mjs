@@ -75,6 +75,28 @@ test("visualGaps measures output time, not source time", () => {
   );
 });
 
+test("elementSupport accepts parallax and marks the Remotion fallback", () => {
+  const plan = {
+    elements: [
+      {
+        id: "el-1",
+        type: "parallax",
+        template: "parallax",
+        start: 0,
+        end: 4,
+        text: "3,6 GB",
+        data: { layers: [{ text: "3,6 GB", depth: 0.9 }] },
+      },
+    ],
+  };
+  const hyper = elementSupport(plan, "hyperframes");
+  assert.deepEqual(hyper.unsupported, []);
+  assert.ok(hyper.supported.includes("parallax"));
+  const remotion = elementSupport(plan, "remotion");
+  assert.equal(remotion.unsupported.length, 0);
+  assert.ok(remotion.fallback.some((item) => item.template === "parallax"));
+});
+
 test("elementSupport flags zoom for FilmCraft but not for HyperFrames", () => {
   const plan = {
     elements: [
@@ -241,6 +263,17 @@ test("cutSmoothing punches uncovered silence jumps and skips covered ones", () =
   assert.equal(result.punchKeeps[2], false);
   assert.equal(result.uncovered.length, 1);
   assert.equal(result.uncovered[0].id, "cut-1");
+});
+
+test("layoutCollisionWarnings flags a full-frame scene over another element", () => {
+  const plan = {
+    elements: [
+      { id: "px", type: "parallax", start: 0, end: 5 },
+      { id: "term", type: "grafico", template: "terminal", start: 1, end: 2 },
+    ],
+  };
+  const warnings = layoutCollisionWarnings(plan);
+  assert.ok(warnings.some((warning) => /full-frame/.test(warning.message)));
 });
 
 test("layoutCollisionWarnings catches two cards in the same corner", () => {

@@ -13,7 +13,7 @@
     "test": "node --test scripts/test/*.test.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "files": [
     "SKILL.md",

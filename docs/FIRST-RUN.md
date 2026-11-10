@@ -145,7 +145,7 @@ O `project.json` registra `channel` e `overrides`, então dá para ver o que vei
 
 Antes de criar a timeline, o agente grava `edit/plan.json` e roda `plan <slug>`, que gera `edit/plan.md`, `edit/plan.html` e `qa/plan-review.md`. Se o harness permitir exibir arquivos, ele abre o HTML no preview; se não, mostra o resumo no chat. O pedido de aprovação vem com o marcador de etapa, por exemplo: **"Etapa 4/8 - Plano pronto. Posso seguir com a timeline?"**
 
-Por padrão o plano usa `editMode: "cleanup"`: mantém o vídeo inteiro e corta só silêncio, vícios de fala, falsos começos e retakes abandonados. O comando `silence <slug>` propõe esses cortes a partir da transcrição. Uma versão encurtada (`condensed`, com `keeps`) só acontece se você pedir explicitamente.
+Por padrão o plano usa `editMode: "cleanup"`: mantém o vídeo inteiro e corta só silêncio, vícios de fala, falsos começos e retakes abandonados. O comando `tighten <slug>` propõe esses cortes a partir do áudio, mantém um respiro natural de 0,4 s, deixa 100 ms antes da próxima fala e respeita `plan.protect`. O `silence <slug>` continua como fallback quando o áudio não pode ser analisado. Uma versão encurtada (`condensed`, com `keeps`) só acontece se você pedir explicitamente.
 
 As oito etapas são: ambiente, intake, assets/transcrição, plano, timeline, build, preview/QA, render/entrega. O agente mostra a etapa atual e pergunta antes de avançar; timeline e render final não são aprovados na mesma pergunta. Comece em `guided` nos primeiros vídeos e mude para `auto` quando o estilo estiver estável.
 

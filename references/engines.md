@@ -59,6 +59,7 @@ The build:
 - remaps element and chapter timings to the cut timeline;
 - copies the base media and element assets into the engine project;
 - writes a working composition for the chosen engine;
+- runs `npx hyperframes check --json` after a HyperFrames build and prints a one-line summary plus the first findings. `--strict` fails the build on an error; `--no-check` skips it;
 - writes `work/build-state.json` and updates `project.json` with the engine and `preview` status.
 
 Use `--force` to rebuild an existing engine project, `--if-needed` to skip when the build state is unchanged, `--rebuild-media` to force FFmpeg again, and `--no-cache` to bypass the cache. `--sample 3` now builds a short montage around the selected elements instead of the whole timeline.
@@ -123,6 +124,16 @@ npx hyperframes render --quality draft -o draft.mp4
 npx hyperframes render --quality delivery -o final.mp4
 ```
 
+The CLI wrapper keeps the engine directory and the project slug together:
+
+```bash
+node "<skill>/scripts/rooster.mjs" hyperframes catalog --query "glitch transition" --json
+node "<skill>/scripts/rooster.mjs" hyperframes add <name> --project <slug> --json
+node "<skill>/scripts/rooster.mjs" hyperframes snapshot <slug> --at 1,3 --review
+node "<skill>/scripts/rooster.mjs" hyperframes timeline <slug> --json
+node "<skill>/scripts/rooster.mjs" hyperframes history <slug> --since mine --who <you>
+```
+
 If the `hyperframes` skill is installed, load it and follow its contract. If not, use the commands above and the render contract below. Do not assume the CLI version; check `npx hyperframes --version` or `npx hyperframes doctor`.
 
 ### Project shape
@@ -134,6 +145,17 @@ engine/hyperframes/
 ├── assets/                 # media and fonts
 ├── frame.md                # optional design system
 └── out/                    # renders
+```
+
+### Generated project
+
+The adapter writes one `compositions/el-<n>.html` per visual element and mounts each one from `index.html` with `data-composition-src`. Every scene registers its own paused timeline, so the root only holds the base media, scene hosts, zooms, and transitions. The main text, kicker, and subtitle of chapter/title and parallax scenes are declared as composition variables and bound with `data-var-text`, so the Studio Variables panel can edit them. Text and media use the profile tokens (`--display`, `--body`, `--mono`, `--radius`, `--space`); sizes are expressed in short-side units (`--u`), so 9:16 and 1:1 keep readable type instead of the 16:9 pixel layout. `npx hyperframes check` runs after the build unless `--no-check` is passed.
+
+Before hand-building a named effect, search the registry:
+
+```bash
+npx hyperframes catalog --query "glitch transition" --json
+npx hyperframes add <name> --json
 ```
 
 ### Render contract
@@ -188,6 +210,8 @@ npx remotion render <composition-id> out/draft.mp4 --scale=0.5 --crf=28
 
 Check the installed Remotion version before using APIs that may have changed.
 
+Remotion is free for individuals and teams of up to three people. Larger companies need a paid license; confirm it before a commercial delivery. See `docs/COSTS.md`.
+
 ### Project shape
 
 ```text
@@ -203,6 +227,10 @@ engine/remotion/
 ├── remotion.config.ts
 └── out/
 ```
+
+### Generated project
+
+The adapter emits `Sequence` timing, `spring` entrances, `position`-aware placement, and template-aware cards for chapter, terminal, counter, diagram, and list. Transitions stay global overlays because their frame ranges are absolute. It does not emit `<Series>` or the wider Remotion ecosystem (`@remotion/transitions`, `@remotion/three`, `@remotion/lottie`, Player, Lambda). Use those when the project needs them, and keep the plan as the source of truth.
 
 ### Render contract
 

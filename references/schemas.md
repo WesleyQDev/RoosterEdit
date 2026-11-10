@@ -227,6 +227,9 @@ The `style/proof/index.html` file is the review artifact; `proof.json` records w
     { "id": "cut-001", "start": 12.4, "end": 18.2, "reason": "long-pause", "confidence": 0.9 }
   ],
   "keeps": [],
+  "protect": [
+    { "start": 88.0, "end": 91.5, "reason": "laugh" }
+  ],
   "elements": [
     { "id": "el-001", "type": "letreiro", "start": 3.0, "end": 6.0, "text": "A virada", "description": "Title card" }
   ],
@@ -241,15 +244,17 @@ Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
 
 `editMode` defaults to `cleanup`. A plan that uses `keeps` must set `editMode: "condensed"`; `plan --check` rejects the combination otherwise.
 
+`protect` is optional: source spans that no cut may touch (a laugh, a dramatic pause, an answer the user asked to keep). `tighten` subtracts them from every candidate cut and `plan --check` warns when a cut overlaps one.
+
 `music` is optional; when present, `src` is required and is relative to the project. `gainDb` defaults to `-18`.
 
 Element fields:
 
 - `type`: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`, `custom`.
-- `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `custom`. See `references/edit-plan.md`.
+- `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `parallax`, `custom`. See `references/edit-plan.md`.
 - `component`: on a `custom` element, the name of a reusable component folder (`style/components/<name>/`).
 - `html`, `css`, `animation`: inline custom markup, CSS, and GSAP statements. The animation receives `root`, `start`, `duration`, and `tl`.
-- `data`: template-specific data (`nodes`, `rows`, `items`, `name`, `role`, `strike`, `tag`, `command`, `note`).
+- `data`: template-specific data (`nodes`, `rows`, `items`, `name`, `role`, `strike`, `tag`, `command`, `note`; `layers` and `camera` on `parallax`).
 - `role`: `chapter` marks a section card and exempts its text from transcript grounding.
 - `position`: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `center`, `center-left`.
 - `layout` on `broll`: `pip` (default), `split`, or `full`.

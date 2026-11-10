@@ -13,11 +13,12 @@ Do not read the raw transcript, engine code, or render logs. The analysis alread
 
 ## Do
 
-1. Default to `editMode: "cleanup"`: keep the full story and express the edit as `cuts`, not `keeps`. Remove only silence longer than the threshold, filler words, false starts, and retakes the speaker abandons. Run `silence <slug> --json` as the baseline for silence cuts, then adjust only where the transcript is wrong.
+1. Default to `editMode: "cleanup"`: keep the full story and express the edit as `cuts`, not `keeps`. Remove only silence longer than the threshold, filler words, false starts, and retakes the speaker abandons. Run `tighten <slug> --json` as the baseline for silence cuts, then adjust only where the transcript is wrong. Add `plan.protect` for a laugh, a dramatic pause, or an answer the user asked to keep; review `possibleRetakes` and decide which take stays instead of cutting them automatically.
 2. Use `keeps` only when the user explicitly asked for a condensed or highlight video. Set `editMode: "condensed"` and confirm the target length before writing. Never turn a long recording into a short highlight without that approval.
 3. Map every scene to the script beat it serves. If a beat has no scene, add one or cut the beat.
 4. Add the creative layer: letreiros, graphics, lists, zooms, b-roll, lower thirds. A cut-only plan is not a finished video unless the user asked for a clean cut; if so, record that in `notes`.
-   - Use a structured `template` (`chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`) instead of a generic card. Put on-screen words in `text`; put production notes in `description`.
+   - Use a structured `template` (`chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `parallax`) instead of a generic card. Put on-screen words in `text`; put production notes in `description`.
+   - Prefer `parallax` for a still or flat graphic that needs depth: a product, a place, a concept. It is one full-frame element that sits under lower-thirds and captions, not a background for every beat. Build it from 2-4 layers with different `depth` values.
    - When the built-in templates are not enough, use `template: "custom"` with inline `html`/`css`/`animation`, or reference a reusable `component` from `style/components/<name>/`. Save a look that works as a component so the channel's visual language accumulates.
    - Aim for a visual beat every 20–40 seconds and never leave a stretch longer than 45 seconds without one.
    - Use `layout: "pip"` or `"split"` for b-roll over talking-head footage; `full` only when the b-roll is the subject.

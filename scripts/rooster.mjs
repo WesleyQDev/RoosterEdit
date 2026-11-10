@@ -64,6 +64,17 @@ import {
   remapTime,
   silenceCuts,
 } from "./features/editing.mjs";
+import {
+  DEFAULT_PAD,
+  TIGHTEN_STANDARD,
+  fillerCuts,
+  normalizeProtect,
+  parseProtect,
+  parseSilencedetect,
+  retakeReport,
+  tightenCuts,
+} from "./features/tighten.mjs";
+import { customCodeIssues } from "./features/custom.mjs";
 import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./features/feedback.mjs";
 import { getBrollIndex } from "./lib/broll-index.mjs";
 import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
@@ -114,6 +125,7 @@ const MOTION_TEMPLATES = [
   { id: "end-card", label: "End card", description: "Fechamento com CTA." },
   { id: "callout", label: "Callout", description: "Etiqueta curta de canto." },
   { id: "broll", label: "B-roll", description: "Clipe ou imagem de apoio em PIP, split ou full." },
+  { id: "parallax", label: "Parallax 2.5D", description: "Cena em camadas com câmera lenta; um plano com profundidade." },
   { id: "zoom", label: "Zoom", description: "Punch-in no rosto, produto ou detalhe." },
   { id: "transition", label: "Transição", description: "Wipe ou flash entre blocos." },
   { id: "custom", label: "Custom", description: "HTML/CSS/GSAP próprio ou componente reutilizável." },
@@ -1942,6 +1954,26 @@ function validatePlan(plan, dir, options = {}) {
     if (!cut.reason) errors.push(`plan: cut "${cut.id || "?"}" missing reason`);
   }
 
+  const protectSpans = Array.isArray(plan.protect) ? plan.protect : [];
+  for (const [index, span] of protectSpans.entries()) {
+    if (typeof span?.start !== "number" || typeof span?.end !== "number") {
+      errors.push(`plan: protect[${index}] needs numeric start/end`);
+    } else if (span.start >= span.end) {
+      errors.push(`plan: protect[${index}] has start >= end`);
+    }
+  }
+  for (const cut of plan.cuts || []) {
+    if (typeof cut.start !== "number" || typeof cut.end !== "number") continue;
+    for (const span of protectSpans) {
+      if (typeof span?.start !== "number" || typeof span?.end !== "number") continue;
+      if (cut.start < span.end - 0.05 && cut.end > span.start + 0.05) {
+        warnings.push(
+          `plan: cut "${cut.id || "?"}" overlaps protected span ${span.start.toFixed(1)}-${span.end.toFixed(1)}s`
+        );
+      }
+    }
+  }
+
   const editMode = String(plan.editMode || "cleanup").toLowerCase();
   const keepsCount = Array.isArray(plan.keeps) ? plan.keeps.length : 0;
   const cutsCount = Array.isArray(plan.cuts) ? plan.cuts.length : 0;
@@ -3257,6 +3289,63 @@ function motionsCommand(args) {
   }
 }
 
+function hyperFramesCliCommand(args) {
+  const sub = String(args._.shift() || "").toLowerCase();
+  const allowed = new Set(["catalog", "add", "snapshot", "timeline", "history", "check", "usage"]);
+  if (!allowed.has(sub)) {
+    fail(
+      `Unknown hyperframes subcommand "${sub || "?"}". Use catalog, add, snapshot, timeline, history, check, or usage.`
+    );
+  }
+  const needsProject = !["catalog", "usage"].includes(sub);
+  let cwd = CWD;
+  if (needsProject) {
+    const slug =
+      sub === "add"
+        ? typeof args.project === "string"
+          ? args.project
+          : null
+        : projectSlugFromArg(args);
+    if (!slug) fail(`hyperframes ${sub} needs --project <slug>.`);
+    const project = resolveProject(slug);
+    const dir = path.join(project.dir, "engine", "hyperframes");
+    if (!exists(dir)) {
+      fail(`No HyperFrames project at ${dir}. Run "build ${project.slug} --engine hyperframes" first.`);
+    }
+    cwd = dir;
+  }
+
+  const cli = [sub];
+  if (sub === "add") {
+    const name = args._[0];
+    if (!name) fail("hyperframes add needs a block or component name.");
+    cli.push(String(name));
+  }
+  for (const flag of ["query", "type", "tag", "at", "range", "composition", "since", "who"]) {
+    if (args[flag] !== undefined && args[flag] !== true) cli.push(`--${flag}`, String(args[flag]));
+  }
+  if (args.review) cli.push("--review");
+  if (args.force) cli.push("--force");
+  if (args.json) cli.push("--json");
+
+  const command = ["npx", "--yes", "hyperframes", ...cli].map(quoteCmd).join(" ");
+  const result = spawnSync(command, {
+    cwd,
+    encoding: "utf8",
+    timeout: 15 * 60 * 1000,
+    maxBuffer: 20 * 1024 * 1024,
+    windowsHide: true,
+    shell: true,
+  });
+  const ok = !result.error && result.status === 0;
+  if (!ok) {
+    fail(
+      `hyperframes ${sub} failed:\n${(result.stderr || result.stdout || String(result.error || "unknown error")).slice(0, 2000)}`
+    );
+  }
+  console.log((result.stdout || result.stderr || "").trim());
+}
+
 function silenceCommand(args) {
   const project = resolveProject(projectSlugFromArg(args));
   const transcriptPath = path.join(project.dir, "edit", "transcript.json");
@@ -3272,7 +3361,7 @@ function silenceCommand(args) {
   );
   const sourceDuration = Number(plan?.duration) || Number(project.config.format?.duration) || lastSegment;
   const min = typeof args.min === "string" ? Number(args.min) : 0.8;
-  const pad = typeof args.pad === "string" ? Number(args.pad) : 0.08;
+  const pad = typeof args.pad === "string" ? Number(args.pad) : DEFAULT_PAD;
   if (!Number.isFinite(min) || min <= 0) fail("--min must be a positive number of seconds.");
   if (!Number.isFinite(pad) || pad < 0) fail("--pad must be a non-negative number of seconds.");
 
@@ -3321,6 +3410,182 @@ function silenceCommand(args) {
     console.log(`\n  Wrote ${planPath} (editMode: cleanup).`);
   } else {
     console.log(`\n  Dry run. Add them with: silence ${project.slug} --write`);
+  }
+}
+
+function tightenCommand(args) {
+  const project = resolveProject(projectSlugFromArg(args));
+  const transcriptPath = path.join(project.dir, "edit", "transcript.json");
+  if (!exists(transcriptPath)) {
+    fail(`No transcript at ${transcriptPath}. Run "transcribe ${project.slug}" first.`);
+  }
+  const transcript = readJson(transcriptPath, null);
+  if (!transcript) fail(`Invalid transcript JSON at ${transcriptPath}.`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, null) : null;
+  if (args.input === true) fail("--input needs a file path.");
+  const source =
+    args.input && args.input !== true
+      ? path.resolve(String(args.input))
+      : plan?.source
+        ? path.resolve(project.dir, String(plan.source))
+        : null;
+  if (!source) fail('No source media. Set plan.source or pass --input <path>.');
+  if (!exists(source)) fail(`Source not found: ${source}`);
+
+  const readNumber = (value, fallback, flag, min = 0.01) => {
+    if (value === undefined || value === true) return fallback;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < min) fail(`${flag} must be a number >= ${min}.`);
+    return number;
+  };
+  const options = {
+    minPause: readNumber(args.min, TIGHTEN_STANDARD.minPause, "--min"),
+    keepBeat: readNumber(args.beat, TIGHTEN_STANDARD.keepBeat, "--beat", 0),
+    leadIn: readNumber(args.lead, TIGHTEN_STANDARD.leadIn, "--lead", 0),
+    minCut: readNumber(args["min-cut"], TIGHTEN_STANDARD.minCut, "--min-cut"),
+    noiseDb: readNumber(args.noise, TIGHTEN_STANDARD.noiseDb, "--noise", -80),
+    audioMinSilence: readNumber(args["audio-min"], TIGHTEN_STANDARD.audioMinSilence, "--audio-min"),
+  };
+
+  const probe = probeMedia(source);
+  if (probe?.error) fail(`Could not probe ${source}: ${probe.error}`);
+  const duration = Number(probe?.duration) || Number(plan?.duration) || 0;
+  if (!duration) fail("Could not determine the source duration. Set plan.duration or pass a valid --input.");
+
+  let silences = [];
+  let usedAudio = false;
+  let audioNote = null;
+  if (!args["no-audio"]) {
+    if (!versionOf("ffmpeg", ["-version"])) {
+      audioNote = "FFmpeg not found; used transcript gaps instead of audio.";
+    } else {
+      const timeout = Math.max(120000, Math.min(20 * 60 * 1000, Math.round(duration * 1500)));
+      const detect = run(
+        "ffmpeg",
+        [
+          "-hide_banner",
+          "-nostdin",
+          "-nostats",
+          "-i",
+          source,
+          "-map",
+          "0:a:0?",
+          "-af",
+          `silencedetect=noise=${options.noiseDb}dB:d=${options.audioMinSilence}`,
+          "-f",
+          "null",
+          "-",
+        ],
+        { timeout }
+      );
+      silences = parseSilencedetect(detect.stderr, { duration });
+      usedAudio = silences.length > 0;
+      if (!usedAudio) {
+        audioNote = detect.ok
+          ? "No audio silence found; used transcript gaps instead."
+          : "Audio analysis failed; used transcript gaps instead.";
+      }
+    }
+  } else {
+    audioNote = "Audio analysis skipped (--no-audio); used transcript gaps.";
+  }
+
+  const protect = normalizeProtect([
+    ...(Array.isArray(plan?.protect) ? plan.protect : []),
+    ...parseProtect(args.protect),
+  ]);
+  const pauses = tightenCuts({
+    transcript,
+    silences,
+    duration,
+    protect,
+    options,
+    fallback: !usedAudio,
+  });
+  const fillers = args.fillers ? fillerCuts(transcript, { protect }) : [];
+  const retakes = retakeReport(transcript);
+  const retakeCuts = args.retakes ? retakes.cueCuts : [];
+  const cuts = mergeSilenceCuts(pauses, [...fillers, ...retakeCuts]);
+  const removed = cuts.reduce((sum, cut) => sum + (cut.end - cut.start), 0);
+  const finalDuration = Math.max(0, duration - removed);
+  const ratio = duration > 0 ? removed / duration : 0;
+  const byReason = cuts.reduce((map, cut) => {
+    map[cut.reason] = (map[cut.reason] || 0) + 1;
+    return map;
+  }, {});
+  let written = false;
+
+  if (args.write) {
+    if (!plan) fail(`No plan at ${planPath}. Create the plan first.`);
+    if (Array.isArray(plan.keeps) && plan.keeps.length && !args.force) {
+      fail("Plan uses keeps (a highlight edit). Use --force to replace it with silence cuts, or edit the plan deliberately.");
+    }
+    const existing = Array.isArray(plan.cuts) ? plan.cuts : [];
+    plan.cuts = args.replace ? cuts : mergeSilenceCuts(existing, cuts);
+    if (protect.length) plan.protect = protect;
+    if (args.force || args.replace) plan.keeps = [];
+    plan.editMode = "cleanup";
+    writeJson(planPath, plan);
+    written = true;
+  }
+
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          project: project.slug,
+          source,
+          duration,
+          usedAudio,
+          audioNote,
+          standard: options,
+          protect,
+          cuts: written ? plan.cuts : cuts,
+          removed,
+          finalDuration,
+          removedRatio: Number(ratio.toFixed(3)),
+          byReason,
+          possibleRetakes: retakes.possibleRetakes,
+          written,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  heading("Tighten");
+  console.log(
+    `  source ${formatClock(duration)} | pause >= ${options.minPause}s | beat ${options.keepBeat}s | lead ${options.leadIn}s`
+  );
+  console.log(
+    `  ${cuts.length} cut(s) | ${formatClock(removed)} removed (${Math.round(ratio * 100)}%) | final ~${formatClock(finalDuration)}`
+  );
+  if (audioNote) console.log(`  ! ${audioNote}`);
+  if (protect.length) console.log(`  protected ${protect.length} span(s)`);
+  const shown = cuts.slice(0, 20);
+  const precise = (seconds) => {
+    const total = Math.max(0, Number(seconds) || 0);
+    const minutes = Math.floor(total / 60);
+    return `${String(minutes).padStart(2, "0")}:${(total - minutes * 60).toFixed(1).padStart(4, "0")}`;
+  };
+  for (const cut of shown) {
+    console.log(`  ${precise(cut.start)}-${precise(cut.end)}  ${cut.note || cut.reason}`);
+  }
+  if (cuts.length > shown.length) console.log(`  . ${cuts.length - shown.length} more`);
+  if (retakes.possibleRetakes.length) {
+    console.log(`  ? ${retakes.possibleRetakes.length} possible retake(s); review the plan before cutting them`);
+  }
+  if (ratio > 0.25) {
+    console.log(`  ! ${Math.round(ratio * 100)}% removed; confirm this is cleanup, not a highlight edit`);
+  }
+  if (written) {
+    console.log(`\n  Wrote ${planPath} (editMode: cleanup).`);
+  } else {
+    console.log(`\n  Dry run. Add them with: tighten ${project.slug} --write`);
   }
 }
 
@@ -4195,9 +4460,23 @@ function resolveProfile(profileId, channelId) {
   return null;
 }
 
+function resolvePlanFormat(project, plan) {
+  const config = project.config.format || {};
+  const base = resolveFormat(config.aspect || "16:9", config.width, config.height);
+  const value = plan.format && typeof plan.format === "object" ? plan.format : {};
+  return {
+    ...base,
+    ...value,
+    width: Number(value.width) || base.width,
+    height: Number(value.height) || base.height,
+    fps: Number(value.fps) || Number(config.fps) || base.fps,
+  };
+}
+
 function themeFromProfile(profile) {
   const colors = profile?.tokens?.colors || {};
   const typography = profile?.tokens?.typography || {};
+  const motion = profile?.tokens?.motion || {};
   return {
     bg: colors.bg || "#0b0f19",
     fg: colors.fg || "#f8fafc",
@@ -4206,6 +4485,15 @@ function themeFromProfile(profile) {
     accent2: colors.accent2 || "#f472b6",
     display: typography.display?.family || "Inter",
     body: typography.body?.family || "Inter",
+    mono: typography.mono?.family || "JetBrains Mono",
+    radius: Number(profile?.tokens?.radius) || 12,
+    spacing: Number(profile?.tokens?.spacing) || 8,
+    motion: {
+      ease: motion.ease || "power3.out",
+      fast: Number(motion.fast) || 0.18,
+      normal: Number(motion.normal) || 0.35,
+      slow: Number(motion.slow) || 0.6,
+    },
   };
 }
 
@@ -4433,16 +4721,37 @@ function removeDirRobust(dir) {
   }
 }
 
+function copyPlanAsset(projectDir, assetsDir, prefix, asset) {
+  if (!asset || typeof asset !== "string") return asset;
+  if (/^(https?:|data:)/i.test(asset)) return asset;
+  const source = path.resolve(projectDir, asset);
+  if (!exists(source)) return asset;
+  const target = path.join(assetsDir, path.basename(source));
+  linkOrCopy(source, target);
+  return `${prefix}${path.basename(source)}`;
+}
+
 function copyElementAssets(projectDir, plan, assetsDir, prefix) {
   for (const element of plan.elements || []) {
     const asset = element.src || element.asset;
-    if (!asset) continue;
-    const source = path.resolve(projectDir, asset);
-    if (!exists(source)) continue;
-    const target = path.join(assetsDir, path.basename(source));
-    linkOrCopy(source, target);
-    element.src = `${prefix}${path.basename(source)}`;
-    delete element.asset;
+    if (asset) {
+      element.src = copyPlanAsset(projectDir, assetsDir, prefix, asset);
+      delete element.asset;
+    }
+    if (element.data && typeof element.data === "object") {
+      for (const key of ["bg", "background", "subject"]) {
+        if (element.data[key]) {
+          element.data[key] = copyPlanAsset(projectDir, assetsDir, prefix, element.data[key]);
+        }
+      }
+      if (Array.isArray(element.data.layers)) {
+        for (const layer of element.data.layers) {
+          if (layer && layer.src) {
+            layer.src = copyPlanAsset(projectDir, assetsDir, prefix, layer.src);
+          }
+        }
+      }
+    }
   }
 }
 
@@ -4562,6 +4871,9 @@ function customElementIssues(plan, project) {
     if (!element.animation && !element.component) {
       warnings.push(`plan: ${label} has no animation; it will be static`);
     }
+    const code = customCodeIssues(element);
+    for (const error of code.errors) errors.push(`plan: ${error}`);
+    for (const warning of code.warnings) warnings.push(`plan: ${warning}`);
   }
   return { errors, warnings };
 }
@@ -4939,6 +5251,120 @@ function htmlEscape(value) {
     .replace(/"/g, "&quot;");
 }
 
+function parallaxNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function parallaxColor(value, fallback) {
+  const text = String(value || "").trim();
+  if (!text) return fallback;
+  if (/^#[0-9a-f]{3,8}$/i.test(text)) return text;
+  if (/^(rgb|hsl)a?\(/i.test(text)) return text;
+  if (/^var\(--[a-z0-9-]+\)$/i.test(text)) return text;
+  return fallback;
+}
+
+/**
+ * One layer of a parallax scene. `depth` 0 is far (almost static), 1 is near
+ * (moves the most). Media layers are oversized so the camera never reveals an
+ * edge; text and shape layers keep their declared box.
+ *
+ * @param {object} layer
+ * @param {number} index
+ * @returns {string}
+ */
+function parallaxLayerHtml(layer, index, theme = {}) {
+  if (!layer || typeof layer !== "object") return "";
+  const media = Boolean(layer.src);
+  const x = parallaxNumber(layer.x, media ? -6 : 0);
+  const y = parallaxNumber(layer.y, media ? -6 : 0);
+  const width = parallaxNumber(layer.w ?? layer.width, media ? 112 : 100);
+  const height = parallaxNumber(layer.h ?? layer.height, media ? 112 : 100);
+  const depth = Math.max(0, Math.min(1, parallaxNumber(layer.depth, 0.2 + index * 0.2)));
+  const style = [
+    `left:${x}%`,
+    `top:${y}%`,
+    `width:${width}%`,
+    `height:${height}%`,
+    `z-index:${index + 1}`,
+  ];
+  if (layer.opacity !== undefined) {
+    style.push(`opacity:${Math.max(0, Math.min(1, parallaxNumber(layer.opacity, 1)))}`);
+  }
+  if (layer.radius !== undefined) style.push(`border-radius:${Math.max(0, parallaxNumber(layer.radius, 0))}px`);
+  if (layer.blur) style.push(`filter:blur(${Math.max(0, parallaxNumber(layer.blur, 0))}px)`);
+  if (layer.rotate) style.push(`transform:rotate(${parallaxNumber(layer.rotate, 0)}deg)`);
+  const depthAttr = `data-depth="${depth.toFixed(2)}"`;
+  if (layer.src) {
+    const tag = /\.(mp4|webm|mov|m4v)$/i.test(String(layer.src)) ? "video" : "img";
+    const attrs = tag === "video" ? " muted playsinline" : ' alt=""';
+    return `<${tag} class="px-layer px-media" ${depthAttr} style="${style.join(";")}" src="${htmlEscape(layer.src)}"${attrs}></${tag}>`;
+  }
+  if (layer.text) {
+    const size = parallaxNumber(layer.size, 96);
+    const color = parallaxColor(layer.color, theme.fg || "#f8fafc");
+    const textStyle = [...style, `font-size:${size}px`, `color:${color}`];
+    return `<div class="px-layer px-text" ${depthAttr} style="${textStyle.join(";")}">${htmlEscape(layer.text)}</div>`;
+  }
+  const color = parallaxColor(layer.shape?.color || layer.color, "var(--accent)");
+  const shapeStyle = [...style, `background:${color}`].join(";");
+  return `<div class="px-layer px-shape" ${depthAttr} style="${shapeStyle}"></div>`;
+}
+
+function parallaxLayers(element, data) {
+  const provided = Array.isArray(data.layers)
+    ? data.layers.filter((layer) => layer && typeof layer === "object").slice(0, 6)
+    : [];
+  if (provided.length) return provided;
+  const layers = [];
+  const source = data.bg || data.background || element.src || null;
+  if (source) layers.push({ src: source, depth: 0.15 });
+  if (data.subject) layers.push({ src: data.subject, depth: 0.65, x: 10, y: 6, w: 48, h: 64 });
+  if (!layers.length) {
+    layers.push({
+      shape: { color: "var(--accent)" },
+      depth: 0.15,
+      x: 4,
+      y: 8,
+      w: 44,
+      h: 44,
+      opacity: 0.14,
+      radius: 48,
+    });
+    layers.push({
+      shape: { color: "var(--accent2)" },
+      depth: 0.5,
+      x: 58,
+      y: 46,
+      w: 30,
+      h: 30,
+      opacity: 0.12,
+      radius: 999,
+    });
+  }
+  return layers;
+}
+
+function renderParallaxElement(common, element, data, text, theme = {}, index = 0) {
+  const layers = parallaxLayers(element, data)
+    .map((layer, index) => parallaxLayerHtml(layer, index, theme))
+    .filter(Boolean);
+  const copy = [
+    data.kicker ? `<div class="fx-kicker" data-var-text="el-${index}-kicker">${htmlEscape(data.kicker)}</div>` : "",
+    text ? `<div class="fx-title" data-var-text="el-${index}-text">${htmlEscape(text)}</div>` : "",
+    data.sub || element.sub
+      ? `<div class="fx-sub" data-var-text="el-${index}-sub">${htmlEscape(data.sub || element.sub)}</div>`
+      : "",
+  ].join("");
+  return `<div ${common("parallax-scene")} data-layout-allow-overlap>
+      <div class="px-stage">
+        <div class="px-camera" data-layout-allow-overflow>${layers.join("")}</div>
+      </div>
+      ${copy ? `<div class="px-copy">${copy}</div>` : ""}
+    </div>`;
+}
+
 function renderHyperFramesElement(element, index, theme = {}) {
   const start = Number(element.start) || 0;
   const end = Number(element.end) || start + 1;
@@ -4949,7 +5375,7 @@ function renderHyperFramesElement(element, index, theme = {}) {
   const template = elementTemplate(element, text, data);
   const position = elementPosition(element, template, data);
   const common = (classes) =>
-    `id="el-${index}" class="clip fx fx-${template} pos-${position}${classes ? ` ${classes}` : ""}" data-start="${start.toFixed(3)}" data-duration="${(end - start).toFixed(3)}" data-track-index="${index + 2}" data-template="${template}"`;
+    `id="el-${index}" class="clip fx fx-${template} pos-${position}${classes ? ` ${classes}` : ""}" data-start="${start.toFixed(3)}" data-duration="${(end - start).toFixed(3)}" data-track-index="${index + 2}" data-track-kind="graphics" data-template="${template}"`;
   const panel = (classes, content) =>
     `<div ${common("")}><div class="fx-panel ${classes}">${content}</div></div>`;
 
@@ -4961,7 +5387,11 @@ function renderHyperFramesElement(element, index, theme = {}) {
         : "pip";
       const tag = /\.(png|jpe?g|webp|gif|svg)$/i.test(asset) ? "img" : "video";
       const attrs = tag === "video" ? " muted playsinline" : ' alt=""';
-      return `<${tag} ${common(`broll layout-${layout}`)} src="${htmlEscape(asset)}"${attrs}></${tag}>`;
+      const mediaStart =
+        tag === "video" && Number(element.sourceTime) > 0
+          ? ` data-media-start="${Number(element.sourceTime).toFixed(3)}"`
+          : "";
+      return `<${tag} ${common(`broll layout-${layout}`)} src="${htmlEscape(asset)}"${attrs}${mediaStart}></${tag}>`;
     }
     return panel(
       "callout-panel",
@@ -4971,6 +5401,10 @@ function renderHyperFramesElement(element, index, theme = {}) {
 
   if (element.chart) {
     return `<div ${common("chart")} data-layout-allow-overlap data-layout-ignore>${renderChartSvg(element, theme)}</div>`;
+  }
+
+  if (template === "parallax") {
+    return renderParallaxElement(common, element, data, text, theme, index);
   }
 
   if (template === "custom") {
@@ -4983,9 +5417,9 @@ function renderHyperFramesElement(element, index, theme = {}) {
     const kicker = data.kicker || (template === "chapter" ? "capítulo" : "");
     return panel(
       "title-panel",
-      `<div class="fx-kicker">${htmlEscape(kicker)}</div>
-      <div class="fx-title">${htmlEscape(title)}</div>
-      ${sub ? `<div class="fx-sub">${htmlEscape(sub)}</div>` : ""}
+      `<div class="fx-kicker"${data.kicker ? ` data-var-text="el-${index}-kicker"` : ""}>${htmlEscape(kicker)}</div>
+      <div class="fx-title" data-var-text="el-${index}-text">${htmlEscape(title)}</div>
+      ${sub ? `<div class="fx-sub" data-var-text="el-${index}-sub">${htmlEscape(sub)}</div>` : ""}
       <div class="fx-rule"></div>`
     );
   }
@@ -5106,6 +5540,8 @@ function elementTemplate(element, text, data) {
       return "end-card";
     case "broll":
       return "broll";
+    case "parallax":
+      return "parallax";
     case "grafico":
       if (element.chart) return "chart";
       if (data.rows || /\d/.test(text) && /→|->|a\s|para/i.test(text)) return "counter";
@@ -5126,6 +5562,8 @@ function elementPosition(element, template, data) {
   switch (template) {
     case "chapter":
     case "title":
+      return "center-left";
+    case "parallax":
       return "center-left";
     case "counter":
       return "top-right";
@@ -5255,6 +5693,18 @@ function templateTween(element, index, start, duration) {
       }
       break;
     }
+    case "parallax": {
+      const camera = element.data && typeof element.data === "object" ? element.data.camera || {} : {};
+      const panX = Number.isFinite(Number(camera.x)) ? Number(camera.x) : 28;
+      const panY = Number.isFinite(Number(camera.y)) ? Number(camera.y) : -16;
+      const zoom = Number.isFinite(Number(camera.zoom)) ? Number(camera.zoom) : 0.06;
+      lines.push(
+        `tl.fromTo("${id} .px-camera", { scale: 1 }, { scale: ${(1 + zoom).toFixed(3)}, duration: ${total.toFixed(3)}, ease: "sine.inOut" }, ${at(0)});`,
+        `tl.fromTo("${id} .px-layer", { x: (i, t) => -Number(t.dataset.depth || 0) * ${panX}, y: (i, t) => -Number(t.dataset.depth || 0) * ${panY} }, { x: (i, t) => Number(t.dataset.depth || 0) * ${panX}, y: (i, t) => Number(t.dataset.depth || 0) * ${panY}, duration: ${total.toFixed(3)}, ease: "sine.inOut" }, ${at(0)});`,
+        `tl.fromTo("${id} .px-copy > *", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, stagger: 0.12, ease: "power3.out" }, ${at(0.12)});`
+      );
+      break;
+    }
     case "chapter":
     case "title":
       lines.push(
@@ -5300,7 +5750,7 @@ function templateTween(element, index, start, duration) {
     case "terminal":
       lines.push(
         `tl.fromTo("${id} .terminal-panel", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, ${at(0.05)});`,
-        `tl.to("${id} .cursor", { opacity: 0, repeat: -1, yoyo: true, duration: 0.45, ease: "none" }, ${at(0.3)});`
+        `tl.to("${id} .cursor", { opacity: 0, repeat: Math.max(1, Math.floor(${total.toFixed(3)} / 0.9)), yoyo: true, duration: 0.45, ease: "none" }, ${at(0.3)});`
       );
       break;
     case "end-card":
@@ -5323,8 +5773,17 @@ function templateTween(element, index, start, duration) {
  * carry an alpha channel (MOV ProRes 4444 / WebM). Element clips use it;
  * the full-film composition keeps the themed background.
  */
-function hyperFramesCss(theme, width, height, { transparent = false, extraCss = "" } = {}) {
-  return `
+function scaleDesignPx(css, width, height) {
+  return String(css)
+    .replaceAll(`${width}px`, "__HF_W__")
+    .replaceAll(`${height}px`, "__HF_H__")
+    .replace(/(\d+(?:\.\d+)?)px/g, (_, number) => `calc(${number} * var(--u))`)
+    .replaceAll("__HF_W__", `${width}px`)
+    .replaceAll("__HF_H__", `${height}px`);
+}
+
+function hyperFramesCss(theme, width, height, { transparent = false, extraCss = "", scene = false } = {}) {
+  const css = `
       :root {
         --bg: ${theme.bg};
         --fg: ${theme.fg};
@@ -5333,20 +5792,31 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
         --accent2: ${theme.accent2};
         --display: "${theme.display}", sans-serif;
         --body: "${theme.body}", sans-serif;
+        --mono: "${theme.mono || "JetBrains Mono"}", monospace;
+        --radius: ${Number(theme.radius) || 12}px;
+        --space: ${Number(theme.spacing) || 8}px;
+        --u: 0.0925926vmin;
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body {
+      ${scene
+        ? `html, body {
+        width: 100%; height: 100%; margin: 0;
+        overflow: hidden; background: transparent;
+        font-family: var(--body);
+      }`
+        : `html, body {
         width: ${width}px; height: ${height}px;
         overflow: hidden;
         background: ${transparent ? "transparent" : "var(--bg)"};
         font-family: var(--body);
-      }
+      }`}
       #root {
-        position: relative;
+        ${scene ? "position: absolute; inset: 0;" : "position: relative;"}
         width: 100%; height: 100%;
         overflow: hidden;
+        color: var(--fg);
         background: ${
-          transparent
+          scene || transparent
             ? "transparent"
             : `radial-gradient(circle at 70% 30%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%),
           radial-gradient(circle at 20% 80%, color-mix(in srgb, var(--accent2) 12%, transparent), transparent 40%),
@@ -5365,7 +5835,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
         border-radius: 8px;
       }
       .title {
-        position: absolute; left: 96px; top: 240px; width: 1600px;
+        position: absolute; left: 96px; top: 240px; width: 84%;
         color: var(--fg); font-family: var(--display);
         font-size: 104px; font-weight: 700; line-height: 1.02;
         letter-spacing: -0.04em;
@@ -5382,7 +5852,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
         letter-spacing: 0;
       }
       .caption {
-        position: absolute; left: 96px; bottom: 170px; width: 1500px;
+        position: absolute; left: 96px; bottom: 170px; width: 84%;
         color: var(--fg); font-family: var(--display);
         font-size: 68px; font-weight: 700; line-height: 1.08;
         letter-spacing: -0.03em;
@@ -5393,7 +5863,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
         margin-bottom: 18px;
         color: var(--accent);
         font-family: var(--body);
-        font-size: 22px;
+        font-size: 28px;
         font-weight: 700;
         line-height: 1.2;
         letter-spacing: 0.16em;
@@ -5405,7 +5875,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
         background: rgba(0, 0, 0, 0.28); color: var(--fg);
       }
       .card-kicker {
-        display: block; color: var(--accent); font-size: 22px;
+        display: block; color: var(--accent); font-size: 28px;
         letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 18px;
       }
       .card strong { display: block; font-family: var(--display); font-size: 56px; line-height: 1.05; }
@@ -5440,7 +5910,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .fx.chart { inset: 80px; }
       .fx-panel { position: absolute; color: var(--fg); }
       .fx-kicker {
-        font-family: var(--body); font-size: 22px; font-weight: 700;
+        font-family: var(--body); font-size: 28px; font-weight: 700;
         letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
         margin-bottom: 16px;
       }
@@ -5466,12 +5936,12 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .pos-bottom-right > .fx-panel { right: 96px; bottom: 120px; }
       .pos-bottom-center > .fx-panel { left: 50%; bottom: 140px; transform: translateX(-50%); }
 
-      .title-panel { max-width: 1400px; padding-left: 32px; border-left: 8px solid var(--accent); }
+      .title-panel { max-width: 84%; padding-left: 32px; border-left: 8px solid var(--accent); }
       .title-panel .fx-title { font-size: 110px; }
       .title-panel .fx-rule { margin-left: 0; }
 
       .diagram-panel {
-        width: 1020px; padding: 30px 34px;
+        width: min(1020px, 86%); padding: 30px 34px;
         border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
         border-radius: 24px; background: rgba(10, 6, 18, 0.88);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
@@ -5502,29 +5972,29 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       }
 
       .counter-panel {
-        min-width: 560px; padding: 26px 30px;
+        min-width: min(560px, 78%); padding: 26px 30px;
         border-left: 6px solid var(--accent); border-radius: 0 20px 20px 0;
         background: rgba(10, 6, 18, 0.88);
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
       }
       .counter-row { display: flex; align-items: baseline; gap: 18px; margin-top: 10px; }
       .counter-value {
-        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-family: var(--mono);
         font-size: 64px; font-weight: 700; line-height: 1; color: var(--fg);
       }
       .counter-value.accent { color: var(--accent2); }
-      .counter-row span { color: var(--muted); font-size: 26px; font-weight: 600; }
+      .counter-row span { color: var(--muted); font-size: 28px; font-weight: 600; }
 
       .list-panel {
-        min-width: 540px; padding: 26px 30px;
+        min-width: min(540px, 78%); padding: 26px 30px;
         border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
         border-radius: 20px; background: rgba(10, 6, 18, 0.88);
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
       }
       .list-row { display: flex; align-items: baseline; gap: 18px; margin-top: 14px; }
       .list-index {
-        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-        color: var(--accent); font-size: 26px; font-weight: 700;
+        font-family: var(--mono);
+        color: var(--accent); font-size: 28px; font-weight: 700;
       }
       .list-row span:last-child { font-family: var(--display); font-size: 42px; font-weight: 800; }
 
@@ -5539,10 +6009,10 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
         transform-origin: top center;
       }
       .lt-copy strong { display: block; font-family: var(--display); font-size: 38px; font-weight: 800; }
-      .lt-copy span { display: block; margin-top: 6px; color: var(--muted); font-size: 27px; font-weight: 500; }
+      .lt-copy span { display: block; margin-top: 6px; color: var(--muted); font-size: 28px; font-weight: 500; }
 
       .emphasis-panel {
-        max-width: 1500px; padding: 20px 34px;
+        max-width: 90%; padding: 20px 34px;
         border-left: 6px solid var(--accent); border-radius: 0 18px 18px 0;
         background: rgba(10, 6, 18, 0.86);
         box-shadow: 0 18px 55px rgba(0, 0, 0, 0.4);
@@ -5560,7 +6030,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .emphasis-tag {
         display: inline-block; margin-top: 14px; padding: 8px 16px;
         border-radius: 999px; background: var(--accent); color: var(--bg);
-        font-family: var(--display); font-size: 24px; font-weight: 800;
+        font-family: var(--display); font-size: 28px; font-weight: 800;
         letter-spacing: 0.02em;
       }
 
@@ -5572,14 +6042,14 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       }
       .callout-icon { color: var(--accent2); font-size: 28px; }
       .callout-panel strong { display: block; font-family: var(--display); font-size: 36px; font-weight: 800; }
-      .callout-panel span:last-child { display: block; margin-top: 4px; color: var(--muted); font-size: 24px; }
+      .callout-panel span:last-child { display: block; margin-top: 4px; color: var(--muted); font-size: 28px; }
 
       .terminal-panel {
-        min-width: 640px; padding: 20px 26px 22px;
+        min-width: min(640px, 86%); padding: 20px 26px 22px;
         border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
         border-radius: 18px; background: rgba(7, 5, 13, 0.94);
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-family: var(--mono);
       }
       .terminal-bar { display: flex; gap: 8px; margin-bottom: 16px; }
       .terminal-bar span { width: 12px; height: 12px; border-radius: 999px; background: var(--accent); opacity: 0.55; }
@@ -5587,7 +6057,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .terminal-line .prompt { color: var(--accent2); }
       .terminal-line .cmd { color: var(--fg); }
       .cursor { width: 14px; height: 42px; background: var(--accent); display: inline-block; }
-      .terminal-note { margin-top: 12px; color: var(--muted); font-size: 26px; }
+      .terminal-note { margin-top: 12px; color: var(--muted); font-size: 28px; }
 
       .end-card-panel {
         inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -5607,7 +6077,7 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .end-card-panel .fx-rule { margin-left: auto; margin-right: auto; width: 220px; }
 
       .broll.layout-pip {
-        inset: 96px 72px auto auto; width: 720px; height: 405px;
+        inset: 96px 72px auto auto; width: min(720px, 62%); aspect-ratio: 16 / 9;
         border-radius: 24px; border: 2px solid var(--accent);
         box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); z-index: 3;
       }
@@ -5617,8 +6087,109 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       }
       .broll.layout-full { inset: 0; width: 100%; height: 100%; z-index: 3; }
 
+      /* Parallax 2.5D: a scene built in layers, moved by a slow camera. */
+      .fx-parallax { z-index: 1; overflow: hidden; }
+      .fx-parallax .px-stage {
+        position: absolute; inset: 0; overflow: hidden; background: var(--bg);
+      }
+      .fx-parallax .px-camera {
+        position: absolute; inset: 0; transform-origin: 55% 50%;
+      }
+      .fx-parallax .px-layer {
+        position: absolute; transform-origin: center; will-change: transform;
+      }
+      .fx-parallax .px-media { display: block; object-fit: cover; }
+      .fx-parallax .px-shape { box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35); }
+      .fx-parallax .px-text {
+        display: flex; align-items: center; color: var(--fg);
+        font-family: var(--display); font-weight: 800;
+        line-height: 1; letter-spacing: -0.04em;
+      }
+      .fx-parallax .px-vignette { display: none; }
+      .fx-parallax .px-copy { position: absolute; z-index: 4; max-width: min(980px, 86%); color: var(--fg); }
+      .fx-parallax.pos-center-left .px-copy { left: 96px; top: 50%; transform: translateY(-50%); }
+      .fx-parallax.pos-center .px-copy {
+        left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;
+      }
+      .fx-parallax.pos-top-left .px-copy { left: 96px; top: 96px; }
+      .fx-parallax.pos-top-right .px-copy { right: 96px; top: 96px; text-align: right; }
+      .fx-parallax.pos-bottom-left .px-copy { left: 96px; bottom: 120px; }
+      .fx-parallax.pos-bottom-right .px-copy { right: 96px; bottom: 120px; text-align: right; }
+      .fx-parallax .px-copy .fx-title { font-size: 96px; }
+
       ${extraCss}
   `;
+  return scaleDesignPx(css, width, height);
+}
+
+function renderHyperFramesScene(element, index, theme, width, height) {
+  const start = Number(element.start) || 0;
+  const end = Math.max(start + 0.1, Number(element.end) || start + 1);
+  const duration = end - start;
+  const sceneVariables = [];
+  const text = elementText(element);
+  if (text) {
+    sceneVariables.push({
+      id: `el-${index}-text`,
+      type: "string",
+      label: element.id || `Element ${index + 1}`,
+      default: String(text),
+      maxLength: 200,
+    });
+  }
+  if (element.data?.kicker) {
+    sceneVariables.push({
+      id: `el-${index}-kicker`,
+      type: "string",
+      label: `${element.id || `Element ${index + 1}`} kicker`,
+      default: String(element.data.kicker),
+      maxLength: 80,
+    });
+  }
+  const sub = element.data?.sub || element.sub;
+  if (sub) {
+    sceneVariables.push({
+      id: `el-${index}-sub`,
+      type: "string",
+      label: `${element.id || `Element ${index + 1}`} sub`,
+      default: String(sub),
+      maxLength: 200,
+    });
+  }
+  const variablesAttr = sceneVariables.length
+    ? ` data-composition-variables='${htmlEscape(JSON.stringify(sceneVariables)).replace(/'/g, "&#39;")}'`
+    : "";
+  const local = { ...element, start: 0, end: duration };
+  const html = renderHyperFramesElement(local, index, theme);
+  if (!html) return null;
+  const tween = templateTween(local, index, 0, duration);
+  const css = hyperFramesCss(theme, width, height, {
+    scene: true,
+    extraCss: customElementCss({ elements: [element] }),
+  });
+  return `<!doctype html>
+<html${variablesAttr}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=${width}, height=${height}" />
+  </head>
+  <body>
+    <template>
+      <style>${css}</style>
+      <div id="root" data-composition-id="el-${index}" data-width="${width}" data-height="${height}">
+        ${html}
+      </div>
+      <script>
+        const tl = gsap.timeline({ paused: true });
+        tl.seek(0);
+        ${tween}
+        window.__timelines["el-${index}"] = tl;
+        tl.seek(0);
+      </script>
+    </template>
+  </body>
+</html>
+`;
 }
 
 function renderHyperFramesHtml(project, plan, theme, base) {
@@ -5655,17 +6226,64 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   const panelHtml = panel ? '<div id="panel"></div>' : "";
 
   const elements = (plan.elements || [])
-    .map((element, index) => ({ element, index, html: renderHyperFramesElement(element, index, theme) }))
-    .filter((entry) => entry.html);
+    .map((element, index) => ({ element, index }))
+    .filter(({ element }) => !["zoom", "transition"].includes(String(element.type || "")));
 
-  const elementHtml = elements.map((entry) => entry.html).join("\n      ");
-  const timeline = elements
+  const variables = [];
+  for (const { element, index } of elements) {
+    const text = elementText(element);
+    if (text) {
+      variables.push({
+        id: `el-${index}-text`,
+        type: "string",
+        label: element.id || `Element ${index + 1}`,
+        default: String(text),
+        maxLength: 200,
+      });
+    }
+    if (element.data?.kicker) {
+      variables.push({
+        id: `el-${index}-kicker`,
+        type: "string",
+        label: `${element.id || `Element ${index + 1}`} kicker`,
+        default: String(element.data.kicker),
+        maxLength: 80,
+      });
+    }
+    const sub = element.data?.sub || element.sub;
+    if (sub) {
+      variables.push({
+        id: `el-${index}-sub`,
+        type: "string",
+        label: `${element.id || `Element ${index + 1}`} sub`,
+        default: String(sub),
+        maxLength: 200,
+      });
+    }
+  }
+  const variablesAttr = variables.length
+    ? ` data-composition-variables='${htmlEscape(JSON.stringify(variables)).replace(/'/g, "&#39;")}'`
+    : "";
+
+  const scenes = elements
+    .map(({ element, index }) => ({
+      file: `compositions/el-${index}.html`,
+      content: renderHyperFramesScene(element, index, theme, width, height),
+    }))
+    .filter((scene) => scene.content);
+
+  const elementHtml = elements
     .map(({ element, index }) => {
       const start = Number(element.start) || 0;
-      const end = Math.max(start + 0.5, Number(element.end) || start + 1);
-      return templateTween(element, index, start, end - start);
+      const end = Math.max(start + 0.1, Number(element.end) || start + 1);
+      const allowOverlap =
+        String(element.type || "") === "parallax" || String(element.template || "") === "parallax"
+          ? " data-layout-allow-overlap"
+          : "";
+      return `<div id="el-${index}" class="clip scene-host" data-composition-id="el-${index}" data-composition-src="compositions/el-${index}.html" data-start="${start.toFixed(3)}" data-duration="${(end - start).toFixed(3)}" data-track-index="${index + 2}" data-track-kind="graphics" data-width="${width}" data-height="${height}"${allowOverlap}></div>`;
     })
     .join("\n      ");
+  const timeline = "";
 
   const transitions = (plan.elements || [])
     .filter((element) => element.type === "transition")
@@ -5679,7 +6297,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
         .map((element) => hyperframesZoom(element, "#base"));
   const motionHtml = transitions.map((transition) => transition.html).join("\n      ");
   const motionCss = [...transitions.map((transition) => transition.css), ...zooms.map((zoom) => zoom.css)].join("\n");
-  const customCss = customElementCss(plan);
+  const customCss = "";
   const motionTween = [...zooms.map((zoom) => zoom.tween), ...transitions.map((transition) => transition.tween)].join("\n");
 
   let baseHtml = "";
@@ -5696,8 +6314,8 @@ function renderHyperFramesHtml(project, plan, theme, base) {
       ? `tl.to("#base", { scale: 1.035, duration: ${duration.toFixed(3)}, ease: "none" }, 0);`
       : "";
 
-  return `<!doctype html>
-<html lang="${lang}">
+  const html = `<!doctype html>
+<html lang="${lang}"${variablesAttr}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=${width}, height=${height}" />
@@ -5733,6 +6351,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
   </body>
 </html>
 `;
+  return { html, scenes };
 }
 
 function renderHyperFramesElementDocument(project, plan, element, spec, theme) {
@@ -5791,6 +6410,58 @@ function renderHyperFramesElementDocument(project, plan, element, spec, theme) {
 `;
 }
 
+function runHyperFramesCheck(engineDir, args = {}) {
+  if (args["no-check"]) return null;
+  if (!versionOf("npx", ["--version"])) {
+    console.warn("  ! npx not found; skipped the HyperFrames check.");
+    return null;
+  }
+  const result = run("npx", ["--yes", "hyperframes", "check", "--json"], {
+    cwd: engineDir,
+    timeout: 15 * 60 * 1000,
+  });
+  let report = null;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    const text = String(result.stdout || "");
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        report = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        report = null;
+      }
+    }
+  }
+  if (!report) {
+    console.warn(
+      `  ! HyperFrames check did not return JSON${result.ok ? "" : `: ${(result.stderr || result.stdout || "unknown error").slice(0, 300)}`}`
+    );
+    return null;
+  }
+  const sections = ["lint", "layout", "contrast", "craft", "audio", "runtime", "motion"];
+  const errors = sections.reduce((sum, key) => sum + (Number(report[key]?.errorCount) || 0), 0);
+  const warnings = sections.reduce((sum, key) => sum + (Number(report[key]?.warningCount) || 0), 0);
+  const findings = [];
+  for (const key of sections) {
+    for (const finding of report[key]?.findings || []) {
+      findings.push({ section: key, ...finding });
+    }
+  }
+  console.log(`  check:   ${errors} error(s), ${warnings} warning(s)`);
+  for (const finding of findings.slice(0, 5)) {
+    console.log(
+      `    ${finding.severity || "info"} ${finding.code || ""} - ${String(finding.message || "").slice(0, 140)}`
+    );
+  }
+  if (errors && args.strict) {
+    fail(`HyperFrames check failed with ${errors} error(s). Fix them or build without --strict.`);
+  }
+  return report;
+}
+
 function buildHyperFrames(project, plan, args) {
   const engineDir = path.join(project.dir, "engine", "hyperframes");
   if (exists(engineDir) && !args.force) {
@@ -5814,12 +6485,22 @@ function buildHyperFrames(project, plan, args) {
 
   const remapped = planForBuild(plan, args);
   const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args);
-  const finalPlan = { ...remapped.plan, duration: base.duration };
+  const finalPlan = {
+    ...remapped.plan,
+    duration: base.duration,
+    format: { ...resolvePlanFormat(project, plan), duration: base.duration },
+  };
   resolveCustomElements(project, finalPlan);
   copyElementAssets(project.dir, finalPlan, path.join(engineDir, "assets"), "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
 
-  writeText(path.join(engineDir, "index.html"), renderHyperFramesHtml(project, finalPlan, theme, base));
+  const rendered = renderHyperFramesHtml(project, finalPlan, theme, base);
+  writeText(path.join(engineDir, "index.html"), rendered.html);
+  for (const scene of rendered.scenes) {
+    const scenePath = path.join(engineDir, scene.file);
+    ensureDir(path.dirname(scenePath));
+    writeText(scenePath, scene.content);
+  }
   writeJson(path.join(engineDir, "hyperframes.json"), {
     $schema: "https://hyperframes.heygen.com/schema/hyperframes.json",
     registry: "https://raw.githubusercontent.com/heygen-com/hyperframes/main/registry",
@@ -5855,8 +6536,10 @@ function renderRemotionTsx(project, plan, theme, base) {
   Audio,
   Img,
   OffthreadVideo,
+  Sequence,
   interpolate,
   staticFile,
+  spring,
   useCurrentFrame,
 } from "remotion";
 import { plan, theme, base } from "./data/plan";
@@ -5891,24 +6574,49 @@ const textOf = (element: any) => {
   return parts.length ? parts.join(" · ") : element.description ?? "";
 };
 
-const Element = ({ element, frame }: { element: any; frame: number }) => {
-  const opacity = fade(frame, element.start, element.end);
+const Element = ({ element }: { element: any }) => {
+  const frame = useCurrentFrame();
+  const duration = Math.max(0.1, (element.end ?? 0) - (element.start ?? 0));
+  const opacity = fade(frame, 0, duration);
   if (opacity <= 0.001) return null;
   const text = textOf(element);
   const common = { position: "absolute" as const, opacity };
+  const pos =
+    element.position === "top-left" ? { left: "5%", top: "5%" } :
+    element.position === "top-right" ? { right: "5%", top: "5%" } :
+    element.position === "bottom-left" ? { left: "5%", bottom: "8%" } :
+    element.position === "bottom-right" ? { right: "5%", bottom: "8%" } :
+    element.position === "center" ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)" } :
+    element.position === "bottom-center" ? { left: "50%", bottom: "8%", transform: "translateX(-50%)" } :
+    { left: "5%", top: "50%", transform: "translateY(-50%)" };
+  const enter = spring({
+    frame: Math.max(0, frame),
+    fps,
+    config: { damping: 200, mass: 0.6, stiffness: 120 },
+  });
+  const rise = interpolate(enter, [0, 1], [24, 0]);
+  const textStyle = { ...common, ...pos, marginTop: rise };
 
   switch (element.type) {
-    case "letreiro":
-      return <div style={{ ...common, left: 96, top: 240, width: 1600, fontSize: 104, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em" }}>{text}</div>;
+    case "letreiro": {
+      const chapter = element.role === "chapter" || element.template === "chapter";
+      return (
+        <div style={{ ...textStyle, width: "84%", fontSize: chapter ? 104 : 96, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em", paddingLeft: chapter ? 32 : 0, borderLeft: chapter ? \`8px solid \${theme.accent}\` : undefined }}>
+          {chapter && element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 28, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
+          {text}
+          {chapter && element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
+        </div>
+      );
+    }
     case "caption-emphasis":
-      return <div style={{ ...common, left: 96, bottom: 170, width: 1500, fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
+      return <div style={{ ...textStyle, width: "84%", fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
     case "grafico":
     case "lista":
       if (element.chartSvg) {
         return <div style={{ ...common, left: 80, right: 80, top: 80, bottom: 80 }} dangerouslySetInnerHTML={{ __html: element.chartSvg }} />;
       }
       return (
-        <div style={{ ...common, left: 200, right: 200, top: 300, padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
+        <div style={{ ...textStyle, width: "80%", padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
           <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 18 }}>{element.type}</div>
           <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.05 }}>{text}</div>
           <div style={{ marginTop: 18, color: theme.muted, fontSize: 28, lineHeight: 1.35 }}>{element.description ?? ""}</div>
@@ -5930,7 +6638,7 @@ const Element = ({ element, frame }: { element: any; frame: number }) => {
     }
     case "lower-third":
       return (
-        <div style={{ ...common, left: 96, bottom: 96, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
+        <div style={{ ...textStyle, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
           <div style={{ fontSize: 34, fontWeight: 700 }}>{text}</div>
           <div style={{ marginTop: 6, color: theme.muted, fontSize: 24 }}>{element.description ?? ""}</div>
         </div>
@@ -5942,6 +6650,25 @@ const Element = ({ element, frame }: { element: any; frame: number }) => {
           <div style={{ marginTop: 24, color: theme.muted, fontSize: 28 }}>{element.description ?? ""}</div>
         </div>
       );
+    case "parallax": {
+      const layers = Array.isArray(element.data?.layers) ? element.data.layers : [];
+      const src =
+        layers.find((layer: any) => layer && layer.src)?.src ||
+        element.src ||
+        element.data?.bg ||
+        element.data?.subject;
+      return (
+        <AbsoluteFill style={{ ...common, overflow: "hidden" }}>
+          {src ? <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.8), transparent 70%)" }} />
+          <div style={{ position: "absolute", left: 96, top: "50%", transform: "translateY(-50%)", maxWidth: 1000 }}>
+            {element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
+            <div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1 }}>{text}</div>
+            {element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
+          </div>
+        </AbsoluteFill>
+      );
+    }
     case "broll": {
       const src = element.src || element.asset;
       if (!src) return null;
@@ -5956,6 +6683,20 @@ const Element = ({ element, frame }: { element: any; frame: number }) => {
     default:
       return null;
   }
+};
+
+const Transition = ({ element }: { element: any }) => {
+  const frame = useCurrentFrame();
+  if (!element.motion) return null;
+  const value = interpolate(frame, element.motion.inputRange, element.motion.outputRange, {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  if (element.motion.slide) {
+    const transform = element.motion.property === "xPercent" ? \`translateX(\${value}%)\` : \`translateY(\${value}%)\`;
+    return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, transform }} />;
+  }
+  return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, opacity: value }} />;
 };
 
 export const RoosterVideo = () => {
@@ -5981,8 +6722,19 @@ export const RoosterVideo = () => {
         {base.kind === "video" ? <OffthreadVideo src={staticFile(base.path)} muted={!base.hasAudio} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
         {base.kind === "audio" ? <Audio src={staticFile(base.path)} /> : null}
       </div>
-      {(plan.elements ?? []).map((element: any, index: number) => (
-        <Element key={index} element={element} frame={frame} />
+      {(plan.elements ?? []).map((element: any, index: number) => {
+        if (element.type === "transition") return null;
+        const from = Math.max(0, Math.round((element.start ?? 0) * fps));
+        const duration = Math.max(1, Math.round(((element.end ?? 0) - (element.start ?? 0)) * fps));
+        if (duration <= 0) return null;
+        return (
+          <Sequence key={index} from={from} durationInFrames={duration}>
+            <Element element={element} />
+          </Sequence>
+        );
+      })}
+      {(plan.elements ?? []).filter((element: any) => element.type === "transition").map((element: any, index: number) => (
+        <Transition key={\`transition-\${index}\`} element={element} />
       ))}
     </AbsoluteFill>
   );
@@ -6014,13 +6766,23 @@ function buildRemotion(project, plan, args) {
   const assetsDir = path.join(engineDir, "public", "assets");
   const remapped = planForBuild(plan, args);
   const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args, "public/assets");
-  const finalPlan = { ...remapped.plan, duration: base.duration };
+  const finalPlan = {
+    ...remapped.plan,
+    duration: base.duration,
+    format: { ...resolvePlanFormat(project, plan), duration: base.duration },
+  };
   copyElementAssets(project.dir, finalPlan, assetsDir, "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
   const fps = Number(finalPlan.format?.fps || project.config.format?.fps) || 30;
   const enrichedPlan = {
     ...finalPlan,
-    elements: (finalPlan.elements || []).map((element) => {
+    elements: (finalPlan.elements || [])
+      .map((element) => {
+        const data = element.data && typeof element.data === "object" ? element.data : {};
+        const template = elementTemplate(element, elementText(element) || "", data);
+        return element.position ? element : { ...element, position: elementPosition(element, template, data) };
+      })
+      .map((element) => {
       if (element.type === "grafico" && element.chart) {
         return { ...element, chartSvg: renderChartSvg(element, theme) };
       }
@@ -6240,8 +7002,10 @@ function renderRemotionElementTsx() {
   AbsoluteFill,
   Img,
   OffthreadVideo,
+  Sequence,
   interpolate,
   staticFile,
+  spring,
   useCurrentFrame,
 } from "remotion";
 
@@ -6280,20 +7044,43 @@ export const RoosterElement = ({ entry }: { entry: any }) => {
   if (opacity <= 0.001) return null;
   const text = textOf(element);
   const common = { position: "absolute" as const, opacity };
+  const pos =
+    element.position === "top-left" ? { left: "5%", top: "5%" } :
+    element.position === "top-right" ? { right: "5%", top: "5%" } :
+    element.position === "bottom-left" ? { left: "5%", bottom: "8%" } :
+    element.position === "bottom-right" ? { right: "5%", bottom: "8%" } :
+    element.position === "center" ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)" } :
+    element.position === "bottom-center" ? { left: "50%", bottom: "8%", transform: "translateX(-50%)" } :
+    { left: "5%", top: "50%", transform: "translateY(-50%)" };
+  const enter = spring({
+    frame: Math.max(0, frame),
+    fps,
+    config: { damping: 200, mass: 0.6, stiffness: 120 },
+  });
+  const rise = interpolate(enter, [0, 1], [24, 0]);
+  const textStyle = { ...common, ...pos, marginTop: rise };
   const theme = entry.theme ?? {};
 
   switch (element.type) {
-    case "letreiro":
-      return <div style={{ ...common, left: 96, top: 240, width: 1600, fontSize: 104, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em" }}>{text}</div>;
+    case "letreiro": {
+      const chapter = element.role === "chapter" || element.template === "chapter";
+      return (
+        <div style={{ ...textStyle, width: "84%", fontSize: chapter ? 104 : 96, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em", paddingLeft: chapter ? 32 : 0, borderLeft: chapter ? \`8px solid \${theme.accent}\` : undefined }}>
+          {chapter && element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 28, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
+          {text}
+          {chapter && element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
+        </div>
+      );
+    }
     case "caption-emphasis":
-      return <div style={{ ...common, left: 96, bottom: 170, width: 1500, fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
+      return <div style={{ ...textStyle, width: "84%", fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
     case "grafico":
     case "lista":
       if (element.chartSvg) {
         return <div style={{ ...common, left: 80, right: 80, top: 80, bottom: 80 }} dangerouslySetInnerHTML={{ __html: element.chartSvg }} />;
       }
       return (
-        <div style={{ ...common, left: 200, right: 200, top: 300, padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
+        <div style={{ ...textStyle, width: "80%", padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
           <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 18 }}>{element.type}</div>
           <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.05 }}>{text}</div>
           <div style={{ marginTop: 18, color: theme.muted, fontSize: 28, lineHeight: 1.35 }}>{element.description ?? ""}</div>
@@ -6315,7 +7102,7 @@ export const RoosterElement = ({ entry }: { entry: any }) => {
     }
     case "lower-third":
       return (
-        <div style={{ ...common, left: 96, bottom: 96, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
+        <div style={{ ...textStyle, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
           <div style={{ fontSize: 34, fontWeight: 700 }}>{text}</div>
           <div style={{ marginTop: 6, color: theme.muted, fontSize: 24 }}>{element.description ?? ""}</div>
         </div>
@@ -6327,6 +7114,25 @@ export const RoosterElement = ({ entry }: { entry: any }) => {
           <div style={{ marginTop: 24, color: theme.muted, fontSize: 28 }}>{element.description ?? ""}</div>
         </div>
       );
+    case "parallax": {
+      const layers = Array.isArray(element.data?.layers) ? element.data.layers : [];
+      const src =
+        layers.find((layer: any) => layer && layer.src)?.src ||
+        element.src ||
+        element.data?.bg ||
+        element.data?.subject;
+      return (
+        <AbsoluteFill style={{ ...common, overflow: "hidden" }}>
+          {src ? <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.8), transparent 70%)" }} />
+          <div style={{ position: "absolute", left: 96, top: "50%", transform: "translateY(-50%)", maxWidth: 1000 }}>
+            {element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
+            <div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1 }}>{text}</div>
+            {element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
+          </div>
+        </AbsoluteFill>
+      );
+    }
     case "broll": {
       const src = element.src || element.asset;
       if (!src) return null;
@@ -7402,6 +8208,10 @@ function buildCommand(args) {
     createdAt: now(),
   });
 
+  if (engine === "hyperframes" && !isSample) {
+    runHyperFramesCheck(result.engineDir, args);
+  }
+
   const updated = {
     ...project.config,
     engine,
@@ -8437,7 +9247,9 @@ Commands:
   transcribe [slug] [options]     Transcribe assets/source with Whisper
   plan [slug] [--check]           Validate, show, and write edit/plan.html + qa/plan-review.md
   motions [slug] [--json]         List planned motions, reusable components, and built-in templates
+  hyperframes catalog|add|snapshot|timeline|history|check  Search the registry, review frames, inspect the timeline
   silence <slug> [--min <s>]      Propose cuts for silence/filler cleanup from the transcript
+  tighten <slug> [--write]        Propose audio-based cuts with a natural beat and protected spans
   textcheck <slug>                Write qa/text-review.md with on-screen text
   styleproof <slug> [--open]      Write style/proof/index.html with 3 frames
   captions <slug> [options]       Generate SRT/VTT from the transcript
@@ -8488,6 +9300,23 @@ Doctor options:
 Plan options:
   --check                         Validate only
   --show                          Show the plan summary (default)
+  --json                          Machine-readable output
+
+Tighten options:
+  --input <path>                  Source (default: plan.source)
+  --min <s>                       Shortest pause to consider (default: 0.8)
+  --beat <s>                      Room tone kept after the line (default: 0.4)
+  --lead <s>                      Room tone kept before the next line (default: 0.1)
+  --min-cut <s>                   Shortest cut worth a jump (default: 0.35)
+  --noise <db>                    Silence threshold (default: -35)
+  --audio-min <s>                 Minimum audio silence (default: 0.4)
+  --protect <a-b[,c-d]>           Never cut these source spans
+  --fillers                       Also cut standalone filler words
+  --retakes                       Also cut explicit retake cue lines
+  --no-audio                      Use transcript gaps only (weaker)
+  --write                         Merge the cuts into edit/plan.json
+  --replace                       Replace existing cuts instead of merging
+  --force                         Allow --write on a plan that uses keeps
   --json                          Machine-readable output
 
 Captions options:
@@ -8575,6 +9404,20 @@ Build options:
   --no-cuts                       Ignore plan cuts and use the original source
   --cut-punch <scale>             Punch-in on uncovered silence cuts (default: 1.035)
   --cut-fade <seconds>            Audio micro-fade at each cut (default: 0.035; 0 disables)
+  --no-check                      Skip the HyperFrames check after the build
+  --strict                        Fail the build when HyperFrames reports an error
+
+HyperFrames CLI options:
+  --query <text>                  Catalog search
+  --type block|component          Filter catalog results
+  --tag <tag>                     Filter catalog results
+  --project <slug>                Project for "hyperframes add"
+  --at <s[,s]>                    Snapshot at specific seconds
+  --range <a-b>                   Snapshot over a range
+  --composition <id>              Snapshot a composition
+  --review                        Write a review artifact
+  --since <ref> --who <name>      History filters
+  --json                          Machine-readable output
   --allow-cut-only                Allow a plan with no visual elements
   --allow-no-music                Allow a plan with no music decision
   --allow-skipped-elements        Build even when the engine cannot render an element
@@ -9167,8 +10010,14 @@ async function main() {
     case "motions":
       motionsCommand(args);
       return;
+    case "hyperframes":
+      hyperFramesCliCommand(args);
+      return;
     case "silence":
       silenceCommand(args);
+      return;
+    case "tighten":
+      tightenCommand(args);
       return;
     case "textcheck":
       textcheckCommand(args);

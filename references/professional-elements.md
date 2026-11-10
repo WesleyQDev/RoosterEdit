@@ -5,7 +5,7 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | Layer | Reference | What it adds |
 |---|---|---|
 | Captions | `features/captions.md` | SRT/VTT, readable cues, burn-in, accessibility |
-| Motion | `features/motion.md` | Real zooms, fades, dips, slides |
+| Motion | `features/motion.md` | Real zooms, parallax scenes, fades, dips, slides |
 | Audio | `features/audio.md` | Music ducking, SFX, loudness |
 | Reframe | `features/reframe.md` | 16:9 to 9:16/1:1/4:5 crop and focus |
 | Delivery | `features/delivery.md` | Thumbnail, metadata, chapters, package |

@@ -43,6 +43,13 @@ The edit plan is the bridge between the transcript analysis and the build. It is
       "reason": "strongest explanation of the problem"
     }
   ],
+  "protect": [
+    {
+      "start": 88.0,
+      "end": 91.5,
+      "reason": "laugh"
+    }
+  ],
   "elements": [
     {
       "id": "el-001",
@@ -153,6 +160,7 @@ Do not rely on the generic card fallback. Pick a template and give it the data i
 | `callout` | Short corner label | `{ label, sub, icon }` |
 | `terminal` | Command, file, technical detail | `{ command, note }` |
 | `end-card` | CTA | `{ title, sub }` |
+| `parallax` | A still or graphic built in layers, moved by a slow 2.5D camera | `{ kicker, sub, layers: [...], camera: { x, y, zoom } }` |
 | `custom` | Agent-authored HTML/CSS/GSAP | inline `html`, `css`, `animation`, or a `component` |
 
 Use `role: "chapter"` on a `letreiro` when it is a section card. Chapter cards are exempt from transcript grounding.
@@ -222,6 +230,56 @@ Custom elements are trusted local HTML/CSS/JS. They are supported by HyperFrames
 
 The first time the agent invents a look that works, save it as a component. The next video can reuse it, and the channel's visual language accumulates instead of starting from zero.
 
+## Parallax scenes
+
+`template: "parallax"` is a full-frame scene built in layers: background,
+subject, foreground. A slow camera moves each layer at a different speed, so a
+still or a flat graphic reads as a 2.5D space instead of a card. This is the
+look of historical documentaries and product explainers. Use it when the line
+describes a concept, a product, or a place; not for every beat.
+
+```json
+{
+  "id": "el-010",
+  "type": "parallax",
+  "template": "parallax",
+  "start": 32.0,
+  "end": 38.0,
+  "text": "3,6 GB",
+  "covers": "os cinco rodam em 3,6 GB",
+  "data": {
+    "kicker": "o conjunto",
+    "sub": "sem placa de vídeo",
+    "layers": [
+      { "src": "assets/generated/scene-bg.png", "depth": 0.15 },
+      { "src": "assets/generated/scene-icon.png", "depth": 0.55, "x": 8, "y": 10, "w": 44, "h": 60 },
+      { "text": "3,6 GB", "depth": 0.9, "x": 62, "y": 18, "w": 30, "h": 24, "size": 120 }
+    ],
+    "camera": { "x": 30, "y": -12, "zoom": 0.07 }
+  },
+  "description": "Cena em camadas: fundo, ícone e número em parallax 2.5D"
+}
+```
+
+- `depth` is 0-1: 0 is far and almost still, 1 is near and moves the most.
+- A layer is an image/video (`src`), text (`text`), or a shape (`shape`).
+  Text and shape layers need no asset file.
+- `x`, `y`, `w`, `h` are percentages of the frame. Media layers default to
+  `-6/-6/112/112`, so the camera never reveals an edge.
+- `camera.x` and `camera.y` are the total pan in pixels; `camera.zoom` is the
+  extra scale (`0.06` = 6%).
+- Layers are capped at six. More layers read as a pile, not depth.
+- The scene is full-frame and sits under other elements: lower-thirds,
+  captions, and callouts can overlay it. Do not run two full-frame scenes at
+  the same time.
+- HyperFrames animates the camera; Remotion renders a static version with the
+  same copy. Use HyperFrames when the movement matters.
+- A `parallax` element needs at least one layer, or `src`/`data.bg` for the
+  background. Put the explanation in `description`; on-screen words go in
+  `text`.
+- Reuse a layer composition across a chapter by saving it as a `custom`
+  component once the first pass works.
+
 ## B-roll layout
 
 `broll` accepts `layout`:
@@ -261,6 +319,9 @@ The build softens the cut pass automatically:
 - a small punch-in on uncovered silence cuts, alternating wide/tight so the eye reads two camera angles;
 - `--cut-punch <scale>` changes the punch (default `1.035`; `1` disables it);
 - `--cut-fade <seconds>` changes the audio fade (default `0.035`; `0` disables it).
+
+Cuts proposed by `tighten` already leave 0.4 s of room tone and 100 ms before
+the next line, so the smoothing pass is a safety net, not the rhythm.
 
 Covered cuts (a b-roll or transition overlaps the join) are not punched. `plan --check` lists the long jumps that still have no visual cover, the orphan reactions, and keeps shorter than 0.8 seconds that will read as a flash.
 
@@ -318,22 +379,73 @@ Cleanup is the default. Do not turn a long recording into a highlight unless the
 - Keep breaths and reactions that carry emotion.
 - Do not cut every pause; rhythm needs air.
 
-### Silence cleanup
+### Tighten (default)
 
-Use the transcript as the baseline for cleanup:
+`tighten` is the default cleanup pass. It reads the audio instead of guessing
+from the transcript, and it keeps the pause natural instead of deleting it:
+
+```bash
+node "<skill>/scripts/rooster.mjs" tighten <slug> --json
+node "<skill>/scripts/rooster.mjs" tighten <slug> --write
+```
+
+One standard, no presets. The numbers are the editorial default:
+
+| Rule | Default | Why |
+|---|---|---|
+| Shortest pause considered | 0.8 s | Shorter gaps are not worth a jump cut |
+| Beat kept after the line | 0.4 s | The cut keeps real room tone, not digital silence |
+| Lead-in before the next line | 0.1 s | Never clip the incoming consonant |
+| Shortest cut | 0.35 s | A 0.1 s cut costs more than it saves |
+| Silence threshold | -35 dB | Quiet room, not a noise gate |
+| Audio silence minimum | 0.4 s | Ignore breaths and clicks |
+
+The command runs FFmpeg `silencedetect`, snaps each boundary to the word
+timestamps when they exist, subtracts `plan.protect`, and proposes `cuts` with
+`reason: "long-pause"`. Leading and trailing dead air are removed entirely.
+When the audio cannot be analyzed, it falls back to transcript gaps and says so.
+
+Flags exist for edge cases, not as styles: `--min`, `--beat`, `--lead`,
+`--min-cut`, `--noise`, `--audio-min`, `--no-audio`, and `--protect 12-18,1:02-1:05`.
+
+- `--fillers` also cuts standalone filler words (`um`, `uh`, `hmm`…). A word is
+  only removed when at least one side has a small gap, so the neighbour is
+  never clipped. "mm hmm" as agreement stays.
+- `--retakes` also cuts a short segment that is itself a retake cue ("deixa eu
+  repetir"). Repeated takes are only **listed** in the JSON as
+  `possibleRetakes`; the agent or the user decides which take stays.
+- `--write` merges the new cuts into `edit/plan.json`, sets
+  `editMode: "cleanup"`, and leaves non-silence cuts alone. `--replace`
+  discards the existing cuts first; `--force` is required if the plan uses
+  `keeps`.
+
+### Protect
+
+`plan.protect` is a list of source spans that must never be cut: a laugh, a
+dramatic pause, an interview answer, a line the user asked to keep. `tighten`
+subtracts them from every candidate cut, and `plan --check` warns when a cut
+overlaps one.
+
+```json
+"protect": [
+  { "start": 88.0, "end": 91.5, "reason": "laugh" },
+  { "start": 210.0, "end": 216.0, "reason": "the answer the client asked to keep" }
+]
+```
+
+### Silence (legacy)
+
+`silence` still works and is the fallback when the audio cannot be analyzed.
+It proposes cuts from transcript segment gaps only:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" silence <slug> --json
-node "<skill>/scripts/rooster.mjs" silence <slug> --min 0.8 --pad 0.08
-```
-
-The command proposes `cuts` with `reason: "long-pause"` for every gap between transcript segments above `--min`, plus leading and trailing dead air. It is a dry run by default. Review the list, remove false positives (music-only beats, dramatic pauses, room tone that belongs in the edit), then write it:
-
-```bash
+node "<skill>/scripts/rooster.mjs" silence <slug> --min 0.8 --pad 0.1
 node "<skill>/scripts/rooster.mjs" silence <slug> --write
 ```
 
-`--write` merges the new cuts into `edit/plan.json`, sets `editMode: "cleanup"`, and leaves existing non-silence cuts alone. If the plan already uses `keeps`, it refuses unless you pass `--force`; `--replace` discards the existing cuts before writing. Do not invent silence cuts by hand when the transcript can produce them.
+The default padding is 100 ms. It cannot see a pause inside a long segment, so
+prefer `tighten` whenever FFmpeg can read the source.
 
 ### Elements
 
@@ -342,6 +454,7 @@ node "<skill>/scripts/rooster.mjs" silence <slug> --write
 - Add a list when the speaker enumerates steps or items.
 - Add a zoom when the speaker lands an insight or a punchline.
 - Add b-roll when the speaker describes a concrete noun or action.
+- Prefer `parallax` when the line describes a concrete scene, product, or place and there is a still or graphic to build on. It gives a flat image depth without a video; do not use it as a default background for every beat.
 - Do not add an element to every sentence; the video becomes noise.
 - Do not use a full-screen panel or card to hide a mismatched slide unless the user explicitly asks. Prefer small lower-thirds, corner labels, captions, and overlays. The video must remain visible.
 - Match the element style to `style.md` and the resolved profile.
@@ -411,6 +524,7 @@ Wait for an explicit approval. If the user changes the plan, update `edit/plan.j
 - the plan has a music decision, or `notes` records that no music was requested;
 - no duplicate ids;
 - chapters are sorted by start time;
+- every `protect` span has numeric `start < end`, and no cut overlaps one (warning);
 - when `edit/transcript.json` has word-level timestamps, no cut starts or ends inside a word (warning).
 
 The human-readable summary comes from `plan <slug>`; `--check` validates without printing the full summary.

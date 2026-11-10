@@ -15,7 +15,7 @@ node "<skill>/scripts/rooster.mjs" motions <slug> --json
 
 It shows:
 
-- **Planned motions** grouped by resolved template (`title`, `chapter`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `terminal`, `end-card`, `callout`, `broll`, `zoom`, `transition`, `custom`);
+- **Planned motions** grouped by resolved template (`title`, `chapter`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `terminal`, `end-card`, `callout`, `broll`, `parallax`, `zoom`, `transition`, `custom`);
 - **Reusable components** found under `style/components/` (project, channel, or profile scope), with their paths;
 - the **built-in template catalog**, including what each one does.
 
@@ -133,6 +133,53 @@ const opacity = interpolate(frame, t.inputRange, t.outputRange, {
 ```
 
 `remotionZoomSnippet(element, { fps })` and `remotionTransitionSnippet(element, { fps, theme })` return copy-paste statements when editing the generated TSX by hand. `styleAt(frame)` on either values object returns the same style inline, which is easier to use inside a mapped element component.
+
+## Custom elements: freedom with a contract
+
+`template: "custom"` is the escape hatch. The agent may write any HTML/CSS/GSAP
+the HyperFrames renderer can execute; the catalog does not cap it. These checks
+do not judge the design. They only catch code that cannot render, before an
+expensive build.
+
+Rules:
+
+- Animate the shared `tl`. Do not call `gsap.timeline()`; a private timeline is
+  not seeked by the composition.
+- The script receives `root`, `start`, `duration`, and `tl`.
+- No `import`, `require`, `fetch`, `XMLHttpRequest`, or `Worker`. The
+  composition is offline and self-contained.
+- Put code in `element.js`/`animation`, not in a `<script>` inside the HTML.
+- Use `root.querySelector(...)`, not global selectors.
+- Local assets only. Remote CSS, fonts, and images are not copied.
+- Keep inline HTML/CSS/animation small. A reusable look belongs in
+  `style/components/<name>/`.
+- Remotion cannot execute custom HTML/JS. Use HyperFrames for a custom element,
+  or a Remotion component when Remotion is the engine.
+
+`plan <slug> --check` reports a private timeline, imports/fetch, oversized
+inline code, and missing `tl` usage. Fix those before `build`.
+
+Token-cheap loop:
+
+1. Write the smallest version that shows the idea.
+2. Run `plan <slug> --check` and fix the reported errors.
+3. Build a sample and render three stills at the element's in, hold, and out.
+4. Read the stills, change one thing, re-render.
+5. When it works, save it as a component. The next video does not pay again.
+
+```json
+{
+  "id": "el-020",
+  "type": "custom",
+  "template": "custom",
+  "start": 120.0,
+  "end": 124.0,
+  "html": "<div class=\"glow\"><span class=\"ring\"></span><strong>novo</strong></div>",
+  "css": ".glow { position:absolute; inset:0; display:grid; place-items:center; } .ring { width:180px; height:180px; border:6px solid var(--accent); border-radius:50%; position:absolute; }",
+  "animation": "tl.fromTo(root.querySelector('.ring'), { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'back.out(1.7)' }, start + 0.1);",
+  "description": "One-off glow; save as a component if it fits the channel"
+}
+```
 
 ## Cut smoothing
 

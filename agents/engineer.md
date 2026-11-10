@@ -22,6 +22,9 @@ Do not read the raw transcript, and do not load the whole reference library.
    - `render <slug> --draft` and `render <slug> --final` print the engine render command; run it and capture the log;
    - `export <slug> --format both` for EDL/FCPXML when the user wants an NLE;
    - `deliver <slug>` for thumbnail and metadata.
+   - For a custom element, write self-contained HTML/CSS/GSAP, animate the shared `tl`, run `plan <slug> --check` before the build, and render three stills (in, hold, out). Save a reusable look as a component.
+   - Before hand-building a named effect, search the registry: `hyperframes catalog --query "<effect>" --json`, then `hyperframes add <name> --project <slug>`.
+   - After a HyperFrames build, inspect `hyperframes snapshot <slug> --at <times> --review` and `hyperframes timeline <slug> --json` instead of opening every file.
 4. If the selected engine is missing (Remotion not installed, FilmCraft CLI or MCP not configured), do not install anything. Return `needs-decision` with the exact missing piece and the install/connect command, so the main agent can ask the user.
 5. Redirect noisy output to `work/logs/<stage>.log`. Read the last 20–30 lines or the JSON summary, not the full log. On Windows use `*> file`; on POSIX use `> file 2>&1`.
 6. Run the engine's check after structural changes: `npx hyperframes check --json` or the Remotion equivalent. Fix errors before returning.

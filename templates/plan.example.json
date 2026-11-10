@@ -29,6 +29,7 @@
       "confidence": 0.95
     }
   ],
+  "protect": [],
   "elements": [
     {
       "id": "el-001",
@@ -105,6 +106,25 @@
       "css": ".glow{position:absolute;inset:0;display:grid;place-items:center;color:#f5f3ff;font:800 56px Inter,sans-serif}.glow span{position:absolute;width:220px;height:220px;border:6px solid #8b5cf6;border-radius:50%}",
       "animation": "tl.fromTo(root.querySelector('span'), { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'back.out(1.7)' }, start + 0.1);",
       "description": "Animação autoral inline; para reutilizar, salve como component"
+    },
+    {
+      "id": "el-007",
+      "type": "parallax",
+      "template": "parallax",
+      "start": 72.0,
+      "end": 78.0,
+      "text": "3,6 GB",
+      "covers": "os cinco rodam em 3,6 GB",
+      "description": "Cena em camadas: fundo, forma e número em parallax 2.5D",
+      "data": {
+        "kicker": "o conjunto",
+        "sub": "sem placa de vídeo",
+        "layers": [
+          { "shape": { "color": "var(--accent)" }, "depth": 0.15, "x": 4, "y": 8, "w": 42, "h": 42, "opacity": 0.14, "radius": 48 },
+          { "text": "3,6 GB", "depth": 0.9, "x": 58, "y": 16, "w": 34, "h": 26, "size": 120 }
+        ],
+        "camera": { "x": 30, "y": -12, "zoom": 0.07 }
+      }
     }
   ],
   "chapters": [

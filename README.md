@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Status: alpha" />
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 20+" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22+" /></a>
   <a href="#motores"><img src="https://img.shields.io/badge/engines-HyperFrames%20%7C%20Remotion-1f6feb?style=flat-square" alt="Motores: HyperFrames e Remotion" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black?style=flat-square" alt="Licença MIT" /></a>
 </p>

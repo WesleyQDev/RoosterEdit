@@ -352,6 +352,7 @@ export function elementSupport(plan, engine) {
     "terminal",
     "end-card",
     "broll",
+    "parallax",
     "chart",
     "custom",
   ]);
@@ -390,7 +391,10 @@ export function elementSupport(plan, engine) {
           id: element.id || null,
           type,
           template,
-          reason: `Remotion renders "${template}" as the card/text fallback; use HyperFrames for the animated layout`,
+          reason:
+            template === "parallax"
+              ? "Remotion renders a static parallax scene; use HyperFrames for the camera move"
+              : `Remotion renders "${template}" as the card/text fallback; use HyperFrames for the animated layout`,
         });
       }
     }
@@ -615,6 +619,7 @@ function defaultPosition(element) {
   const type = String(element?.type || "");
   const template = String(element?.template || "");
   if (type === "custom" || template === "custom") return "center";
+  if (type === "parallax" || template === "parallax") return "center-left";
   if (type === "broll") return "top-right";
   if (type === "end-card") return "center";
   if (type === "lower-third" || type === "lista" || type === "caption-emphasis") {
@@ -656,6 +661,10 @@ export function layoutCollisionWarnings(plan) {
       start: mapTime(element.start),
       end: mapTime(element.end),
       position: defaultPosition(element),
+      fullFrame:
+        String(element.type || "") === "parallax" ||
+        (String(element.type || "") === "broll" &&
+          String(element.layout || element.data?.layout || "pip") === "full"),
     }))
     .filter((element) => element.end > element.start)
     .sort((a, b) => a.start - b.start);
@@ -665,13 +674,16 @@ export function layoutCollisionWarnings(plan) {
       const a = elements[i];
       const b = elements[j];
       if (b.start >= a.end) break;
-      if (a.position !== b.position) continue;
       const overlap = Math.min(a.end, b.end) - Math.max(a.start, b.start);
       if (overlap < 0.25) continue;
+      if (a.position !== b.position && !(a.fullFrame || b.fullFrame)) continue;
+      const fullFrame = a.fullFrame || b.fullFrame;
       warnings.push({
         id: b.id || null,
         type: "layout",
-        message: `${a.id || a.type} and ${b.id || b.type} overlap in the ${a.position} region for ${overlap.toFixed(1)} s — move one beat or change its position`,
+        message: fullFrame
+          ? `${a.id || a.type}${a.fullFrame ? " (full-frame)" : ""} and ${b.id || b.type}${b.fullFrame ? " (full-frame)" : ""} overlap for ${overlap.toFixed(1)} s - move one beat or change its layout`
+          : `${a.id || a.type} and ${b.id || b.type} overlap in the ${a.position} region for ${overlap.toFixed(1)} s - move one beat or change its position`,
       });
     }
   }

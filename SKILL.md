@@ -12,7 +12,7 @@ description: >-
   editing". RoosterEdit is the director: it organizes the workspace, picks the
   right engine, and drives the project from brief to delivery.
 compatibility: >-
-  Best with Node.js 20+, FFmpeg/ffprobe, and a browser. The skill degrades to
+  Best with Node.js 22+, FFmpeg/ffprobe, and a browser. The skill degrades to
   brief, script, storyboard, and edit plan when those tools are missing.
 metadata:
   version: "0.1.0"
@@ -155,7 +155,7 @@ When the user wants the simplest route from raw footage to a finished video, fol
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
 3. **Write the style guide** — `art-director` writes `style.md` and resolves the profile. Run `styleproof <slug>` and approve the three sample frames before planning.
 4. **Transcribe and plan** — `transcript-analyst` writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`; `editor` writes `edit/plan.json` from the analysis and `style.md`. Show `plan.html` with transcript context and wait for approval.
-5. **Create the visual elements** — `engineer` builds letreiros, graphics, lists, zooms, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
+5. **Create the visual elements** — `engineer` builds letreiros, graphics, lists, zooms, parallax scenes, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
 6. **Assemble, review, export** — `engineer` runs `build` to generate the HyperFrames or Remotion project from the approved plan; use `--sample 3` before the full build. `qa` inspects `preview/index.html` and the frames, then `engineer` renders to `renders/`; `export` writes an EDL/FCPXML handoff when the user wants DaVinci or Premiere.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.
@@ -290,7 +290,7 @@ Build `assets/manifest.json` with:
 
 Never delete or overwrite the user's originals. Prefer copying or linking into the workspace. If a file is missing, say so before building around it.
 
-For footage-driven projects, run transcription and analysis through `transcript-analyst` (HyperFrames/Parakeet, whisper.cpp, or the Whisper CLI). It writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`, and returns duration, topics, beats, and flags. Then have `editor` write `edit/plan.json` from the analysis, `style.md`, and the brief; get approval before opening the engine. Default to `editMode: "cleanup"`: keep the full story and use `cuts`, with `silence <slug> --json` as the baseline for silence. Use `keeps` only when the user approved a condensed or highlight version and the plan says `editMode: "condensed"`. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
+For footage-driven projects, run transcription and analysis through `transcript-analyst` (HyperFrames/Parakeet, whisper.cpp, or the Whisper CLI). It writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`, and returns duration, topics, beats, and flags. Then have `editor` write `edit/plan.json` from the analysis, `style.md`, and the brief; get approval before opening the engine. Default to `editMode: "cleanup"`: keep the full story and use `cuts`, with `tighten <slug> --json` as the baseline. `tighten` reads the audio, keeps a natural beat (0.4 s), leaves 100 ms before the next line, snaps each cut to speech, and never touches a span in `plan.protect`. Use the legacy `silence` command only when the audio cannot be analyzed. Use `keeps` only when the user approved a condensed or highlight version and the plan says `editMode: "condensed"`. Silence removal, filler-word removal, and b-roll placement are editorial decisions; they belong in `edit/plan.json`, `edit/edl.json`, and `edit/timeline.json`, not buried in a render script.
 
 ## Step 6 — Choose and drive the engine
 
@@ -330,7 +330,7 @@ node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
 node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 ```
 
-`build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. A cut-only plan or a plan with no music decision is refused unless `notes` records the exception; pass `--allow-cut-only` or `--allow-no-music` only when the user explicitly asked for that. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
+`build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. After a HyperFrames build it runs `npx hyperframes check --json` and prints a summary; `--strict` fails on an error and `--no-check` skips it. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. A cut-only plan or a plan with no music decision is refused unless `notes` records the exception; pass `--allow-cut-only` or `--allow-no-music` only when the user explicitly asked for that. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
 
 Run `plan <slug> --check` before the build and read `qa/plan-review.md`. It reports visual gaps over 45 seconds, long silence jumps without b-roll or a transition, orphan reactions, b-roll without `covers`/`intent`/`sourceTime`, b-roll extracted from a later scene, on-screen text that does not match the transcript, and element types the target engine cannot render. Fix the top warnings or pass `--strict-plan` to make the build refuse them. The build applies a 35 ms audio micro-fade and an alternating punch-in on uncovered silence cuts; use `--cut-punch` / `--cut-fade` to tune or disable them. FilmCraft cannot animate `zoom` or overlay `transition`; use HyperFrames/Remotion for those, or replace them with PIP/split b-roll and punch-ins. `build` fails on unsupported elements unless you pass `--allow-skipped-elements`.
 
@@ -530,6 +530,9 @@ node "<skill>/scripts/rooster.mjs" digest en-tech/video-x --from 0 --to 60
 node "<skill>/scripts/rooster.mjs" styleproof en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" plan en-tech/video-x
 node "<skill>/scripts/rooster.mjs" motions en-tech/video-x
+node "<skill>/scripts/rooster.mjs" hyperframes catalog --query "glitch transition" --json
+node "<skill>/scripts/rooster.mjs" hyperframes snapshot en-tech/video-x --at 1,3 --review
+node "<skill>/scripts/rooster.mjs" tighten en-tech/video-x --json
 node "<skill>/scripts/rooster.mjs" silence en-tech/video-x --min 0.8
 node "<skill>/scripts/rooster.mjs" textcheck en-tech/video-x
 # Advanced layers: see references/professional-elements.md

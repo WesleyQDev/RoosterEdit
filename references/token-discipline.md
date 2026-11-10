@@ -127,6 +127,8 @@ The full cast and contract are in `references/subagents.md`. Do not spawn a suba
 ## Rule 9 — Keep the main context clean
 
 - Do not paste full `index.html`, `Video.tsx`, or generated code unless debugging.
+- For custom motion, do not paste the element HTML/CSS/JS. Read `motions <slug> --json`, render three stills at the element's in/hold/out, and describe the fix in one sentence.
+- For a named effect, search the HyperFrames registry with `hyperframes catalog --query "<effect>" --json` and install with `add`; do not read the registry tree.
 - Use `rg` to find the relevant lines.
 - Keep decisions in `review.md` and refer to the file path.
 - Summarize the user's feedback in one sentence before acting.
