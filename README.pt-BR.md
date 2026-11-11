@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/rooster-edit"><img src="https://img.shields.io/badge/npm-rooster--edit-cb3837?style=flat-square&logo=npm" alt="npm: rooster-edit" /></a>
+  <a href="https://www.npmjs.com/package/rooster-edit"><img src="https://img.shields.io/npm/v/rooster-edit?style=flat-square&logo=npm" alt="npm: rooster-edit" /></a>
   <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js 22+" />
   <img src="https://img.shields.io/badge/status-alpha-orange?style=flat-square" alt="Status: alpha" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-black?style=flat-square" alt="Licença: MIT" /></a>
