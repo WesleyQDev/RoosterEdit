@@ -507,6 +507,7 @@ If the user already has a different structure, adapt to it and record the mappin
 - Do not upload, publish, or send files to external services without explicit consent.
 - Do not run destructive shell commands on the user's source media.
 - Do not hide a failure behind a lower-quality render. Report it.
+- Do not hand-write a long FFmpeg pass. Use `color` or `build` so the run gets the right encoder, cache, progress, and ETA; if a custom graph is genuinely needed, say why and keep the same flags (progress, filter threads, hardware encoder).
 - Do not claim a feature is supported because a library exists; check the installed version and the actual adapter.
 - Do not create a full NLE, a video-generation model, or a cloud render service as part of the v1 scope. Keep the core focused and pluggable.
 

@@ -132,15 +132,33 @@ const result = spawnSync("ffmpeg", args, {
 if (result.status !== 0) throw new Error(result.stderr);
 ```
 
-With no active filters, `colorArgs` falls back to stream copy. With filters, it re-encodes the first video stream as H.264 (`yuv420p`, CRF 18, `medium`) and copies the first audio stream. Use MP4, MOV, or MKV for the output container.
+With no active filters, `colorArgs` falls back to stream copy. With filters or a scale, it re-encodes the first video stream as H.264 (`yuv420p`) and copies the first audio stream. Use MP4, MOV, or MKV for the output container.
+
+Defaults target an intermediate, because the build re-encodes the graded file: `veryfast` with CRF 20. Pass `quality: "final"` (or explicit `preset`/`crf`) only when the output is a master. `encoder`, `scale`, and `filterThreads` are optional; `colorArgs` uses the same encoder mapping as the build.
 
 ## Commands
 
 ```bash
-node "<skill>/scripts/rooster.mjs" color <slug> [--input <path>] [--out <path>] [--update-plan] [--skip-stabilize]
+node "<skill>/scripts/rooster.mjs" color <slug> [--input <path>] [--out <path>] \
+  [--quality fast|final] [--preset <id>] [--crf <n>] [--encoder <id>] \
+  [--scale <W:H>] [--filter-threads <n>] [--no-progress] [--print] \
+  [--update-plan] [--skip-stabilize]
 ```
 
 The command writes `assets/generated/graded.mp4`; `--update-plan` points `plan.source` at the graded file before build. When `plan.color.stabilize` is true, the command runs the two vidstab passes automatically unless `--skip-stabilize` is passed.
+
+## Cost and speed
+
+Grading is a full re-encode. A 17-minute 1080p source takes about as long as its duration on a 6-core CPU with `veryfast` plus denoise; a delivery-grade `medium`/CRF 18 pass is slower. Keep the intermediate cheap:
+
+- Leave the default `fast` quality (`veryfast`/CRF 20). The build re-encodes anyway; `--quality final` is for a graded master.
+- Do not put grain (`noise`), vignette, or light leaks in the intermediate. They multiply bitrate and encode time; add them in the engine, in the final render, or as an overlay.
+- Denoise only what needs it, and prefer `light`. Denoise and grain filters are partly serial, so a CPU sitting below 60% usually means the filter chain, not x264, is the limit. `--filter-threads` helps the rest.
+- Use the hardware encoder when `doctor` detects one: `--encoder h264_nvenc|h264_amf|h264_qsv`. It is fastest when the encode, not the filter, is the bottleneck.
+- Grade after the cut when the project removes a lot: point `--input` at the cut result, so the pass does not spend time on footage the build will discard.
+- Do not hand-write the FFmpeg command for this step. The CLI streams progress, ETA, the encoder in use, and the elapsed time; a raw command hides all of it and usually skips the flags above.
+
+`--print` shows the exact FFmpeg arguments without running them.
 
 ## QA
 

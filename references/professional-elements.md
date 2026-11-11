@@ -38,7 +38,7 @@ node "<skill>/scripts/rooster.mjs" deliver <slug>
 node "<skill>/scripts/rooster.mjs" reframe <slug> --format 9:16 [--update-plan]
 node "<skill>/scripts/rooster.mjs" broll <slug> [--write]
 node "<skill>/scripts/rooster.mjs" audio <slug>
-node "<skill>/scripts/rooster.mjs" color <slug> [--update-plan]
+node "<skill>/scripts/rooster.mjs" color <slug> [--quality fast|final] [--encoder <id>] [--update-plan]
 node "<skill>/scripts/rooster.mjs" tts <slug> [--generate]
 node "<skill>/scripts/rooster.mjs" multicam <slug> [--render] [--update-plan]
 node "<skill>/scripts/rooster.mjs" qa <slug> [--draft|--final] [--vision] [--fix-audio]

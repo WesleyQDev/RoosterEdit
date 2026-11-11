@@ -5001,7 +5001,7 @@ function audioCommand(args) {
   console.log("  Preview it before building; the plan still owns the music/SFX decisions.");
 }
 
-function colorCommand(args) {
+async function colorCommand(args) {
   const slug = projectSlugFromArg(args);
   const project = resolveProject(slug);
   if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
@@ -5018,16 +5018,50 @@ function colorCommand(args) {
   const color = plan.color && typeof plan.color === "object" ? plan.color : {};
   if (!Object.keys(color).length) fail("No plan.color settings to apply.");
 
+  const quality = String(args.quality || "fast").toLowerCase();
+  if (!["fast", "final"].includes(quality)) fail(`Unknown --quality "${quality}". Use fast or final.`);
+  const encoder =
+    typeof args.encoder === "string" && args.encoder.trim() ? args.encoder.trim() : "libx264";
+  const preset =
+    typeof args.preset === "string" && args.preset.trim() ? args.preset.trim() : undefined;
+  const rawCrf = args.crf;
+  const crf = rawCrf === undefined || rawCrf === null || rawCrf === "" ? undefined : Number(rawCrf);
+  if (crf !== undefined && (!Number.isFinite(crf) || crf < 0 || crf > 63)) {
+    fail("Invalid --crf. Use a number between 0 and 63.");
+  }
+  const scale = typeof args.scale === "string" ? args.scale.trim() : undefined;
+  if (scale && !/^-?\d{1,5}:-?\d{1,5}$/.test(scale)) {
+    fail(`Invalid --scale "${scale}". Use W:H, for example 1920:1080 or 1280:-2.`);
+  }
+  const rawThreads = Number(args["filter-threads"]);
+  const filterThreads = Number.isFinite(rawThreads) && rawThreads > 0 ? rawThreads : undefined;
+  const options = { quality, encoder, preset, crf, scale, filterThreads };
+
+  const output = args.out
+    ? path.resolve(CWD, String(args.out))
+    : path.join(project.dir, "assets", "generated", "graded.mp4");
+  ensureDir(path.dirname(output));
+
+  if (args.print) {
+    const ffArgs = colorArgs({ input, output, color, ...options });
+    console.log(`ffmpeg ${ffArgs.map((value) => (/\s/.test(value) ? JSON.stringify(value) : value)).join(" ")}`);
+    return;
+  }
+
   let colorInput = input;
   if (color.stabilize && !args["skip-stabilize"]) {
     const workDir = path.join(project.dir, "assets", "generated", "stabilize");
     ensureDir(workDir);
-    const passes = buildStabilizePasses({ input, workDir });
+    const passes = buildStabilizePasses({ input, workDir, encoder, preset, crf, filterThreads });
     heading("Stabilization pass 1/2");
-    const detect = run("ffmpeg", passes.detectArgs || passes.detect, { timeout: 60 * 60 * 1000 });
+    const detect = await runAsync("ffmpeg", passes.detectArgs || passes.detect, {
+      timeout: 60 * 60 * 1000,
+    });
     if (!detect.ok) fail(`Stabilization detect failed:\n${detect.stderr || detect.stdout || "unknown error"}`);
     heading("Stabilization pass 2/2");
-    const transform = run("ffmpeg", passes.transformArgs || passes.transform, { timeout: 60 * 60 * 1000 });
+    const transform = await runAsync("ffmpeg", passes.transformArgs || passes.transform, {
+      timeout: 60 * 60 * 1000,
+    });
     if (!transform.ok) fail(`Stabilization transform failed:\n${transform.stderr || transform.stdout || "unknown error"}`);
     colorInput = passes.output;
     console.log(`  ${colorInput}`);
@@ -5035,22 +5069,82 @@ function colorCommand(args) {
     console.warn("  ! Stabilization skipped by --skip-stabilize.");
   }
 
-  const output = args.out
-    ? path.resolve(CWD, String(args.out))
-    : path.join(project.dir, "assets", "generated", "graded.mp4");
-  ensureDir(path.dirname(output));
-
-  const ffArgs = colorArgs({ input: colorInput, output, color });
-  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+  const ffArgs = colorArgs({ input: colorInput, output, color, ...options });
+  const probe = probeMedia(colorInput) || {};
+  const duration = Number(probe.duration) || 0;
+  heading("Color pass");
+  console.log(
+    `  ${encoder} · ${preset || (quality === "final" ? "medium" : "veryfast")} · crf ${crf ?? (quality === "final" ? 18 : 20)}${
+      scale ? ` · scale ${scale}` : ""
+    }`
+  );
+  const result = await runWithProgress(
+    "ffmpeg",
+    ["-progress", "pipe:1", "-nostats", ...ffArgs],
+    { total: duration, enabled: !args["no-progress"], timeout: 60 * 60 * 1000 }
+  );
   if (!result.ok) fail(`Color pass failed:\n${result.stderr || result.stdout || "unknown error"}`);
 
+  const done = probeMedia(output) || {};
   heading("Color pass ready");
   console.log(`  ${output}`);
+  console.log(
+    `  ${formatClock(done.duration || duration)} · ${formatBytes(fs.statSync(output).size)} · ${formatClock(result.elapsedMs / 1000)} elapsed`
+  );
   if (args["update-plan"]) {
     const relative = path.relative(project.dir, output).replace(/\\/g, "/");
     writeJson(planPath, { ...plan, source: relative });
     console.log(`  plan.source updated to ${relative}`);
   }
+}
+
+/**
+ * Run a process and print a single-line progress report with ETA.
+ *
+ * FFmpeg writes `key=value` lines to stdout with `-progress pipe:1`; on a TTY
+ * the report rewrites the same line, otherwise it prints one line every five
+ * seconds so logs and agent shells show movement.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{total?:number, enabled?:boolean, timeout?:number}} [options]
+ * @returns {Promise<{ok:boolean,status:number|null,stdout:string,stderr:string,elapsedMs:number}>}
+ */
+async function runWithProgress(command, args, options = {}) {
+  const total = Number(options.total) || 0;
+  const enabled = options.enabled !== false;
+  const tty = Boolean(process.stdout.isTTY);
+  const interval = tty ? 1000 : 5000;
+  const started = Date.now();
+  let seconds = 0;
+  let speed = 0;
+  let last = 0;
+  let printed = false;
+  const result = await runAsync(command, args, {
+    timeout: options.timeout || 60 * 60 * 1000,
+    onLine: (line) => {
+      const text = String(line).trim();
+      const eq = text.indexOf("=");
+      if (eq <= 0) return;
+      const key = text.slice(0, eq);
+      const value = text.slice(eq + 1);
+      if (key === "out_time_us" || key === "out_time_ms") seconds = (Number(value) || 0) / 1e6;
+      else if (key === "speed") speed = Number.parseFloat(value.replace(/x$/i, "")) || speed;
+      else if (key !== "progress") return;
+      const now = Date.now();
+      if (!enabled || now - last < interval) return;
+      last = now;
+      printed = true;
+      const eta = total > 0 && speed > 0 ? Math.max(0, total - seconds) / speed : null;
+      const lineOut = `  ${formatClock(seconds)} / ${formatClock(total)} · ${speed ? speed.toFixed(2) + "x" : "--"} · ${
+        eta === null ? "ETA --" : `ETA ${formatClock(eta)}`
+      }`;
+      if (tty) process.stdout.write(`\r${lineOut.padEnd(60)}`);
+      else console.log(lineOut);
+    },
+  });
+  if (printed && tty) process.stdout.write("\n");
+  return { ...result, elapsedMs: Date.now() - started };
 }
 
 async function ttsCommand(args) {
@@ -10442,6 +10536,14 @@ Audio mix options:
 Color options:
   --input <path>                  Source (default: plan.source)
   --out <path>                    Output (default: assets/generated/graded.mp4)
+  --quality fast|final            fast = veryfast/CRF 20 intermediate (default); final = medium/CRF 18
+  --preset <id>                   Override the encoder preset
+  --crf <n>                       Override the quality value (0-63)
+  --encoder <id>                  libx264 (default) | h264_nvenc | h264_amf | h264_qsv | ...
+  --scale <W:H>                   Scale in the same pass, e.g. 1920:1080 or 1280:-2
+  --filter-threads <n>            Parallelize the filter chain (heavy grades)
+  --no-progress                   Hide the progress/ETA line
+  --print                         Print the FFmpeg command without running it
   --update-plan                   Point plan.source at the graded file
   --skip-stabilize                Skip plan.color.stabilize
 
@@ -11148,7 +11250,7 @@ async function main() {
       audioCommand(args);
       return;
     case "color":
-      colorCommand(args);
+      await colorCommand(args);
       return;
     case "tts":
       await ttsCommand(args);

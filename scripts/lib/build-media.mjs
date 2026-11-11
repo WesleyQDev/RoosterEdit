@@ -7,6 +7,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
+import { videoEncoderArgs } from "../features/encoders.mjs";
 import {
   audioOutputArgs,
   buildTimelineAudioGraph,
@@ -59,60 +61,6 @@ function booleanOr(value, fallback) {
   if (value === false || value === "false" || value === 0 || value === "0") return false;
   if (value === true || value === "true" || value === 1 || value === "1") return true;
   return fallback;
-}
-
-/**
- * Build encoder-specific video arguments.
- *
- * Hardware encoders accept different quality flags than libx264/libx265, so a
- * plain `-crf` for every encoder would fail at runtime.
- *
- * @param {{encoder?: string, crf?: number, preset?: string}} options
- * @returns {string[]}
- */
-function videoEncoderArgs({ encoder = "libx264", crf = 20, preset = "veryfast" } = {}) {
-  const name = String(encoder || "libx264").trim();
-  if (!/^[A-Za-z0-9_]+$/.test(name)) {
-    throw new TypeError(`buildBaseMediaArgs: invalid encoder "${name}"`);
-  }
-  if (name === "copy") return ["-c:v", "copy"];
-
-  const quality = Number(crf);
-  if (!Number.isFinite(quality) || quality < 0 || quality > 63) {
-    throw new RangeError("buildBaseMediaArgs: crf must be between 0 and 63");
-  }
-  const q = String(quality);
-  const presetName = String(preset || "").trim();
-
-  switch (name) {
-    case "h264_nvenc": {
-      const speed = /^p[1-7]$/.test(presetName) ? presetName : "p4";
-      return ["-c:v", name, "-preset", speed, "-rc", "vbr", "-cq", q];
-    }
-    case "h264_amf": {
-      const speed = ["speed", "balanced", "quality"].includes(presetName)
-        ? presetName
-        : "speed";
-      return [
-        "-c:v",
-        name,
-        "-quality",
-        speed,
-        "-rc",
-        "cqp",
-        "-qp_i",
-        q,
-        "-qp_p",
-        q,
-      ];
-    }
-    case "h264_qsv":
-      return ["-c:v", name, "-preset", presetName || "veryfast", "-global_quality", q];
-    case "h264_videotoolbox":
-      return ["-c:v", name, "-q:v", q];
-    default:
-      return ["-c:v", name, "-preset", presetName || "veryfast", "-crf", q];
-  }
 }
 
 /**

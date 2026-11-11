@@ -8,6 +8,8 @@
 
 import path from "node:path";
 
+import { videoEncoderArgs } from "../features/encoders.mjs";
+
 /**
  * @typedef {object} PlanColor
  * @property {string} [lut] Path to a .cube or .3dl LUT.
@@ -196,6 +198,10 @@ export function buildColorFilters(color) {
  * @param {number} [options.accuracy=15] vidstabdetect accuracy (1..15).
  * @param {number} [options.smoothing=10] vidstabtransform smoothing frames (0..1000).
  * @param {boolean} [options.zoom=true] Auto-zoom to hide stabilized borders.
+ * @param {string} [options.encoder="libx264"] Encoder for the transform pass.
+ * @param {string} [options.preset="veryfast"] Encoder preset.
+ * @param {number} [options.crf=20] Encoder quality.
+ * @param {number} [options.filterThreads] `-filter_threads` value.
  * @returns {{ transformsFile: string, output: string, detect: string[], transform: string[], detectArgs: string[], transformArgs: string[] }}
  */
 export function buildStabilizePasses({
@@ -206,6 +212,10 @@ export function buildStabilizePasses({
   accuracy = 15,
   smoothing = 10,
   zoom = true,
+  encoder = "libx264",
+  preset = "veryfast",
+  crf = 20,
+  filterThreads,
 } = {}) {
   if (typeof input !== "string" || !input.trim()) {
     throw new TypeError("buildStabilizePasses: input path is required");
@@ -231,8 +241,15 @@ export function buildStabilizePasses({
     `vidstabtransform=input=${transforms}:smoothing=${smooth}:` +
     `optzoom=${autoZoom}:zoomspeed=0.25:interpol=bicubic`;
 
+  const threads = Number(filterThreads);
+  const threadArgs =
+    Number.isFinite(threads) && threads > 0
+      ? ["-filter_threads", String(Math.min(64, Math.trunc(threads)))]
+      : [];
+
   const detect = [
     "-y",
+    ...threadArgs,
     "-i", input,
     "-vf", detectFilter,
     "-an",
@@ -242,13 +259,12 @@ export function buildStabilizePasses({
 
   const transform = [
     "-y",
+    ...threadArgs,
     "-i", input,
     "-vf", transformFilter,
     "-map", "0:v:0",
     "-map", "0:a:0?",
-    "-c:v", "libx264",
-    "-preset", "medium",
-    "-crf", "18",
+    ...videoEncoderArgs({ encoder, crf, preset }),
     "-pix_fmt", "yuv420p",
     "-c:a", "copy",
     outputPath,
@@ -267,17 +283,37 @@ export function buildStabilizePasses({
 /**
  * Build complete FFmpeg arguments for a color-graded video.
  *
- * The video is re-encoded with libx264; audio is copied. Stabilization is a
- * separate two-pass flow, so `color.stabilize` is intentionally ignored here.
- * With no active filters the call falls back to stream copy.
+ * The video is re-encoded; audio is copied. Stabilization is a separate
+ * two-pass flow, so `color.stabilize` is intentionally ignored here.
+ * With no active filters and no scale, the call falls back to stream copy.
+ *
+ * The defaults target an intermediate: the build re-encodes the result, so
+ * `veryfast`/CRF 20 is the fast path. Pass `quality: "final"` (or explicit
+ * `preset`/`crf`) when the output is a master.
  *
  * @param {object} options
  * @param {string} options.input Source video path.
  * @param {string} options.output Destination path.
  * @param {object} [options.color] `plan.color` object.
+ * @param {"fast"|"final"} [options.quality="fast"] Intermediate or master quality.
+ * @param {string} [options.preset] x264/encoder preset (overrides quality).
+ * @param {number} [options.crf] Quality value (overrides quality).
+ * @param {string} [options.encoder="libx264"] Any encoder `videoEncoderArgs` knows.
+ * @param {string} [options.scale] Optional `W:H` scale filter (e.g. `1920:1080`).
+ * @param {number} [options.filterThreads] `-filter_threads` value.
  * @returns {string[]} FFmpeg args, without the executable name.
  */
-export function colorArgs({ input, output, color } = {}) {
+export function colorArgs({
+  input,
+  output,
+  color,
+  quality = "fast",
+  preset,
+  crf,
+  encoder = "libx264",
+  scale,
+  filterThreads,
+} = {}) {
   if (typeof input !== "string" || !input.trim()) {
     throw new TypeError("colorArgs: input path is required");
   }
@@ -286,20 +322,41 @@ export function colorArgs({ input, output, color } = {}) {
   }
 
   const filters = buildColorFilters(color);
+  const size = typeof scale === "string" ? scale.trim() : "";
+  if (size && !/^-?\d{1,5}:-?\d{1,5}$/.test(size)) {
+    throw new RangeError(`colorArgs: scale must be W:H with digits, got "${size}"`);
+  }
+  if (size) filters.push(`scale=${size}`);
 
   if (!filters.length) {
     return ["-y", "-i", input, "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", output];
   }
 
+  const final = String(quality).toLowerCase() === "final";
+  const speed = preset === undefined || preset === null || preset === ""
+    ? final
+      ? "medium"
+      : "veryfast"
+    : String(preset);
+  const value = crf === undefined || crf === null || crf === "" ? (final ? 18 : 20) : Number(crf);
+  if (!Number.isFinite(value) || value < 0 || value > 63) {
+    throw new RangeError("colorArgs: crf must be between 0 and 63");
+  }
+
+  const threads = Number(filterThreads);
+  const threadArgs =
+    Number.isFinite(threads) && threads > 0
+      ? ["-filter_threads", String(Math.min(64, Math.trunc(threads)))]
+      : [];
+
   return [
     "-y",
+    ...threadArgs,
     "-i", input,
     "-vf", filters.join(","),
     "-map", "0:v:0",
     "-map", "0:a:0?",
-    "-c:v", "libx264",
-    "-preset", "medium",
-    "-crf", "18",
+    ...videoEncoderArgs({ encoder, crf: value, preset: speed }),
     "-pix_fmt", "yuv420p",
     "-c:a", "copy",
     output,
