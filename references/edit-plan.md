@@ -363,7 +363,7 @@ Covered cuts (a b-roll or transition overlaps the join) are not punched. `plan -
 |---|---|---|
 | `music` | Music bed, ducking, gain, license | `features/audio.md` |
 | `sfx` | Sound effects at timeline positions | `features/audio.md` |
-| `color` | LUT, EQ, temperature, denoise, stabilize | `features/color.md` |
+| `color` | LUT, EQ, temperature, denoise, stabilize — applied by the build with the cuts | `features/color.md` |
 | `multicam` | Camera list and camera cuts | `features/multicam.md` |
 | `zoom` / `transition` | Scale moves and overlay transitions | `features/motion.md` |
 | `chart` on `grafico`/`lista` | Bar, line, or pie data visualization | `features/charts.md` |

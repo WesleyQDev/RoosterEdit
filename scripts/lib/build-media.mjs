@@ -236,6 +236,7 @@ export function buildBaseMediaArgs({
   frameWidth = 0,
   frameHeight = 0,
   cutFade = 0,
+  videoFilters = [],
 } = {}) {
   if (typeof source !== "string" || !source.trim()) {
     throw new TypeError("buildBaseMediaArgs: source is required");
@@ -261,6 +262,12 @@ export function buildBaseMediaArgs({
   }
 
   const cutList = normalizeBaseKeeps(keeps, duration);
+  const filters = Array.isArray(videoFilters)
+    ? videoFilters.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  if (videoFilters !== undefined && !Array.isArray(videoFilters)) {
+    throw new TypeError("buildBaseMediaArgs: videoFilters must be an array");
+  }
   const norm = audio ? loudnormFilter(loudnorm) : null;
   const sourcePath = source.trim();
   const outPath = out.trim();
@@ -284,14 +291,24 @@ export function buildBaseMediaArgs({
     if (video) args.push("-map", "0:v:0");
     if (audio) args.push("-map", "0:a:0");
 
-    if (audio && norm) {
+    if (video && filters.length) {
+      args.push("-vf", filters.join(","));
+      args.push(...videoEncoderArgs({ encoder, crf: quality, preset: speedPreset }));
+      args.push("-pix_fmt", "yuv420p");
+      if (audio) {
+        if (norm) args.push("-af", norm);
+        else args.push("-c:a", "copy");
+      }
+    } else if (audio && norm) {
       if (video) args.push("-c:v", "copy");
       args.push("-af", norm);
-      args.push(...audioOutputArgs(outPath), "-ar", String(rate), "-ac", "2");
     } else {
       args.push("-c", "copy");
     }
 
+    if (audio && norm) {
+      args.push(...audioOutputArgs(outPath), "-ar", String(rate), "-ac", "2");
+    }
     args.push(outPath);
     return args;
   }
@@ -312,6 +329,7 @@ export function buildBaseMediaArgs({
           `,scale=trunc(iw*${punchFactor}/2)*2:trunc(ih*${punchFactor}/2)*2` +
           `,crop=${cropWidth}:${cropHeight}`;
       }
+      if (filters.length) videoChain += `,${filters.join(",")}`;
       if (anyPunch) videoChain += `,setsar=1`;
       videoChain += `,setpts=PTS-STARTPTS[bv${index}]`;
       chains.push(videoChain);

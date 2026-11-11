@@ -336,7 +336,7 @@ node "<skill>/scripts/rooster.mjs" build en-tech/video-x --engine hyperframes
 node "<skill>/scripts/rooster.mjs" build en-tech/video-x --sample 3
 ```
 
-`build` reads `edit/plan.json`, applies the cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, and writes a working engine project. Run `plan <slug> --check` first: it reports the warnings that would make the build refuse the plan.
+`build` reads `edit/plan.json`, applies the cuts and `plan.color` in one FFmpeg pass, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, and writes a working engine project. Run `plan <slug> --check` first: it reports the warnings that would make the build refuse the plan.
 
 Run the build through `engineer`. It owns the generated code, the logs in `work/logs/`, and the fixes, and returns status, artifact paths, and any blocker; if a fix changes the story, it returns `needs-decision` instead of editing the plan. Build `--sample 3` first so the user approves motion, type, and density before the whole video, then rebuild with `--force`.
 

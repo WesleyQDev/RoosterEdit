@@ -28,7 +28,8 @@ Every layer starts with the current `Step X/8` marker. If a choice would change 
 - Wired into `build`: music/SFX ducking, TTS voiceover from `edit/voiceover.json`, zoom/transitions (HyperFrames/Remotion), charts, structured templates (`chapter`, `diagram`, `counter`, `list`, `emphasis`, `callout`, `terminal`, `end-card`), custom HTML/CSS/GSAP elements, PIP/split b-roll, and cut smoothing (audio micro-fade + punch-in).
 - Structured templates are fully rendered in HyperFrames (including the FilmCraft element path). Remotion uses the card/text fallback with the template's data, not the animated layout; use HyperFrames when the motion design is the point.
 - CLI layer: captions (including burn-in), delivery, reframe, b-roll, color (including two-pass stabilization), multicam (including speed/J-L and camera concat), plan quality review.
-- Still manual: final color pass into the build (`color --update-plan` first), multicam into the build (`multicam --render --update-plan` first), and provider approval for TTS generation.
+- Applied by the build: color grading joins the cut pass, so it covers only the keeps; run `color` only for a standalone master or stabilization.
+- Still manual: multicam into the build (`multicam --render --update-plan` first), and provider approval for TTS generation.
 
 ## CLI commands
 

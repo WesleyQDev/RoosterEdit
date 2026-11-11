@@ -106,7 +106,13 @@ Run both passes on the same input and dimensions. If the clip is trimmed or resi
 
 ## FFmpeg integration
 
-`colorArgs({ input, output, color })` returns complete arguments for a graded encode. It does not resolve paths; pass paths valid from the FFmpeg `cwd`. LUT and transforms paths are escaped for Windows drive letters.
+`colorArgs({ input, output, color, ... })` returns complete arguments for a graded encode. It does not resolve paths; pass paths valid from the FFmpeg `cwd`. LUT and transforms paths are escaped for Windows drive letters.
+
+The build applies `plan.color` while cutting: the filters join the `trim`/`concat` chain, so they run once, only on the keeps, and the graded result is the base media. That is the default path; do not grade the whole source before building.
+
+`color` remains for two cases: stabilization, which needs continuous motion and a two-pass vidstab flow over the full source, and a standalone graded master (`--out`). After a `color --update-plan` pass the plan's `color` block is cleared, because the new source already carries it and the build would apply it twice.
+
+`colorArgs` accepts `quality`, `preset`, `crf`, `encoder`, `scale`, and `filterThreads`, so a standalone pass uses the same fast intermediate defaults and the same hardware mapping as the build.
 
 ```js
 import { spawnSync } from "node:child_process";
@@ -145,7 +151,7 @@ node "<skill>/scripts/rooster.mjs" color <slug> [--input <path>] [--out <path>] 
   [--update-plan] [--skip-stabilize]
 ```
 
-The command writes `assets/generated/graded.mp4`; `--update-plan` points `plan.source` at the graded file before build. When `plan.color.stabilize` is true, the command runs the two vidstab passes automatically unless `--skip-stabilize` is passed.
+The command writes `assets/generated/graded.mp4`; `--update-plan` points `plan.source` at the graded file and clears `plan.color` (the new source already carries the grade). Use it for a standalone master or after stabilization. When `plan.color.stabilize` is true, the command runs the two vidstab passes automatically unless `--skip-stabilize` is passed. For a normal edit, skip this command: the build applies `plan.color` while cutting.
 
 ## Cost and speed
 
@@ -178,7 +184,7 @@ Grading is a full re-encode. A 17-minute 1080p source takes about as long as its
 - This is a lightweight grade, not a color-managed pipeline. There is no HDR, log conversion, gamut mapping, or per-shot matching.
 - `eq` and `colorbalance` are approximations; a LUT or a dedicated grade is better for precise looks.
 - Stabilization needs two passes, a writable work directory, and an FFmpeg build with the `vidstab` filters. It cannot fix rolling shutter, motion blur, or a shot with no stable frame.
-- `colorArgs` ignores `color.stabilize`; the `color` command runs `buildStabilizePasses` before the grade, or use `--skip-stabilize`.
+- `colorArgs` ignores `color.stabilize`; the `color` command runs `buildStabilizePasses` before the grade, or use `--skip-stabilize`. The build warns and skips stabilization; run `color` once for it.
 - `colorArgs` copies the audio stream. An incompatible audio codec/container combination will fail.
 - Plan validation checks that a declared LUT exists and warns when `stabilize` needs the two-pass flow; it does not validate every numeric range.
-- `build` does not call `colorArgs` or `buildStabilizePasses` yet; run the `color` command with `--update-plan` before building.
+- The build applies `plan.color` with the cuts. A separate `color` pass is optional; after `--update-plan` the `color` block is cleared to avoid applying the grade twice.

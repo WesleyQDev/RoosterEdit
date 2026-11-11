@@ -19,7 +19,7 @@ import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
 import { reframeArgs, targetDimensions } from "./features/reframe.mjs";
 import { rankBroll, suggestBrollElements } from "./features/broll.mjs";
 import { mixAudioArgs } from "./features/audio.mjs";
-import { colorArgs, buildStabilizePasses } from "./features/color.mjs";
+import { buildColorFilters, buildStabilizePasses, colorArgs } from "./features/color.mjs";
 import { hyperframesTransition, hyperframesZoom, remotionZoomValues, remotionTransitionValues } from "./features/motion.mjs";
 import { renderChartSvg, validateChart, chartSummary } from "./features/charts.mjs";
 import { splitScript, detectTtsProviders, buildTtsArgs, buildVoiceoverPlan } from "./features/tts.mjs";
@@ -5017,6 +5017,12 @@ async function colorCommand(args) {
 
   const color = plan.color && typeof plan.color === "object" ? plan.color : {};
   if (!Object.keys(color).length) fail("No plan.color settings to apply.");
+  if (Array.isArray(plan.cuts) && plan.cuts.length && !args.input) {
+    console.warn(
+      "  ! plan.cuts is set: this pass grades the full source, including footage the build discards. " +
+        "The build applies plan.color on the keeps; use --input <cut file> only when you need a separate master."
+    );
+  }
 
   const quality = String(args.quality || "fast").toLowerCase();
   if (!["fast", "final"].includes(quality)) fail(`Unknown --quality "${quality}". Use fast or final.`);
@@ -5093,8 +5099,9 @@ async function colorCommand(args) {
   );
   if (args["update-plan"]) {
     const relative = path.relative(project.dir, output).replace(/\\/g, "/");
-    writeJson(planPath, { ...plan, source: relative });
+    writeJson(planPath, { ...plan, source: relative, color: {} });
     console.log(`  plan.source updated to ${relative}`);
+    console.log("  plan.color cleared: the graded source already carries it, and the build would apply it twice.");
   }
 }
 
@@ -5877,6 +5884,13 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
   const targetExt = hasVideo ? ".mp4" : ".m4a";
   const target = path.join(assetsDir, `base${targetExt}`);
   const cutKeeps = args["no-cuts"] ? [] : keeps;
+  const colorFilters = plan.color && typeof plan.color === "object" ? buildColorFilters(plan.color) : [];
+  if (plan.color?.stabilize) {
+    console.warn(
+      "  ! plan.color.stabilize is not applied by the build: stabilization needs continuous motion. " +
+        "Run `color <slug>` once, then remove `color.stabilize` from the plan; the build applies the remaining grade with the cuts."
+    );
+  }
   const smoothing = cutSmoothing(plan, {
     punchScale: Number(args["cut-punch"]) || 1.035,
     fade: args["cut-fade"] === undefined ? 0.035 : Number(args["cut-fade"]),
@@ -5897,6 +5911,7 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
     frameWidth: Number(probe.width) || 0,
     frameHeight: Number(probe.height) || 0,
     cutFade: cutKeeps.length ? smoothing.fade : 0,
+    videoFilters: colorFilters,
   });
 
   const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
@@ -5945,6 +5960,7 @@ function planMediaKey(project, plan, keeps, args) {
     punchKeeps: smoothing.punchKeeps,
     punchScale: smoothing.punchScale,
     cutFade: smoothing.fade,
+    color: plan.color && typeof plan.color === "object" ? plan.color : null,
     toolVersion: VERSION,
   });
 

@@ -25,8 +25,7 @@ function inputsOf(args) {
   return inputs;
 }
 
-function count(text, needle) {
-  return text.split(needle).length - 1;
+function count(text, needle) {  return text.split(needle).length - 1;
 }
 
 function tempRoot() {
@@ -502,4 +501,58 @@ test("engine cache helpers tolerate missing directories and reject nested cache 
   } finally {
     project.cleanup();
   }
+});
+
+test("buildBaseMediaArgs applies color filters to every keep", () => {
+  const args = buildBaseMediaArgs({
+    source: "in.mp4",
+    out: "out.mp4",
+    hasVideo: true,
+    hasAudio: true,
+    keeps: [
+      { start: 1, end: 2 },
+      { start: 3, end: 4 },
+    ],
+    duration: 5,
+    videoFilters: ["eq=contrast=1.1", "scale=1280:-2"],
+  });
+  const graph = filterOf(args);
+  assert.match(graph, /\[0:v\]trim=start=1:end=2,eq=contrast=1\.1,scale=1280:-2,setpts=PTS-STARTPTS\[bv0\]/);
+  assert.match(graph, /\[0:v\]trim=start=3:end=4,eq=contrast=1\.1,scale=1280:-2,setpts=PTS-STARTPTS\[bv1\]/);
+  assert.match(graph, /concat=n=2/);
+});
+
+test("buildBaseMediaArgs re-encodes an uncut source when filters are present", () => {
+  const args = buildBaseMediaArgs({
+    source: "in.mp4",
+    out: "out.mp4",
+    hasVideo: true,
+    hasAudio: true,
+    keeps: [],
+    videoFilters: ["eq=contrast=1.1"],
+    encoder: "h264_amf",
+    crf: 22,
+    preset: "speed",
+  });
+  assert.equal(args[args.indexOf("-vf") + 1], "eq=contrast=1.1");
+  assert.deepEqual(args.slice(args.indexOf("-c:v"), args.indexOf("-c:v") + 2), ["-c:v", "h264_amf"]);
+  assert.equal(args[args.indexOf("-quality") + 1], "speed");
+  assert.equal(args[args.indexOf("-qp_i") + 1], "22");
+  const copyIndex = args.indexOf("copy");
+  assert.equal(copyIndex === -1 || args[copyIndex - 1] !== "-c", true);
+});
+
+test("buildBaseMediaArgs validates videoFilters", () => {
+  assert.throws(
+    () =>
+      buildBaseMediaArgs({
+        source: "in.mp4",
+        out: "out.mp4",
+        hasVideo: true,
+        hasAudio: true,
+        keeps: [],
+        videoFilters: "eq=contrast=1.1",
+      }),
+    /videoFilters must be an array/
+  );
 });

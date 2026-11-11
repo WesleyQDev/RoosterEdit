@@ -163,6 +163,7 @@ export function cutKey({
   punchKeeps = [],
   punchScale = 1.035,
   cutFade = 0,
+  color = null,
   toolVersion = "",
 } = {}) {
   if (sourceKey === undefined || sourceKey === null || sourceKey === "") {
@@ -196,6 +197,7 @@ export function cutKey({
       punch,
       punchScale: Number(punchScale) || 1.035,
       cutFade: Math.max(0, Number(cutFade) || 0),
+      color: color && typeof color === "object" ? color : null,
       toolVersion: String(toolVersion || ""),
     },
   ]);
