@@ -67,7 +67,7 @@
 - [ ] Skill description optimization.
 - [x] Translate README, `AGENTS.md`, `docs/`, and `templates/` to English.
 - [ ] Translate generated HTML previews and remaining CLI strings to English.
-- [ ] Re-render the demo with English narration and text.
+- [x] Re-render the demo with English narration and text.
 - [ ] Packaging.
 
 ## Out of scope for v1

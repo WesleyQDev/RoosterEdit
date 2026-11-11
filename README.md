@@ -35,7 +35,7 @@ The plan is a file, the project stays editable, and the renderer is a choice, no
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-16x9.mp4">
-    <img src="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat that becomes the documentary A Cidade às 5h" width="76%" />
+    <img src="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat that becomes the documentary The City at 5 AM" width="76%" />
   </a>
   &nbsp;
   <a href="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-9x16.mp4">
@@ -50,7 +50,7 @@ The plan is a file, the project stays editable, and the renderer is a choice, no
 </p>
 
 <p align="center">
-  <sub>Photos: Unsplash (CC0), via Wikimedia Commons. Music synthesized for this demo. Demo voiceover is in Portuguese; an English cut is being produced.</sub>
+  <sub>Photos: Unsplash (CC0), via Wikimedia Commons. Music synthesized for this demo.</sub>
 </p>
 
 ## What RoosterEdit does

@@ -35,7 +35,7 @@ O plano é um arquivo, o projeto continua editável e o renderizador é uma esco
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-16x9.mp4">
-    <img src="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat que vira o documental A Cidade às 5h" width="76%" />
+    <img src="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat que vira o documental The City at 5 AM" width="76%" />
   </a>
   &nbsp;
   <a href="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/previews/rooster-city-5am-9x16.mp4">
