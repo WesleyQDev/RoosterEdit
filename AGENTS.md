@@ -205,4 +205,20 @@ node scripts/rooster.mjs --help
 node scripts/rooster.mjs doctor --json
 ```
 
+## 16. Releases
+
+Keep npm and GitHub in sync. A version is not released until the npm package and the GitHub release exist for the same tag.
+
+1. Bump the version in `package.json`, `package-lock.json`, `SKILL.md`, and `scripts/rooster.mjs`.
+2. Update hard-coded version assertions in `scripts/test/`.
+3. Run `npm run validate` and `npm test`.
+4. Commit `chore: release X.Y.Z`.
+5. Create and push the annotated tag: `git tag -a vX.Y.Z -m "RoosterEdit vX.Y.Z"` and `git push origin vX.Y.Z`.
+6. Publish to npm. With a stage-only token, run `npm stage publish` and approve the staged version on npmjs.com.
+7. Verify `npm view rooster-edit version` and `npx rooster-edit@latest version`.
+8. Create the GitHub release from the tag after npm is live, with the install command and highlights.
+9. Verify the release page and the npm page.
+
+Do not create the GitHub release before the npm version is live.
+
 If something is unclear, ask before inventing a new convention.
