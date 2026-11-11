@@ -26,3 +26,6 @@ coverage/
 Thumbs.db
 
 __pycache__/
+
+# README previews are intentional docs assets, not render leftovers.
+!docs/assets/previews/*.mp4

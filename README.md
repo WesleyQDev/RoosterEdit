@@ -28,8 +28,30 @@ RoosterEdit é uma skill que ensina agentes de IA a trabalhar com vídeo. Ela ju
 
 Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e gráficos, monta cenas em 3D e produz conteúdo para redes sociais. Você escolhe o formato, o estilo e a ferramenta de render, HyperFrames ou Remotion. O agente cuida do projeto do começo ao fim.
 
+## Prévias geradas pelo RoosterEdit
+
+Um showcase de 40 s feito com o próprio pipeline: o cursor entra no chat, digita “Edite o meu vídeo”, o agente monta o plano, o preview cresce e vira o documental **A cidade às 5h**. O documental começa em 00:12.
+
 <p align="center">
-  <img src="docs/assets/opencode-demo.gif" alt="Demonstração da skill RoosterEdit no chat" width="860" />
+  <a href="docs/assets/previews/rooster-city-5am-16x9.mp4">
+    <img src="docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat que vira o documental A cidade às 5h" height="360" />
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="docs/assets/previews/rooster-city-5am-9x16.mp4">
+    <img src="docs/assets/previews/rooster-city-5am-9x16.webp" alt="Corte vertical do documental A cidade às 5h" height="360" />
+  </a>
+  <br />
+  <sub><strong>16:9</strong> · 40 s · chat → documental com parallax</sub>
+  &nbsp;&nbsp;&nbsp;
+  <sub><strong>9:16</strong> · 28 s · corte vertical do documental</sub>
+</p>
+
+<p align="center">
+  <sub>Prévias geradas com <strong>DeepSeek V4.1 Flash 1017 (No High)</strong> — a prova de que não é preciso um modelo caro para começar a editar vídeos.</sub>
+</p>
+
+<p align="center">
+  <sub>Fotos: Unsplash (CC0), via Wikimedia Commons. Trilha sintetizada para esta demo, sem samples de terceiros.</sub>
 </p>
 
 ## O que já funciona
@@ -43,10 +65,49 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 - Listar todos os textos em tela e avisar sobre cortes no meio de palavras.
 - Exportar EDL/FCPXML para finalizar no DaVinci Resolve ou Premiere.
 - Montar uma timeline editável no FilmCraft (opcional), com clipes de elemento separados.
-+- Gerar um rascunho de issue de feedback com dados sensíveis removidos quando algo falha no caminho.
+- Gerar um rascunho de issue de feedback com dados sensíveis removidos quando algo falha no caminho.
 - Baixar links autorizados com `yt-dlp`.
 - Usar perfis prontos ou criar os seus.
 - Revisar no preview e renderizar o arquivo final.
+
+## Por que RoosterEdit, e não Remotion ou HyperFrames puro?
+
+Remotion e HyperFrames são **motores de render**: você escreve o código/HTML/React e eles desenham os frames. O RoosterEdit é a **camada de direção e produção** em volta deles. Ele decide o que fazer, organiza o material, escreve o plano, conduz os cortes e a revisão e só então aciona o motor escolhido.
+
+Use o motor puro quando você já sabe exatamente qual componente ou frame quer escrever. Use o RoosterEdit quando o trabalho começa antes do código: tem footage, transcrição, b-roll, música, aprovação, mais de um formato e a necessidade de entregar um projeto que continua organizado.
+
+| | Remotion/HyperFrames puro | RoosterEdit |
+|---|---|---|
+| Ponto de partida | código, HTML ou React | brief, footage, transcrição e assets |
+| Decisão do corte | você | plano revisável + gates de aprovação |
+| Trabalho operacional | manual | transcrição, silêncio, b-roll, legendas e QA |
+| Assets e licenças | sua responsabilidade | organiza, separa e registra a origem |
+| Entrega | você renderiza e empacota | preview, QA, render, thumbnail, metadata e EDL/FCPXML |
+| Reuso | componentes | canal, perfil, componentes e workspace |
+| Motor | fixo no projeto | escolhe HyperFrames ou Remotion; FilmCraft opcional |
+
+O RoosterEdit não substitui os motores: ele os dirige. O plano continua sendo a fonte de verdade; o motor é a camada que desenha os frames.
+
+- **Ambiente:** confere Node, FFmpeg, browser, engines, TTS e `yt-dlp`, e pede permissão antes de instalar qualquer coisa.
+- **Workspace:** cria canais, projetos, assets, biblioteca, cache, logs e renders no lugar certo, sem espalhar arquivos pela raiz.
+- **Proveniência:** separa material bruto, gerado e licenciado, registra origem e licença e nunca sobrescreve o original.
+
+```text
+rooster/
+├── channels/<canal>/
+│   ├── projects/<vídeo>/
+│   │   ├── assets/{source,generated,licensed}/
+│   │   ├── edit/{plan.json,transcript.json,timeline.json}
+│   │   ├── engine/{hyperframes,remotion}/
+│   │   ├── preview/
+│   │   ├── qa/
+│   │   └── renders/
+│   ├── profiles/
+│   └── library/
+└── cache/
+```
+
+O resultado não é só um MP4: é um estúdio que continua arrumado depois que o vídeo fica pronto.
 
 ## Como funciona
 
@@ -80,6 +141,12 @@ As etapas pesadas podem rodar em subagents para economizar contexto, mas o fluxo
 ## Instalação
 
 A instalação é feita pelo seu agente. Ele pergunta se você quer instalar localmente no projeto (recomendado) ou globalmente, usando a pasta de skills que o seu harness lê, clona a skill, confere Node, FFmpeg e o browser, responde em poucas linhas e pergunta se você quer criar o primeiro canal.
+
+<p align="center">
+  <img src="docs/assets/opencode-demo.gif" alt="O agente instala a skill e valida o ambiente no chat" width="760" />
+  <br />
+  <sub>O agente instala, valida o ambiente e configura o workspace sem você usar o terminal.</sub>
+</p>
 
 Você não precisa rodar comandos no terminal: o agente executa e mostra o resultado. Se quiser o prompt único de instalação + dependências + workspace, use [`templates/install-prompt.pt-BR.md`](templates/install-prompt.pt-BR.md). Custos esperados estão em [`docs/COSTS.md`](docs/COSTS.md).
 
