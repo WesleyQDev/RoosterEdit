@@ -13,7 +13,7 @@ Workspace → Channel → Project
 - **Profile** = visual identity. Shared or channel-specific.
 - **Project** = one video inside a channel. Inherits the channel and can override anything.
 
-A channel example: "Studio A" (pt-BR, 16:9, its own profile, TTS) and "Client B" (en, 1:1, minimal profile, user voice).
+A channel example: "Studio A" (en-US, 16:9, its own profile, TTS) and "Client B" (en, 1:1, minimal profile, user voice).
 
 There is no separate category concept. The channel's `content` field records what it produces, and each project defines its own structure in `brief.md`, `script.md`, and `edit/plan.json`.
 
@@ -38,9 +38,9 @@ A channel is not a YouTube channel. It is the folder that groups the videos of a
 
 Installation is not onboarding. After cloning and running `doctor`, report the result in at most about 8 lines and ask in one message:
 
-> "Quer criar o primeiro canal agora? Pensa nele como a pasta daquele projeto: dentro dela ficam os vídeos, o estilo e os arquivos da marca ou cliente. Se sim, me diga o nome do canal e o que ele vai produzir?"
+> "Do you want to create your first channel now? Think of it as the project folder: it holds the videos, the style, and the brand or client files. If yes, tell me the channel name and what it will produce?"
 
-Do not ask "Quer configurar o workspace agora?". The workspace is an implementation detail; the channel is the decision, and the folder explanation above is part of the question.
+Do not ask "Do you want to configure the workspace now?". The workspace is an implementation detail; the channel is the decision, and the folder explanation above is part of the question.
 
 If the answer is no, stop. Do not create the workspace, a channel, or a project. If the answer is yes, follow the first-run batch below and keep the final summary short.
 
@@ -54,9 +54,9 @@ If the user says "just start" or "use the defaults", create the `default` channe
 
 The same message already asks for the two things the channel needs: **name** and **content**. Do not ask them again in a second turn. If the user gave only the content, propose a short kebab-case name and confirm it; if they gave only a name, ask what it produces.
 
-> "Qual o nome do canal e o que ele vai produzir?"
+> "What is the channel name, and what will it produce?"
 
-Do not seed the topic with examples such as "shorts de tecnologia", "entrevistas" or "promos de produto". The user owns the topic; the agent only infers production defaults from what they wrote.
+Do not seed the topic with examples such as "tech shorts", "interviews", or "product promos". The user owns the topic; the agent only infers production defaults from what they wrote.
 
 Use the answer and the conversation to infer the rest. A channel here is a production standard, not a YouTube channel.
 
@@ -78,7 +78,7 @@ Audio identity includes both music and SFX. If the style is ads, motion graphics
 
 Show one line and ask for confirmation:
 
-> "Vou criar `studio-a`: português, 16:9, visual minimal e voz TTS. Está bom ou quer ajustar algo?"
+> "I will create `studio-a`: English, 16:9, minimal look, and TTS voice. Does that look right, or do you want to adjust anything?"
 
 If the user confirms, run `init` and `channel new`. If they correct one item, apply it and confirm again. Do not ask the twelve fields.
 
@@ -88,9 +88,9 @@ Start with `guided` for the first one to three videos. When the style is stable 
 
 A channel is not ready until it has an identity. After creating the channel, ask three questions in one block — not twelve:
 
-1. **Palette:** "Tem cores de marca? Se não, descreva o clima visual."
-2. **Typography:** "Tem fonte ou estilo de tipografia em mente?"
-3. **Motion and audio:** "Como devem ser o motion, a música e os SFX?"
+1. **Palette:** "Do you have brand colors? If not, describe the visual mood."
+2. **Typography:** "Do you have a font or typography style in mind?"
+3. **Motion and audio:** "How should motion, music, and SFX feel?"
 
 Then create a channel-scoped profile:
 
@@ -119,7 +119,7 @@ Before the first plan, run `styleproof <slug>` and approve the three frames. The
 
 A channel does not define how many seconds a video has, and a project does not get a default duration. Trimming silence, removing filler, and cutting dead air change the length; the final duration is whatever the edit produces.
 
-`--duration` exists only for a target the user **explicitly declares**, for example "quero exatamente 30 segundos" or "preciso de 15s para o anúncio". When creating a project, do not ask for a target by default. If the user volunteers one, pass it; otherwise omit the flag and let the plan and the media define the length.
+`--duration` exists only for a target the user **explicitly declares**, for example "I want exactly 30 seconds" or "I need 15s for the ad". When creating a project, do not ask for a target by default. If the user volunteers one, pass it; otherwise omit the flag and let the plan and the media define the length.
 
 ## Advanced setup (only if requested)
 
@@ -139,7 +139,7 @@ node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" channel new studio-a \
   --name "Studio A" \
   --content "<the user's sentence>" \
-  --language pt-BR \
+  --language en-US \
   --format 16:9 \
   --profile minimal \
   --source generated \
@@ -245,7 +245,7 @@ The project can override any channel default. The channel is the stable context;
 
 ## Summary to show
 
-> Canal `studio-a` criado, com perfil próprio `studio-a`. Padrão: pt-BR, 16:9, assets mixed, engine auto, autonomia guided, voz TTS. Os projetos herdam isso e podem sobrescrever; a duração vem da edição, não de um default. Quer criar o primeiro vídeo?
+> Channel `studio-a` created, with its own profile `studio-a`. Defaults: en-US, 16:9, assets mixed, engine auto, autonomy guided, TTS voice. Projects inherit these and can override them; duration comes from the edit, not from a default. Do you want to create the first video?
 
 ## What not to do
 

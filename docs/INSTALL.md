@@ -1,142 +1,143 @@
-# Instalação
+# Install
 
-O repositório inteiro é a skill. Não há build step: basta clonar/copiar para uma pasta de skills que o agente já descubra.
+RoosterEdit is a skill: the whole repository is the payload, with no build step. The recommended install is npm, which copies the skill into the folder your agent already reads.
 
-Você não precisa rodar os comandos manualmente; o agente executa e mostra o resultado. Se quiser um prompt único de instalação + dependências + workspace, use [`templates/install-prompt.pt-BR.md`](../templates/install-prompt.pt-BR.md). Custos esperados estão em [`docs/COSTS.md`](COSTS.md).
+## Requirements
 
-## Requisitos
+- Node.js 22+ (22 or 24 recommended)
+- FFmpeg and FFprobe
+- A browser (for the HyperFrames and Remotion preview/render)
+- Optional: Whisper, `yt-dlp`, a GPU
 
-- Node.js 20+ (recomendado 22/24)
-- FFmpeg e FFprobe
-- Um browser (para preview/render do HyperFrames e Remotion)
-- Opcional: Whisper local, `yt-dlp`, GPU
-
-O `doctor` verifica tudo:
+`doctor` checks all of it:
 
 ```bash
-node scripts/rooster.mjs doctor --json
+npx rooster-edit@latest doctor
 ```
 
-## Local ou global?
+## Install with npx
 
-A instalação **local é a recomendada**: a skill fica na pasta de skills do projeto que o seu harness lê, por exemplo `.opencode/skills/rooster-edit`, `.claude/skills/rooster-edit` ou `.agents/skills/rooster-edit`. A **global** fica na pasta global do harness, por exemplo `~/.config/opencode/skills/rooster-edit` ou `~/.claude/skills/rooster-edit`, e vale para todos os projetos da máquina.
-
-O prompt de instalação pergunta qual você prefere antes de clonar. Use a global só se quiser a skill disponível em todos os projetos.
-
-## Com um agente
-
-Se você quer que o agente instale e valide tudo, o prompt pronto está no [README](../README.md). Ele pergunta primeiro se a instalação deve ser local (recomendada) ou global. As seções abaixo cobrem a instalação manual.
-
-## OpenCode — projeto local (recomendado)
-
-Na raiz do projeto de vídeo:
+Run this in the project where you will make videos:
 
 ```bash
-git clone https://github.com/WesleyQDev/RoosterEdit.git .opencode/skills/rooster-edit
+npx rooster-edit@latest install
 ```
 
-Se a pasta já existir e você quiser atualizar:
+The command copies `SKILL.md`, `references/`, `scripts/`, `templates/`, `agents/`, and `docs/` into `.opencode/skills/rooster-edit` and prints the path. It does not create a workspace or a project.
+
+Other harnesses:
 
 ```bash
-cd .opencode/skills/rooster-edit
-git pull
+npx rooster-edit@latest install --harness claude   # .claude/skills/rooster-edit
+npx rooster-edit@latest install --harness agents   # .agents/skills/rooster-edit
 ```
 
-O OpenCode descobre automaticamente `.opencode/skills/rooster-edit/SKILL.md`.
-
-## OpenCode — global
+Global install, for every project on the machine:
 
 ```bash
-git clone https://github.com/WesleyQDev/RoosterEdit.git ~/.config/opencode/skills/rooster-edit
+npx rooster-edit@latest install --global
 ```
 
-No Windows, o caminho padrão é:
+| Harness | Local | Global |
+|---|---|---|
+| OpenCode | `.opencode/skills/rooster-edit` | `~/.config/opencode/skills/rooster-edit` |
+| Claude Code | `.claude/skills/rooster-edit` | `~/.claude/skills/rooster-edit` |
+| Agents / Codex | `.agents/skills/rooster-edit` | `~/.agents/skills/rooster-edit` |
 
-```powershell
-git clone https://github.com/WesleyQDev/RoosterEdit.git "$env:USERPROFILE\.config\opencode\skills\rooster-edit"
-```
-
-## Claude Code / Codex / compatibilidade
-
-Além de `.opencode/skills`, o OpenCode e outros agentes também leem `.claude/skills` e `.agents/skills`. Clone ou copie para um desses diretórios:
+Use `--dir <skills-folder>` when the harness reads a custom path. The folder `rooster-edit` is appended to it.
 
 ```bash
-git clone https://github.com/WesleyQDev/RoosterEdit.git .claude/skills/rooster-edit
-# ou
-git clone https://github.com/WesleyQDev/RoosterEdit.git .agents/skills/rooster-edit
+npx rooster-edit@latest install --dir ~/my-agent/skills
+npx rooster-edit@latest install --dry-run
+npx rooster-edit@latest install --json
 ```
 
-No Windows, se preferir não duplicar, crie um junction:
+The installer writes `.rooster-install.json` inside the skill folder. It refuses to overwrite a folder that does not contain that marker or a `SKILL.md`.
 
-```powershell
-New-Item -ItemType Junction -Path ".claude\skills\rooster-edit" -Target ".opencode\skills\rooster-edit"
+## Update and uninstall
+
+```bash
+npx rooster-edit@latest install --force
 ```
 
-## Verificar a instalação
+`--force` replaces the installed copy with the current package version. To uninstall, delete the `rooster-edit` folder; your `rooster/` workspace is separate and is not touched.
+
+## Verify
 
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs doctor --json
 ```
 
-Você deve ver Node, FFmpeg, FFprobe, HyperFrames CLI e o workspace (se existir).
+Or, without the local path:
 
-## Primeiro uso
+```bash
+npx rooster-edit doctor --json
+```
 
-Depois de instalar, o agente deve fechar com um resumo curto e perguntar se você quer criar o primeiro canal agora. A pergunta é simples: ele explica que o canal é como a pasta daquele projeto e pede o nome e o que ele vai produzir. Se você confirmar, ele infere o resto e mostra um resumo curto para ajustar.
+You should see Node, FFmpeg, FFprobe, the HyperFrames CLI, and the workspace if one exists.
 
-Depois de criar o canal, ele pergunta paleta, tipografia e motion/áudio e roda `channel design <id>` para gravar a identidade do canal.
+## First use
 
-Duração não é padrão do canal nem do projeto: a duração é o resultado da edição. A flag `--duration` só entra quando você declara um alvo explícito.
+Open the agent in the project and ask it to set up RoosterEdit. The agent installs nothing else without permission and ends with a short status.
 
-O guia está em [`docs/FIRST-RUN.md`](FIRST-RUN.md). O agente grava os defaults do canal e só cria um projeto quando você pedir. A pergunta inicial é “Qual o nome do canal e o que ele vai produzir?” — um padrão de produção local, não um canal no YouTube.
+Then create the first channel:
 
 ```bash
 node .opencode/skills/rooster-edit/scripts/rooster.mjs init
-node .opencode/skills/rooster-edit/scripts/rooster.mjs channel new meu-canal \
-  --language pt-BR \
+node .opencode/skills/rooster-edit/scripts/rooster.mjs channel new my-channel \
+  --language en-US \
   --format 16:9 \
   --profile minimal
-node .opencode/skills/rooster-edit/scripts/rooster.mjs channel design meu-canal \
+node .opencode/skills/rooster-edit/scripts/rooster.mjs channel design my-channel \
   --from minimal \
   --accent "#22d3ee" \
   --motion calm
-node .opencode/skills/rooster-edit/scripts/rooster.mjs channel list
 ```
 
-Crie o projeto dentro do canal e abra a pasta de origem:
+Create a project and open the source folder:
 
 ```bash
-node .opencode/skills/rooster-edit/scripts/rooster.mjs new meu-video --channel meu-canal
-node .opencode/skills/rooster-edit/scripts/rooster.mjs open meu-canal/meu-video
+node .opencode/skills/rooster-edit/scripts/rooster.mjs new my-video --channel my-channel
+node .opencode/skills/rooster-edit/scripts/rooster.mjs open my-channel/my-video
 ```
 
-Coloque o vídeo em `rooster/channels/meu-canal/projects/meu-video/assets/source/` e peça ao agente:
+Put the footage in `rooster/channels/my-channel/projects/my-video/assets/source/` and ask the agent:
 
-> Transcreva o vídeo, leia meu `style.md`, monte `edit/plan.json` e me mostre o plano antes de criar qualquer coisa.
+> Transcribe the video, read my `style.md`, write `edit/plan.json`, and show me the plan before building anything.
 
-Depois da aprovação:
+After approval:
 
 ```bash
-node .opencode/skills/rooster-edit/scripts/rooster.mjs build meu-canal/meu-video --engine hyperframes
+node .opencode/skills/rooster-edit/scripts/rooster.mjs build my-channel/my-video --engine hyperframes
 ```
 
-## Atualizar
+The full walkthrough is in [`FIRST-RUN.md`](FIRST-RUN.md).
+
+## Manual install (development)
+
+Clone the repository into a skills folder:
 
 ```bash
-cd .opencode/skills/rooster-edit
-git pull
+git clone https://github.com/WesleyQDev/RoosterEdit.git .opencode/skills/rooster-edit
 ```
 
-O OpenCode recarrega skills quando os arquivos mudam. Se não aparecer, use `/reload`.
+On Windows:
 
-## Problemas comuns
+```powershell
+git clone https://github.com/WesleyQDev/RoosterEdit.git "$env:USERPROFILE\.config\opencode\skills\rooster-edit"
+```
 
-| Problema | Solução |
+Update with `git pull` inside that folder. This path is for development; normal installs should use npm.
+
+## Troubleshooting
+
+| Problem | Fix |
 |---|---|
-| Skill não aparece | Confirme que o arquivo é `<pasta-de-skills>/rooster-edit/SKILL.md` (por exemplo, `.opencode/skills`, `.claude/skills` ou `.agents/skills`) e que a pasta não está vazia |
-| `node` não encontrado | Instale Node.js LTS e reabra o terminal |
-| `ffmpeg` não encontrado | Instale FFmpeg e adicione ao PATH |
-| HyperFrames lento na primeira execução | `npx hyperframes` baixa o pacote/Chrome na primeira vez; depois usa cache |
-| Remotion não renderiza | Rode `npm install` dentro de `engine/remotion` |
-| Transcrição em português falha | Instale whisper.cpp ou `openai-whisper`; o Parakeet cobre inglês |
-| YouTube bloqueia download | Use `--cookies-from-browser` ou baixe o arquivo manualmente, respeitando os direitos |
+| Skill does not appear | Confirm the file is `<skills-folder>/rooster-edit/SKILL.md` and the folder is not empty. Reload the agent. |
+| Install says the folder exists | Run with `--force` to update, or delete the old folder if it was not installed by RoosterEdit. |
+| `node` not found | Install Node.js 22+ and reopen the terminal. |
+| `ffmpeg` not found | Install FFmpeg and add it to `PATH`. |
+| HyperFrames is slow on first run | `npx hyperframes` downloads the package and Chrome once; later runs use the cache. |
+| Remotion does not render | Run `npm install` inside `engine/remotion`. |
+| Transcription fails in some languages | Install whisper.cpp or `openai-whisper`; Parakeet covers English. |
+| YouTube blocks a download | Use `--cookies-from-browser` or download the file manually, respecting the rights. |

@@ -2,10 +2,10 @@
   "schema": "rooster.plan/v1",
   "source": "assets/source/video.mp4",
   "style": "style.md",
-  "language": "pt-BR",
+  "language": "en-US",
   "duration": 612.4,
   "editMode": "cleanup",
-  "summary": "Entrevista sobre começar um negócio depois de perder o emprego.",
+  "summary": "Interview about starting a business after losing your job.",
   "music": {
     "src": "assets/licensed/music/theme.mp3",
     "gainDb": -18,
@@ -25,7 +25,7 @@
       "start": 41.0,
       "end": 46.5,
       "reason": "retake",
-      "note": "O próximo take é mais forte",
+      "note": "The next take is stronger",
       "confidence": 0.95
     }
   ],
@@ -38,8 +38,8 @@
       "template": "chapter",
       "start": 3.0,
       "end": 6.0,
-      "text": "A virada",
-      "description": "Card de capítulo com a promessa central do vídeo"
+      "text": "The turning point",
+      "description": "Chapter card with the video's central promise"
     },
     {
       "id": "el-002",
@@ -47,14 +47,14 @@
       "template": "diagram",
       "start": 32.0,
       "end": 38.0,
-      "text": "3 decisões",
-      "covers": "foram três decisões",
+      "text": "3 decisions",
+      "covers": "it was three decisions",
       "data": {
-        "kicker": "processo",
-        "nodes": ["pedir demissão", "testar o produto", "escalar"],
-        "caption": "uma decisão por vez"
+        "kicker": "process",
+        "nodes": ["quitting the job", "testing the product", "scaling"],
+        "caption": "one decision at a time"
       },
-      "description": "Diagrama de três nós, um por vez"
+      "description": "Three-node diagram, one at a time"
     },
     {
       "id": "el-003",
@@ -63,15 +63,15 @@
       "start": 40.0,
       "end": 45.0,
       "text": "140 s → 20 s",
-      "covers": "cento e quarenta segundos",
+      "covers": "one hundred and forty seconds",
       "data": {
-        "kicker": "tempo",
+        "kicker": "time",
         "rows": [
-          { "value": "140 s", "label": "primeira instalação" },
-          { "value": "20 s", "label": "aberturas seguintes" }
+          { "value": "140 s", "label": "first install" },
+          { "value": "20 s", "label": "later openings" }
         ]
       },
-      "description": "Comparação de tempo em dois números"
+      "description": "Time comparison in two numbers"
     },
     {
       "id": "el-004",
@@ -79,10 +79,10 @@
       "template": "emphasis",
       "start": 52.0,
       "end": 55.0,
-      "text": "não é um GPT",
-      "covers": "não é um GPT",
-      "data": { "strike": "GPT", "tag": "IA local" },
-      "description": "Risca GPT e destaca IA local"
+      "text": "it is not a GPT",
+      "covers": "it is not a GPT",
+      "data": { "strike": "GPT", "tag": "local AI" },
+      "description": "Strikes through GPT and highlights local AI"
     },
     {
       "id": "el-005",
@@ -91,10 +91,10 @@
       "start": 58.0,
       "end": 64.0,
       "src": "assets/source/broll-office.mp4",
-      "covers": "na fala sobre o primeiro cliente",
+      "covers": "on the line about the first client",
       "intent": "evidence",
       "sourceTime": 210.0,
-      "description": "B-roll de escritório em PIP, mantendo o rosto visível"
+      "description": "Office b-roll in PIP, keeping the face visible"
     },
     {
       "id": "el-006",
@@ -102,10 +102,10 @@
       "template": "custom",
       "start": 66.0,
       "end": 70.0,
-      "html": "<div class=\"glow\"><span></span><strong>novo</strong></div>",
+      "html": "<div class=\"glow\"><span></span><strong>new</strong></div>",
       "css": ".glow{position:absolute;inset:0;display:grid;place-items:center;color:#f5f3ff;font:800 56px Inter,sans-serif}.glow span{position:absolute;width:220px;height:220px;border:6px solid #8b5cf6;border-radius:50%}",
       "animation": "tl.fromTo(root.querySelector('span'), { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'back.out(1.7)' }, start + 0.1);",
-      "description": "Animação autoral inline; para reutilizar, salve como component"
+      "description": "Inline custom animation; save it as a component to reuse"
     },
     {
       "id": "el-007",
@@ -113,25 +113,25 @@
       "template": "parallax",
       "start": 72.0,
       "end": 78.0,
-      "text": "3,6 GB",
-      "covers": "os cinco rodam em 3,6 GB",
-      "description": "Cena em camadas: fundo, forma e número em parallax 2.5D",
+      "text": "3.6 GB",
+      "covers": "all five run in 3.6 GB",
+      "description": "Layered scene: background, shape, and number in 2.5D parallax",
       "data": {
-        "kicker": "o conjunto",
-        "sub": "sem placa de vídeo",
+        "kicker": "the whole set",
+        "sub": "without a graphics card",
         "layers": [
           { "shape": { "color": "var(--accent)" }, "depth": 0.15, "x": 4, "y": 8, "w": 42, "h": 42, "opacity": 0.14, "radius": 48 },
-          { "text": "3,6 GB", "depth": 0.9, "x": 58, "y": 16, "w": 34, "h": 26, "size": 120 }
+          { "text": "3.6 GB", "depth": 0.9, "x": 58, "y": 16, "w": 34, "h": 26, "size": 120 }
         ],
         "camera": { "x": 30, "y": -12, "zoom": 0.07 }
       }
     }
   ],
   "chapters": [
-    { "start": 0, "title": "Introdução" },
-    { "start": 45, "title": "O problema" }
+    { "start": 0, "title": "Introduction" },
+    { "start": 45, "title": "The problem" }
   ],
   "notes": [
-    "Manter o áudio original; sem música nos primeiros 5 segundos."
+    "Keep the original audio; no music in the first 5 seconds."
   ]
 }

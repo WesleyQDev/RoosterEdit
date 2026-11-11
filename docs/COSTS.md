@@ -1,47 +1,47 @@
-# Custos
+# Costs
 
-Vídeo com IA não é gratuito, mas dá para separar o que é obrigatório do que é opcional. Os valores mudam por país, plano e fornecedor; confira o preço atual antes de assinar.
+AI video is not free, but you can separate what is required from what is optional. Prices vary by country, plan, and vendor; check the current price before subscribing.
 
-## O que é obrigatório
+## What is required
 
-| Item | Custo | Observação |
+| Item | Cost | Note |
 |---|---|---|
-| Agente com acesso a arquivos e comandos | Assinatura ou API | Claude Pro, ChatGPT/Codex, Gemini ou outro. É o único custo realmente necessário para o fluxo. |
-| Node.js, FFmpeg, Python | Grátis | Ferramentas locais. |
-| Whisper ou faster-whisper | Grátis | Transcrição local; usa CPU/GPU e tempo. |
-| HyperFrames | Grátis e open source | Motor padrão para HTML/CSS/GSAP. |
-| Remotion | Grátis para indivíduos e times pequenos; licença para empresas maiores | Confira a licença atual antes de usar comercialmente. |
+| An agent with access to files and commands | Subscription or API | Claude Pro, ChatGPT/Codex, Gemini, or another. It is the only cost truly required for the flow. |
+| Node.js, FFmpeg, Python | Free | Local tools. |
+| Whisper or faster-whisper | Free | Local transcription; uses CPU/GPU and time. |
+| HyperFrames | Free and open source | Default engine for HTML/CSS/GSAP. |
+| Remotion | Free for individuals and small teams; license for larger companies | Check the current license before using it commercially. |
 
-## O que é opcional
+## What is optional
 
-| Item | Custo | Quando faz sentido |
+| Item | Cost | When it makes sense |
 |---|---|---|
-| DaVinci Resolve Studio | Pago, licença única | Handoff NLE com mais controle; a versão gratuita importa EDL/FCPXML manualmente. |
-| TTS pago (ElevenLabs, OpenAI etc.) | Por caractere/segundo | Voz de alta qualidade; Edge TTS e Piper são alternativas locais/gratuitas. |
-| Stock, música e fontes | Variável | Só com licença registrada; nunca use sem saber a origem. |
-| Render em nuvem | Por minuto/máquina | Vídeos longos ou 4K; o render local costuma bastar. |
-| GPU | Hardware | Acelera 3D e encodes; não é obrigatória para começar. |
+| DaVinci Resolve Studio | Paid, one-time license | NLE handoff with more control; the free version imports EDL/FCPXML manually. |
+| Paid TTS (ElevenLabs, OpenAI, etc.) | Per character/second | High-quality voice; Edge TTS and Piper are local/free alternatives. |
+| Stock, music, and fonts | Variable | Only with a recorded license; never use without knowing the source. |
+| Cloud render | Per minute/machine | Long or 4K videos; local render is usually enough. |
+| GPU | Hardware | Speeds up 3D and encodes; not required to start. |
 
-## Custos invisíveis
+## Invisible costs
 
-- Render repetido: cada draft consome tempo, disco e, em nuvem, dinheiro.
-- Retrabalho de estilo: refazer todos os elementos porque o look não foi aprovado antes.
-- Transcrição refeita: re-transcrever o mesmo arquivo sem necessidade.
-- Tokens de agente: logs, transcrições e código no contexto principal.
+- Repeated renders: every draft consumes time, disk, and, in the cloud, money.
+- Style rework: redoing every element because the look was not approved first.
+- Redone transcription: re-transcribing the same file with no need.
+- Agent tokens: logs, transcripts, and code in the main context.
 
-## Como gastar menos
+## How to spend less
 
-1. Aprove 3 frames de style proof antes do plano.
-2. Gere 3 elementos de amostra (`build --sample 3`) antes do build completo.
-3. Renderize um draft e revise; só depois o final.
-4. Use Whisper/faster-whisper local em vez de transcrição paga.
-5. Use `digest` em vez da transcrição inteira.
-6. Reuse perfis, TTS e projetos; não refaça o que não mudou.
-7. Delegue as etapas pesadas a subagents e leia só o handoff.
+1. Approve 3 style proof frames before the plan.
+2. Build 3 sample elements (`build --sample 3`) before the full build.
+3. Render a draft and review it; only then the final.
+4. Use local Whisper/faster-whisper instead of paid transcription.
+5. Use `digest` instead of the full transcript.
+6. Reuse profiles, TTS, and projects; do not redo what did not change.
+7. Delegate the heavy stages to subagents and read only the handoff.
 
-## Regra de ouro
+## Golden rule
 
-O RoosterEdit não chama API paga, provider de TTS ou render em nuvem sem permissão explícita. Se o custo for unavoidable, ele aparece no gate da etapa com uma estimativa antes de executar.
+RoosterEdit does not call a paid API, a TTS provider, or cloud render without explicit permission. If the cost is unavoidable, it appears at the step gate with an estimate before running.
 
-O RoosterEdit em si é MIT. O custo é das ferramentas e serviços que ele orquestra.
+RoosterEdit itself is MIT. The cost belongs to the tools and services it orchestrates.
 

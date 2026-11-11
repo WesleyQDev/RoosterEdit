@@ -1,74 +1,74 @@
 # Style guide
 
-> Template para `channels/<canal>/projects/<slug>/style.md`. O guia de estilo é a fonte de verdade visual e sonora do vídeo. Se houver um profile, ele complementa este arquivo.
+> Template for `channels/<channel>/projects/<slug>/style.md`. The style guide is the visual and sonic source of truth for the video. If a profile exists, it complements this file.
 
-## Objetivo e tom
+## Goal and tone
 
-- O que o vídeo deve fazer o espectador sentir?
-- Qual é o tom: editorial, técnico, casual, cinematográfico, divertido?
-- Referências visuais (links, frames, vídeos).
+- What should the video make the viewer feel?
+- What is the tone: editorial, technical, casual, cinematic, playful?
+- Visual references (links, frames, videos).
 
-## Paleta
+## Palette
 
-| Uso | Cor | Hex |
+| Use | Color | Hex |
 |---|---|---|
-| Fundo | | |
-| Texto principal | | |
-| Texto de apoio | | |
-| Acento 1 | | |
-| Acento 2 | | |
+| Background | | |
+| Primary text | | |
+| Support text | | |
+| Accent 1 | | |
+| Accent 2 | | |
 
-## Tipografia
+## Typography
 
-| Uso | Família | Peso | Tamanho |
+| Use | Family | Weight | Size |
 |---|---|---|---|
 | Display | | | |
-| Corpo | | | |
-| Legendas | | | |
-| Números/código | | | |
+| Body | | | |
+| Captions | | | |
+| Numbers/code | | | |
 
-## Movimento
+## Motion
 
-- Easing principal:
-- Duração das entradas:
-- Transições permitidas:
-- Movimento proibido:
+- Primary easing:
+- Entry duration:
+- Allowed transitions:
+- Forbidden motion:
 
-## Legendas
+## Captions
 
-- Estilo: queimada / sidecar
-- Fonte:
-- Tamanho:
-- Cor:
-- Stroke/caixa:
-- Posição:
-- Máximo de caracteres por linha:
+- Style: burned-in / sidecar
+- Font:
+- Size:
+- Color:
+- Stroke/box:
+- Position:
+- Maximum characters per line:
 
-## Áudio
+## Audio
 
-- Voz: usuário / TTS / sem voz
-- Música:
+- Voice: user / TTS / no voice
+- Music:
 - SFX:
-- Loudness alvo:
+- Target loudness:
 - Ducking:
 
-## Elementos recorrentes
+## Recurring elements
 
-- Letreiros:
+- Titles:
 - Lower thirds:
-- Gráficos:
-- Listas:
+- Graphics:
+- Lists:
 - Zooms:
 - End card:
 
-## O que evitar
+## What to avoid
 
-- Cores:
-- Tipografia:
-- Efeitos:
-- Clichês:
+- Colors:
+- Typography:
+- Effects:
+- Clichés:
 
-## Exemplos
+## Examples
 
 - Frame 1:
 - Frame 2:

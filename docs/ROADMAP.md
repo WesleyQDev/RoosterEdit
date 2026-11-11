@@ -1,76 +1,81 @@
 # Roadmap
 
-## Fase 1 — Fundação (em andamento)
+## Phase 1 — Foundation (in progress)
 
-- [x] `SKILL.md` draft em inglês.
-- [x] Arquitetura e decisões documentadas.
-- [x] Estrutura de workspace, canais e perfis.
-- [x] CLI base: `doctor`, `init`, `new`, `list`, `check`.
-- [x] Ingestão de links com `yt-dlp` (com gate de direitos).
-- [x] Referências: workflow, intake, engines, perfis, timeline, QA, harness, schemas, link ingest.
-- [x] Perfis iniciais: minimal, tech-neon, 3d-cartoon.
-- [x] Templates built-in de perfis.
-- [x] Sync local para OpenCode.
-- [x] Detecção de Whisper e comando `transcribe`.
-- [x] Schema e comando de validação do `edit/plan.json`.
-- [x] Fluxo de 6 etapas inspirado no vídeo, adaptado à estrutura do RoosterEdit.
-- [x] Prompt de bootstrap em pt-BR.
-- [x] Onboarding por canal (`channel new/set`) e projetos com overrides.
-- [x] CLI `channel`, `profile`, `digest`.
-- [x] Estratégias de assets por canal/projeto.
-- [x] `digest` para transcrição compacta e disciplina de tokens.
-- [x] Papéis de subagents em `agents/` e protocolo de handoff por etapa.
-- [ ] Validar a skill com o skill-creator.
+- [x] `SKILL.md` draft in English.
+- [x] Architecture and decisions documented.
+- [x] Workspace, channel, and profile structure.
+- [x] Base CLI: `doctor`, `init`, `new`, `list`, `check`.
+- [x] Link ingest with `yt-dlp` (with a rights gate).
+- [x] References: workflow, intake, engines, profiles, timeline, QA, harness, schemas, link ingest.
+- [x] Initial profiles: minimal, tech-neon, 3d-cartoon.
+- [x] Built-in profile templates.
+- [x] Local sync to OpenCode.
+- [x] Whisper detection and the `transcribe` command.
+- [x] Schema and validation command for `edit/plan.json`.
+- [x] 6-step flow inspired by the video, adapted to the RoosterEdit structure.
+- [x] Bootstrap prompt in English.
+- [x] Channel onboarding (`channel new/set`) and projects with overrides.
+- [x] `channel`, `profile`, `digest` CLI.
+- [x] Asset strategies per channel/project.
+- [x] `digest` for compact transcription and token discipline.
+- [x] Subagent roles in `agents/` and a per-stage handoff protocol.
+- [x] Install via `npx rooster-edit install` (local, global, per harness).
+- [ ] Publish the `rooster-edit` package to npm.
+- [ ] Validate the skill with the skill-creator.
 
-## Fase 2 — Pipeline de mídia
+## Phase 2 — Media pipeline
 
-- [x] Transcrição via HyperFrames/Whisper, testada com amostra pública.
-- [x] `edit/plan.json` com validação e gate de aprovação.
-- [x] Cache content-addressed de capabilities, probes, transcrições, TTS, build e render.
-- [x] Transcrição por idioma: Parakeet/sherpa-onnx, faster-whisper e whisper.cpp; defaults `fast` (base/beam 1).
-- [x] `build --if-needed`, sample curto e reuse de mídia por estágio.
-- [x] Wrapper real de `render` com qualidade, workers, resume, cache de frames e probe.
-- [x] `cache info|path|clear|gc`, `frames` com contact sheet e índice de b-roll.
-- [ ] Cortes sem re-encode no engine (`data-media-start`/`trimBefore`).
-- [ ] Render híbrido FFmpeg + overlays curtos.
-- [ ] Passe de áudio fundido e hardware encode automático.
-- [ ] `cut-plan` automático: silêncios, filler words, rough cut.
+- [x] Transcription via HyperFrames/Whisper, tested with a public sample.
+- [x] `edit/plan.json` with validation and an approval gate.
+- [x] Content-addressed cache for capabilities, probes, transcriptions, TTS, build, and render.
+- [x] Per-language transcription: Parakeet/sherpa-onnx, faster-whisper, and whisper.cpp; defaults `fast` (base/beam 1).
+- [x] `build --if-needed`, short sample, and per-stage media reuse.
+- [x] Real `render` wrapper with quality, workers, resume, frame cache, and probe.
+- [x] `cache info|path|clear|gc`, `frames` with contact sheet, and b-roll index.
+- [ ] Cuts without re-encode in the engine (`data-media-start`/`trimBefore`).
+- [ ] Hybrid FFmpeg + short overlay render.
+- [ ] Fused audio pass and automatic hardware encode.
+- [ ] Automatic `cut-plan`: silences, filler words, rough cut.
 - [ ] TTS adapter (provider-agnostic).
-- [ ] Mix, loudness e ducking.
-- [ ] Legendas: SRT/VTT, sync e burn-in.
-- [ ] Manifest com hashes, licenças e proveniência completa.
+- [ ] Mix, loudness, and ducking.
+- [ ] Captions: SRT/VTT, sync, and burn-in.
+- [ ] Manifest with hashes, licenses, and full provenance.
 
-## Fase 3 — Engines e timeline
+## Phase 3 — Engines and timeline
 
-- [x] Adapter HyperFrames (smoke test: init, check, render).
-- [x] Adapter Remotion (smoke test: scaffold, still, render).
-- [x] Build automático de `edit/plan.json` para HyperFrames/Remotion (v1: cortes, elementos e mídia base).
-- [x] Build rico: b-roll em PIP/split, gráficos estruturados, listas, ênfase, callout, terminal e end card.
-- [x] Suavização de cortes: micro-fade de áudio e punch-in alternado em saltos sem cobertura.
-- [ ] Gráficos 3D no build.
-- [ ] Adapter FFmpeg (EDL → filtergraph).
-- [x] Preview unificado com timeline e QA.
-- [x] Handoff NLE com EDL/FCPXML.
-- [x] Style proof de 3 frames e sample build de 3 elementos.
-- [x] Text review e validação de corte no meio de palavra.
-- [ ] `render` e `package`.
+- [x] HyperFrames adapter (smoke test: init, check, render).
+- [x] Remotion adapter (smoke test: scaffold, still, render).
+- [x] Automatic build of `edit/plan.json` for HyperFrames/Remotion (v1: cuts, elements, and base media).
+- [x] Rich build: b-roll in PIP/split, structured graphics, lists, emphasis, callout, terminal, and end card.
+- [x] Cut smoothing: audio micro-fade and alternating punch-in on uncovered jumps.
+- [ ] 3D graphics in the build.
+- [ ] FFmpeg adapter (EDL → filtergraph).
+- [x] Unified preview with timeline and QA.
+- [x] NLE handoff with EDL/FCPXML.
+- [x] 3-frame style proof and 3-element sample build.
+- [x] Text review and validation of cuts in the middle of a word.
+- [ ] `render` and `package`.
 
-## Fase 4 — 3D e qualidade
+## Phase 4 — 3D and quality
 
-- [ ] Starter 3D Three.js para Remotion.
-- [ ] Starter 3D Three.js para HyperFrames.
-- [ ] Mais perfis prontos: warm-documentary, brutalist, corporate-clean.
-- [ ] Exemplos de projetos.
-- [ ] Evals com baseline e iteração.
-- [ ] Otimização da descrição da skill.
-- [ ] Empacotamento.
+- [ ] Three.js 3D starter for Remotion.
+- [ ] Three.js 3D starter for HyperFrames.
+- [ ] More ready-made profiles: warm-documentary, brutalist, corporate-clean.
+- [ ] Project examples.
+- [ ] Evals with baseline and iteration.
+- [ ] Skill description optimization.
+- [x] Translate README, `AGENTS.md`, `docs/`, and `templates/` to English.
+- [ ] Translate generated HTML previews and remaining CLI strings to English.
+- [ ] Re-render the demo with English narration and text.
+- [ ] Packaging.
 
-## Fora de escopo no v1
+## Out of scope for v1
 
-- NLE completo no browser.
-- Geração de vídeo por modelos (Veo/Kling/Runway) como core.
-- Avatar/UGC gerado.
+- Full NLE in the browser.
+- Video generation by models (Veo/Kling/Runway) as core.
+- Generated avatar/UGC.
 - Cloud render.
-- Upload automático para YouTube/TikTok.
-- Color grading avançado.
-- Edição colaborativa em tempo real.
+- Automatic upload to YouTube/TikTok.
+- Advanced color grading.
+- Real-time collaborative editing.

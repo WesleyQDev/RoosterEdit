@@ -1,201 +1,201 @@
 # AGENTS.md
 
-Regras para agentes que editam o repositório **RoosterEdit**. Leia este arquivo antes de qualquer mudança.
+Rules for agents editing the **RoosterEdit** repository. Read this file before any change.
 
-Ordem de precedência em caso de conflito:
+Precedence when rules conflict:
 
-1. `AGENTS.md` — processo e limites do repositório.
-2. `SKILL.md` + `references/` — contrato da skill (em inglês).
-3. Código em `scripts/` — comportamento real.
-4. `docs/` — documentação humana (em pt-BR).
+1. `AGENTS.md` — repository process and limits.
+2. `SKILL.md` + `references/` — the skill contract (English).
+3. Code in `scripts/` — actual behavior.
+4. `docs/` — human documentation.
 
-Se o código contradiz a documentação, o código vence para descrever o comportamento; corrija a documentação ou registre a divergência.
+If code contradicts documentation, code wins for describing behavior; fix the documentation or record the divergence.
 
 ---
 
-## 1. O que é este repositório
+## 1. What this repository is
 
-- A raiz do repositório **é o pacote da skill**. Não é um workspace de vídeo.
-- `scripts/rooster.mjs` é o CLI (Node.js, ESM, zero dependências de runtime).
-- `scripts/lib/` guarda infraestrutura: cache, exec async, capabilities, engines, media, ASR, build, render.
-- `scripts/features/` guarda helpers puros (args de FFmpeg, legendas, gráficos, áudio, motion).
-- `scripts/test/` guarda testes com `node:test` (zero dependências).
-- `references/` e `agents/` fazem parte da skill instalável e são escritos em inglês.
-- `docs/` é documentação humana durável, em pt-BR.
-- `.opencode/skills/rooster-edit/` é uma **cópia gerada** por `scripts/sync-skill.mjs`. Nunca edite essa cópia; edite a raiz e rode o sync.
-- `rooster/` é o workspace padrão de vídeo do usuário. É ignorado pelo git e não deve ser criado na raiz para testes.
+- The repository root **is the skill package**. It is not a video workspace.
+- `scripts/rooster.mjs` is the CLI (Node.js, ESM, zero runtime dependencies).
+- `scripts/lib/` holds infrastructure: cache, async exec, capabilities, engines, media, ASR, build, render.
+- `scripts/features/` holds pure helpers (FFmpeg args, captions, charts, audio, motion).
+- `scripts/test/` holds tests with `node:test` (zero dependencies).
+- `references/` and `agents/` are part of the installable skill and are written in English.
+- `docs/` is durable human documentation.
+- `.opencode/skills/rooster-edit/` is a **generated copy** made by `scripts/sync-skill.mjs`. Never edit that copy; edit the root and run the sync.
+- `rooster/` is the user's default video workspace. It is git-ignored and must not be created at the root for tests.
 
-## 2. O que ler antes de trabalhar
+## 2. What to read before working
 
-| Tarefa | Leia primeiro |
+| Task | Read first |
 |---|---|
-| Qualquer mudança | `AGENTS.md` (este arquivo) |
-| Skill, fluxo, comandos | `SKILL.md` |
-| Edição, plano, timeline, QA | o reference específico em `references/` |
-| Arquitetura e decisões | `docs/ARCHITECTURE.md` |
-| Workspace, canais, perfis | `docs/WORKSPACE.md` |
-| Testes já feitos | `docs/TESTING.md` |
-| Custo e licenças | `docs/COSTS.md`, `references/assets.md` |
+| Any change | `AGENTS.md` (this file) |
+| Skill, workflow, commands | `SKILL.md` |
+| Editing, plan, timeline, QA | the specific reference in `references/` |
+| Architecture and decisions | `docs/ARCHITECTURE.md` |
+| Workspace, channels, profiles | `docs/WORKSPACE.md` |
+| Tests already run | `docs/TESTING.md` |
+| Cost and licenses | `docs/COSTS.md`, `references/assets.md` |
 
-Não leia o repositório inteiro por padrão. Leia só o reference da fase atual.
+Do not read the whole repository by default. Read only the reference for the current phase.
 
-## 3. Idioma
+## 3. Language
 
-- `SKILL.md`, `references/`, `agents/` e comentários de código: **inglês**.
-- `README.md`, `docs/` e este `AGENTS.md`: **pt-BR**.
-- Respostas ao usuário: no idioma da conversa.
-- Não traduza nomes de comandos, campos de JSON, schemas ou paths.
+- `README.md`, `AGENTS.md`, `SKILL.md`, `references/`, `agents/`, `docs/`, and code comments: **English**.
+- Docs that are still in Portuguese are being translated in batches. New or heavily edited docs must be written in English.
+- Chat replies to the user: the language of the conversation.
+- Do not translate command names, JSON fields, schemas, or paths.
 
-## 4. Durable vs temporal (regra dura)
+## 4. Durable vs temporary (hard rule)
 
-`docs/` é somente para documentação **durável**, que deve sobreviver a releases e ser mantida.
+`docs/` is only for **durable** documentation that must survive releases and be maintained.
 
-**Não coloque em `docs/`:**
+**Do not put in `docs/`:**
 
-- auditorias;
-- benchmarks e medições de uma tarefa;
-- relatórios de uma sessão;
-- rascunhos, análises exploratórias, listas de ideias;
-- resultados gerados, logs, frames, contact sheets;
-- qualquer arquivo que comece com data ou nome de projeto.
+- audits;
+- benchmarks and measurements from one task;
+- session reports;
+- drafts, exploratory analysis, idea lists;
+- generated results, logs, frames, contact sheets;
+- any file that starts with a date or a project name.
 
-**Coloque em `.scratch/`** (ignorado pelo git), com prefixo de data:
+**Put them in `.scratch/`** (git-ignored), with a date prefix:
 
 ```text
 .scratch/2026-11-03-performance-audit.md
 .scratch/2026-11-05-render-bench.json
-.scratch/2026-11-07-ideias-de-ux.md
+.scratch/2026-11-07-ux-ideas.md
 ```
 
-Regras:
+Rules:
 
-- `.scratch/` é descartável. Pode apagar sem aviso quando o assunto morrer.
-- Não linke `.scratch/` no README nem em `docs/`.
-- Se um achado virar regra permanente, destile-o no lugar certo (`docs/`, `references/` ou `ROADMAP.md`) e apague o scratch.
-- Logs de execução de um projeto de vídeo ficam em `work/logs/` dentro do workspace do projeto, não no repositório.
-- Benchmarks de uma máquina não viram documentação oficial sem protocolo reproduzível e data.
+- `.scratch/` is disposable. Delete it without warning when the subject dies.
+- Do not link `.scratch/` from the README or from `docs/`.
+- If a finding becomes a permanent rule, distill it into the right place (`docs/`, `references/`, or `ROADMAP.md`) and delete the scratch file.
+- Execution logs for a video project live in `work/logs/` inside the project workspace, not in this repository.
+- Benchmarks from one machine do not become official documentation without a reproducible protocol and a date.
 
-## 5. Dados do usuário e segurança
+## 5. User data and safety
 
-- Nunca apague ou sobrescreva mídia original do usuário.
-- Não rode comandos destrutivos (`rm -rf`, `Remove-Item -Recurse`, `--force`) fora de diretórios de teste.
-- Para testes, use `ROOSTER_WORKSPACE` apontando para um diretório temporário e limpe depois.
-- Não commite `.env`, chaves, cookies, tokens, mídia, renders, caches ou logs.
-- Não chame API paga, TTS pago ou render em nuvem sem permissão explícita.
-- Não faça upload de mídia do usuário.
-- Respeite licenças e proveniência de assets; não invente licença.
+- Never delete or overwrite the user's original media.
+- Do not run destructive commands (`rm -rf`, `Remove-Item -Recurse`, `--force`) outside test directories.
+- For tests, point `ROOSTER_WORKSPACE` at a temporary directory and clean up afterward.
+- Do not commit `.env`, keys, cookies, tokens, media, renders, caches, or logs.
+- Do not call a paid API, paid TTS, or cloud render without explicit permission.
+- Do not upload user media.
+- Respect asset licenses and provenance; never invent a license.
 
-## 6. Regras de código
+## 6. Code rules
 
-- Node.js `>=20`, ESM (`import`/`export`), zero dependências de runtime.
-- Não adicione pacote npm sem pedido explícito; prefira a biblioteca padrão.
-- Mantenha o padrão de helpers existente: `run`, `readJson`, `writeJson`, `writeText`, `ensureDir`, `fail`, `probeMedia`, `linkOrCopy`.
-- Lógica pura de features fica em `scripts/features/`; infraestrutura com I/O/processos fica em `scripts/lib/`; o CLI e o dispatcher ficam em `scripts/rooster.mjs`.
-- Testes automatizados ficam em `scripts/test/` e usam `node:test`; não crie dependências de teste.
-- Evite refatorações grandes não pedidas. O arquivo principal é grande de propósito; mexer nele exige cuidado.
-- Compatibilidade com Windows: paths com `path.join`, spawn de `.cmd` via `cmd.exe`, sem comandos bash-only.
-- `spawnSync` é o padrão atual. Se precisar de paralelismo, introduza um helper isolado e não mude o comportamento existente sem teste.
-- Saída humana no stdout; `--json` estável e parseável para agentes.
-- Erros devem dizer o que falhou e como corrigir; use `fail()` para encerrar com código 1.
-- Não esconda falha atrás de fallback silencioso. Se degradar, avise.
+- Node.js `>=22`, ESM (`import`/`export`), zero runtime dependencies.
+- Do not add an npm package without an explicit request; prefer the standard library.
+- Keep the existing helper pattern: `run`, `readJson`, `writeJson`, `writeText`, `ensureDir`, `fail`, `probeMedia`, `linkOrCopy`.
+- Pure feature logic lives in `scripts/features/`; infrastructure with I/O or processes lives in `scripts/lib/`; the CLI and dispatcher live in `scripts/rooster.mjs`.
+- Automated tests live in `scripts/test/` and use `node:test`; do not add test dependencies.
+- Avoid large unrequested refactors. The main file is large on purpose; changing it requires care.
+- Windows compatibility: use `path.join`, spawn `.cmd` through `cmd.exe`, and avoid bash-only commands.
+- `spawnSync` is the current pattern. If you need parallelism, add an isolated helper and do not change existing behavior without a test.
+- Human output goes to stdout; `--json` must be stable and parseable by agents.
+- Errors must say what failed and how to fix it; use `fail()` to exit with code 1.
+- Do not hide a failure behind a silent fallback. If quality degrades, say so.
 
-## 7. Mudou o CLI? Checklist
+## 7. Changed the CLI? Checklist
 
-Toda mudança de comportamento precisa atualizar os pontos abaixo, quando aplicável:
+Every behavior change must update the items below, when applicable:
 
-1. Implementação em `scripts/rooster.mjs` ou `scripts/features/`.
-2. Texto de ajuda/usage no próprio CLI.
-3. `SKILL.md` (comandos rápidos e contrato), se for comando ou comportamento de usuário.
-4. Reference correspondente em `references/` (ex.: `edit-plan.md`, `engines.md`, `schemas.md`).
-5. `templates/` se o schema de plano/perfil mudou.
-6. `docs/` apenas se for conhecimento durável.
+1. Implementation in `scripts/rooster.mjs` or `scripts/features/`.
+2. Help/usage text in the CLI itself.
+3. `SKILL.md` (quick commands and contract), if it is a user-facing command or behavior.
+4. The matching reference in `references/` (for example `edit-plan.md`, `engines.md`, `schemas.md`).
+5. `templates/` if the plan or profile schema changed.
+6. `docs/` only if it is durable knowledge.
 7. `npm run validate`.
-8. Smoke test em workspace temporário.
-9. `node scripts/sync-skill.mjs` se quiser testar a descoberta local no OpenCode (a cópia é gerada; não commite).
+8. Smoke test in a temporary workspace.
+9. `node scripts/sync-skill.mjs` if you need to test local discovery in OpenCode (the copy is generated; do not commit it).
 
-Não anuncie um comando como pronto sem rodá-lo. Se não deu para testar, diga o que falta.
+Do not announce a command as ready without running it. If you could not test it, say what is missing.
 
-## 8. Documentação
+## 8. Documentation
 
-- `docs/` é durável: precisa de propósito claro e manutenção.
-- Não duplique `SKILL.md`; linke.
-- Mantenha o índice de documentação do `README.md` atualizado ao adicionar um doc durável.
-- Comandos devem ser copiáveis, usando `<skill>` para o caminho da skill.
-- Números de performance só entram em doc durável se tiverem protocolo reproduzível.
-- Relatórios temporários vão para `.scratch/` (ver seção 4).
+- `docs/` is durable: it needs a clear purpose and maintenance.
+- Do not duplicate `SKILL.md`; link to it.
+- Keep the documentation index in `README.md` up to date when adding a durable doc.
+- Commands must be copyable, using `<skill>` for the skill path.
+- Performance numbers only enter durable docs with a reproducible protocol.
+- Temporary reports go to `.scratch/` (see section 4).
 
-## 9. Testes e validação
+## 9. Testing and validation
 
-- `npm run validate` é obrigatório antes de concluir.
-- `npm test` roda os testes unitários (`node --test scripts/test/*.test.mjs`) e também é obrigatório quando a mudança toca `scripts/lib/`, `scripts/features/` ou schemas.
-- Smoke test mínimo do CLI:
+- `npm run validate` is mandatory before finishing.
+- `npm test` runs the unit tests (`node --test scripts/test/*.test.mjs`) and is also mandatory when the change touches `scripts/lib/`, `scripts/features/`, or schemas.
+- Minimal CLI smoke test:
 
 ```bash
 node scripts/rooster.mjs --help
 node scripts/rooster.mjs doctor --json
 ```
 
-- Para mudanças de fluxo, teste em workspace temporário:
+- For workflow changes, test in a temporary workspace:
 
 ```bash
 $env:ROOSTER_WORKSPACE = "$env:TEMP\rooster-test"
 node scripts/rooster.mjs init
-node scripts/rooster.mjs channel new demo --language pt-BR --format 16:9 --profile minimal
+node scripts/rooster.mjs channel new demo --language en-US --format 16:9 --profile minimal
 node scripts/rooster.mjs channel design demo --from minimal --accent "#22d3ee"
-node scripts/rooster.mjs new teste --channel demo
+node scripts/rooster.mjs new test-video --channel demo
 ```
 
-- Não existe suíte de testes formal. `docs/TESTING.md` é um registro de testes manuais, não uma suíte automatizada.
-- Se adicionar testes automatizados, use `node:test` e mantenha zero dependências.
-- Teste o caminho de erro também: arquivo ausente, plano inválido, ffmpeg indisponível.
-- Em Windows, cuidado com handles de arquivo e hardlinks; valide o comportamento no SO alvo.
+- There is no formal test suite. `docs/TESTING.md` is a record of manual tests, not an automated suite.
+- If you add automated tests, use `node:test` and keep zero dependencies.
+- Test error paths too: missing file, invalid plan, unavailable FFmpeg.
+- On Windows, watch for file handles and hardlinks; validate behavior on the target OS.
 
-## 10. Sync da skill
+## 10. Skill sync
 
-- Fonte de verdade: a raiz do repositório.
-- `.opencode/skills/rooster-edit/` é artefato de build local, ignorado pelo git.
-- Rode `npm run sync` (ou `node scripts/sync-skill.mjs`) depois de mudar `SKILL.md`, `references/`, `scripts/`, `templates/` ou `agents/`, se precisar testar no OpenCode.
-- Nunca edite arquivos em `.opencode/` diretamente.
+- Source of truth: the repository root.
+- `.opencode/skills/rooster-edit/` is a local build artifact, git-ignored.
+- Run `npm run sync` (or `node scripts/sync-skill.mjs`) after changing `SKILL.md`, `references/`, `scripts/`, `templates/`, or `agents/`, if you need to test in OpenCode.
+- Never edit files in `.opencode/` directly.
 
 ## 11. Performance
 
-- Meça antes de otimizar. Benchmarks e resultados vão para `.scratch/` ou `work/logs/`, não para `docs/`.
-- Cache só entra com chave de invalidação (conteúdo + versão da ferramenta + opções) e opção de `--refresh`.
-- Não troque qualidade por velocidade silenciosamente: draft e final são explícitos.
-- Hardware encode só em draft/intermediário, salvo validação de qualidade para entrega.
-- Não adicione paralelismo sem limite; Chrome/ffmpeg consomem RAM e CPU.
-- Se um relatório de performance for pedido, o default é `.scratch/YYYY-MM-DD-performance-*.md`.
+- Measure before optimizing. Benchmarks and results go to `.scratch/` or `work/logs/`, not `docs/`.
+- Cache only with an invalidation key (content + tool version + options) and a `--refresh` option.
+- Do not trade quality for speed silently: draft and final are explicit.
+- Hardware encoding only for draft/intermediate work, unless quality is validated for delivery.
+- Do not add unbounded parallelism; Chrome and FFmpeg consume RAM and CPU.
+- If a performance report is requested, the default path is `.scratch/YYYY-MM-DD-performance-*.md`.
 
-## 12. Git e commits
+## 12. Git and commits
 
-- Commits pequenos e focados.
-- Estilo convencional: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`.
-- Não commite artefatos gerados: `.opencode/`, `rooster/`, `.rooster/`, `.scratch/`, renders, mídia, logs.
-- Não reescreva histórico nem faça force-push sem permissão.
-- Não misture mudança de código com relatório temporal no mesmo commit.
-- Se o usuário pedir para manter um scratch, pergunte onde promovê-lo antes de mover para `docs/`.
+- Small, focused commits.
+- Conventional style: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`.
+- Do not commit generated artifacts: `.opencode/`, `rooster/`, `.rooster/`, `.scratch/`, renders, media, logs.
+- Do not rewrite history or force-push without permission.
+- Do not mix a code change with a temporary report in the same commit.
+- If the user asks to keep a scratch file, ask where to promote it before moving it to `docs/`.
 
-## 13. Quando a tarefa é produzir vídeo
+## 13. When the task is producing a video
 
-- Siga `SKILL.md` e o fluxo de 6/8 etapas.
-- Não renderize antes do plano e do preview aprovados, salvo pedido explícito.
-- Use o workspace do projeto; não crie projeto na raiz do repositório da skill.
-- Delegue etapas pesadas a subagents quando o harness permitir; o principal lê handoff, não transcrição/log/código gerado.
-- Feche a tarefa com resultado, caminhos, bloqueios e uma próxima pergunta.
+- Follow `SKILL.md` and the 6/8-step workflow.
+- Do not render before the plan and preview are approved, unless explicitly asked.
+- Use the project workspace; do not create a project at the skill repository root.
+- Delegate heavy stages to subagents when the harness supports it; the main agent reads the handoff, not the transcript, log, or generated code.
+- Close the task with the result, paths, blockers, and one next question.
 
-## 14. Armadilhas comuns
+## 14. Common traps
 
-- `.opencode/skills/rooster-edit/` é gerado; editar ali não muda a skill.
-- `docs/` não é lugar de relatório temporário; use `.scratch/`.
-- `references/` é contrato da skill em inglês; não traduza.
-- `rooster/` na raiz é workspace de vídeo, não pasta de teste do repositório.
-- `doctor` pode chamar `npx` e demorar; não o coloque em loop de teste.
-- `build --force` apaga o diretório do engine; nunca aponte para projeto do usuário sem intenção.
-- `linkOrCopy` usa hardlink quando possível; em outro volume vira cópia.
-- Windows pode segurar handles; espere antes de apagar diretórios grandes.
-- Não presuma que uma lib está instalada; cheque versão e adapter real.
+- `.opencode/skills/rooster-edit/` is generated; editing there does not change the skill.
+- `docs/` is not the place for temporary reports; use `.scratch/`.
+- `references/` is the English skill contract; do not translate it.
+- `rooster/` at the root is a video workspace, not a test folder for the repository.
+- `doctor` may call `npx` and take a while; do not put it in a test loop.
+- `build --force` deletes the engine directory; never point it at a user project without intent.
+- `linkOrCopy` uses a hardlink when possible; across volumes it becomes a copy.
+- Windows may hold file handles; wait before deleting large directories.
+- Do not assume a library is installed; check the version and the real adapter.
 
-## 15. Comandos rápidos
+## 15. Quick commands
 
 ```bash
 npm run validate
@@ -205,4 +205,4 @@ node scripts/rooster.mjs --help
 node scripts/rooster.mjs doctor --json
 ```
 
-Se algo não estiver claro, pergunte antes de inventar uma convenção nova.
+If something is unclear, ask before inventing a new convention.

@@ -1,57 +1,57 @@
 # Tech Neon
 
-Tecnologia noturna, precisa e um pouco cinematográfica. O contraste é alto, mas a leitura vem primeiro.
+Night tech, precise, and slightly cinematic. Contrast is high, but readability comes first.
 
-## Quando usar
+## When to use
 
-- explainers de tecnologia, IA, software, dados;
-- lançamentos de produto;
-- conteúdo para desenvolvedores;
-- vídeos com gráficos, diagramas e kinetic type.
+- tech, AI, software, and data explainers;
+- product launches;
+- content for developers;
+- videos with graphics, diagrams, and kinetic type.
 
-## Paleta
+## Palette
 
-- Fundo: `#060913`.
-- Texto: `#f8fafc`.
-- Apoio: `#94a3b8`.
-- Acento 1: `#22d3ee` (ciano).
-- Acento 2: `#f472b6` (magenta).
-- Use um acento por cena; os dois juntos só em momentos de destaque.
+- Background: `#060913`.
+- Text: `#f8fafc`.
+- Support: `#94a3b8`.
+- Accent 1: `#22d3ee` (cyan).
+- Accent 2: `#f472b6` (magenta).
+- Use one accent per scene; both together only in highlight moments.
 
-## Tipografia
+## Typography
 
 - Display: Inter 700.
-- Corpo: Inter 400.
-- Mono: JetBrains Mono 500 para código, métricas e labels.
-- Títulos grandes, tracking levemente negativo.
-- Evite parágrafos longos; quebre em frases curtas.
+- Body: Inter 400.
+- Mono: JetBrains Mono 500 for code, metrics, and labels.
+- Large titles, slightly negative tracking.
+- Avoid long paragraphs; break them into short sentences.
 
-## Movimento
+## Motion
 
-- Entradas rápidas com `power3.out`.
-- Linhas que se desenham, grids que se revelam, números que contam.
-- Glow sutil, não excessivo.
-- Transições por corte ou wipe curto.
-- Evite bounce e animações “fofas”.
+- Fast entrances with `power3.out`.
+- Lines that draw themselves, grids that reveal, numbers that count.
+- Subtle glow, not excessive.
+- Cut transitions or short wipes.
+- Avoid bounce and “cute” animations.
 
-## Legendas
+## Captions
 
-- Inter 700, branco, stroke preto.
-- Máximo 32 caracteres por linha.
-- Posição inferior.
-- Destaque de palavra-chave em ciano, com moderação.
+- Inter 700, white, black stroke.
+- Maximum 32 characters per line.
+- Bottom position.
+- Keyword highlight in cyan, sparingly.
 
-## Áudio
+## Audio
 
-- Synthwave ou ambient eletrônico.
-- SFX digitais: clicks, whooshes curtos, data ticks.
+- Synthwave or electronic ambient.
+- Digital SFX: clicks, short whooshes, data ticks.
 - Loudness -14 LUFS.
-- Ducking agressivo sob a voz.
+- Aggressive ducking under the voice.
 
-## Evitar
+## Avoid
 
-- Fundo branco.
-- Gradientes arco-íris.
-- Excesso de glow.
-- Ícones de estilo misturado.
-- Texto pequeno sobre fundo escuro.
+- White background.
+- Rainbow gradients.
+- Excess glow.
+- Mixed-style icons.
+- Small text on a dark background.

@@ -6,18 +6,18 @@ This fast path borrows the **sequence** and the **approval discipline** from the
 
 | Reference video | RoosterEdit |
 |---|---|
-| `bruto/` | `channels/<canal>/projects/<slug>/assets/source/` |
-| `estilo/ESTILO.md` | `channels/<canal>/projects/<slug>/style.md` + resolved profile |
-| `trabalho/transcricao.json` | `channels/<canal>/projects/<slug>/edit/transcript.json` |
-| `trabalho/plano.json` | `channels/<canal>/projects/<slug>/edit/plan.json` |
-| `final/` | `channels/<canal>/projects/<slug>/renders/` |
-| `estilo/` references | `channels/<canal>/projects/<slug>/style/` + `profiles/<id>/references/` |
+| `bruto/` | `channels/<channel>/projects/<slug>/assets/source/` |
+| `estilo/ESTILO.md` | `channels/<channel>/projects/<slug>/style.md` + resolved profile |
+| `trabalho/transcricao.json` | `channels/<channel>/projects/<slug>/edit/transcript.json` |
+| `trabalho/plano.json` | `channels/<channel>/projects/<slug>/edit/plan.json` |
+| `final/` | `channels/<channel>/projects/<slug>/renders/` |
+| `estilo/` references | `channels/<channel>/projects/<slug>/style/` + `profiles/<id>/references/` |
 
 The project structure stays:
 
 ```text
 rooster/
-├── channels/<canal>/
+├── channels/<channel>/
 │   ├── channel.json
 │   └── projects/<slug>/
 │       ├── project.json
@@ -79,18 +79,18 @@ If the user only wants planning, do not install anything. Explain what is missin
 Create the channel first if it does not exist, then the project:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" new meu-video \
-  --channel meu-canal \
+node "<skill>/scripts/rooster.mjs" new my-video \
+  --channel my-channel \
   --profile minimal \
   --source live \
   --voice user
 ```
 
-Put raw media in `channels/meu-canal/projects/meu-video/assets/source/`. If the user says they will provide the footage and has not sent a path, create the project and run `open <slug>` so the source folder opens in the file manager. If the user already has a project, resolve its channel/profile instead of creating a new one.
+Put raw media in `channels/my-channel/projects/my-video/assets/source/`. If the user says they will provide the footage and has not sent a path, create the project and run `open <slug>` so the source folder opens in the file manager. If the user already has a project, resolve its channel/profile instead of creating a new one.
 
 ## Step 3 — Write the style guide
 
-Write `channels/<canal>/projects/<slug>/style.md` and resolve the profile. The video uses a single `ESTILO.md`; RoosterEdit separates the human-readable guide (`style.md`) from the reusable identity (`profiles/<id>/profile.json`).
+Write `channels/<channel>/projects/<slug>/style.md` and resolve the profile. The video uses a single `ESTILO.md`; RoosterEdit separates the human-readable guide (`style.md`) from the reusable identity (`profiles/<id>/profile.json`).
 
 The style guide should include:
 
@@ -109,22 +109,22 @@ The style guide should include:
 Prefer HyperFrames transcribe. It uses Parakeet for English and whisper.cpp for other languages, and writes word-level timestamps:
 
 ```bash
-npx hyperframes transcribe channels/meu-canal/projects/meu-video/assets/source/video.mp4 \
+npx hyperframes transcribe channels/my-channel/projects/my-video/assets/source/video.mp4 \
   --language pt \
   --model small \
   --json \
   --to srt \
-  -o channels/meu-canal/projects/meu-video/edit/captions/transcript.srt
+  -o channels/my-channel/projects/my-video/edit/captions/transcript.srt
 ```
 
 Or use Whisper locally:
 
 ```bash
-whisper channels/meu-canal/projects/meu-video/assets/source/video.mp4 \
+whisper channels/my-channel/projects/my-video/assets/source/video.mp4 \
   --model small \
   --language pt \
   --output_format json \
-  --output_dir channels/meu-canal/projects/meu-video/edit
+  --output_dir channels/my-channel/projects/my-video/edit
 ```
 
 Save the result as `edit/transcript.json` (and optionally `.srt`). The transcript must include the start and end time of each sentence or segment.
@@ -132,7 +132,7 @@ Save the result as `edit/transcript.json` (and optionally `.srt`). The transcrip
 The RoosterEdit CLI wraps both paths:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" transcribe meu-video --language pt --quality fast
+node "<skill>/scripts/rooster.mjs" transcribe my-video --language pt --quality fast
 ```
 
 It prefers Parakeet/sherpa-onnx when the language is covered, then faster-whisper, then whisper.cpp/OpenAI Whisper. `--quality fast` uses `base`, beam 1, and word timestamps only when captions are enabled; `balanced` uses `small` and `accurate` uses `medium`. Results are cached by source and options; rerunning without changes is instant.
@@ -161,7 +161,7 @@ Always show the user a readable summary of `edit/plan.json` and wait for approva
 Turn the approved plan into scenes:
 
 - **Letreiros**: short titles, names, key phrases.
-- **Gráficos**: diagrams, charts, numbers, comparisons.
+- **Charts**: diagrams, charts, numbers, comparisons.
 - **Listas**: steps, checklist items, rankings.
 - **Zooms**: punch-ins on faces, products, or details.
 - **B-roll**: footage or images that illustrate the words.
@@ -182,7 +182,7 @@ Ask the user before building (see the gate in `references/engines.md`): HyperFra
 Build a HyperFrames project from the approved plan:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
+node "<skill>/scripts/rooster.mjs" build my-video --engine hyperframes
 ```
 
 The build applies the plan's cuts with FFmpeg, remaps the element timings, copies the media, and writes a working composition. Base media and mixes are cached; `--if-needed` skips unchanged builds, and `--sample 3` builds a short montage for approval. Preview it in the browser. Review the cuts, captions, overlays, and audio. Render to `renders/final.mp4`.
@@ -192,7 +192,7 @@ The build applies the plan's cuts with FFmpeg, remaps the element timings, copie
 Build a Remotion project from the approved plan when the video needs React components, data-driven scenes, interaction, or 3D via `@remotion/three`:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
+node "<skill>/scripts/rooster.mjs" build my-video --engine remotion
 ```
 
 After the scaffold, ask before running `npm install` in `engine/remotion`; if the user declines, fall back to HyperFrames. Preview in Remotion Studio, then render to `renders/final.mp4`.
@@ -219,7 +219,7 @@ Run the QA sweep through `qa` and the fixes through `engineer`:
 
 ## What we adapt
 
-- Folder names: we use `channels/<canal>/projects/<slug>/` instead of `bruto/estilo/trabalho/final`.
+- Folder names: we use `channels/<channel>/projects/<slug>/` instead of `bruto/estilo/trabalho/final`.
 - The style guide is split into `style.md` and a reusable profile.
 - The plan is `edit/plan.json`, not `trabalho/plano.json`.
 - The plan feeds an engine-agnostic timeline (`edit/timeline.json`), not only one engine.

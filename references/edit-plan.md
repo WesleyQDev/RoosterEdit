@@ -9,7 +9,7 @@ The edit plan is the bridge between the transcript analysis and the build. It is
   "schema": "rooster.plan/v1",
   "source": "assets/source/video.mp4",
   "style": "style.md",
-  "language": "pt-BR",
+  "language": "en-US",
   "duration": 612.4,
   "summary": "Interview about starting a business after losing a job.",
   "music": {
@@ -65,7 +65,7 @@ The edit plan is the bridge between the transcript analysis and the build. It is
       "type": "grafico",
       "start": 32.0,
       "end": 38.0,
-      "text": "3 decisões",
+      "text": "3 decisions",
       "description": "Three-step diagram appears one item at a time"
     },
     {
@@ -85,7 +85,7 @@ The edit plan is the bridge between the transcript analysis and the build. It is
     }
   ],
   "chapters": [
-    { "start": 0, "title": "Introdução" },
+    { "start": 0, "title": "Introduction" },
     { "start": 45, "title": "O problema" }
   ],
   "notes": [
@@ -116,7 +116,7 @@ Use consistent values so the plan can be reviewed and automated:
 | `repetition` | The same idea is said again |
 | `false-start` | The speaker restarts the sentence |
 | `retake` | A later take is better |
-| `filler` | "um", "é", "tipo", "you know" |
+| `filler` | "um", "uh", "like", "you know" |
 | `mistake` | Factual error or slip |
 | `off-topic` | Does not serve the story |
 | `manual` | User requested a cut |
@@ -249,7 +249,7 @@ describes a concept, a product, or a place; not for every beat.
   "covers": "os cinco rodam em 3,6 GB",
   "data": {
     "kicker": "o conjunto",
-    "sub": "sem placa de vídeo",
+    "sub": "no GPU",
     "layers": [
       { "src": "assets/generated/scene-bg.png", "depth": 0.15 },
       { "src": "assets/generated/scene-icon.png", "depth": 0.55, "x": 8, "y": 10, "w": 44, "h": 60 },
@@ -257,7 +257,7 @@ describes a concept, a product, or a place; not for every beat.
     ],
     "camera": { "x": 30, "y": -12, "zoom": 0.07 }
   },
-  "description": "Cena em camadas: fundo, ícone e número em parallax 2.5D"
+  "description": "Layered scene: background, icon, and number in 2.5D parallax"
 }
 ```
 
@@ -479,33 +479,33 @@ prefer `tighten` whenever FFmpeg can read the source.
 Before building, show a readable summary:
 
 ```md
-# Plano de edição
+# Edit plan
 
-Fonte: assets/source/video.mp4 (10:12)
-Estilo: style.md
+Source: assets/source/video.mp4 (10:12)
+Style: style.md
 
-## Cortes (12)
-- 00:12–00:18 — pausa longa
-- 00:41–00:46 — take repetido; o próximo é melhor
+## Cuts (12)
+- 00:12–00:18 — long pause
+- 00:41–00:46 — repeated take; the next one is better
 ...
 
-## Elementos (8)
-- 00:03–00:06 — letreiro: "A virada"
-- 00:32–00:38 — gráfico: "3 decisões"
-- 00:52–00:55 — zoom no rosto
+## Elements (8)
+- 00:03–00:06 — title card: "The Turn"
+- 00:32–00:38 — chart: "3 decisions"
+- 00:52–00:55 — zoom on the face
 ...
 
-## Capítulos
-- 00:00 Introdução
-- 00:45 O problema
+## Chapters
+- 00:00 Introduction
+- 00:45 The problem
 ...
 
-Aprovar este plano? Só vou criar a timeline e os visuais depois do seu OK.
+Approve this plan? I will only build the timeline and visuals after your OK.
 ```
 
-`node "<skill>/scripts/rooster.mjs" plan <slug>` writes the same summary to `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`. If the harness can display a file or open a browser, show `edit/plan.html` in the review pane or browser. Otherwise, paste the summary in chat and give the file path. Ask for approval with the progress marker, for example: `Etapa 4/8 - Plano pronto. Posso seguir com a timeline?`
+`node "<skill>/scripts/rooster.mjs" plan <slug>` writes the same summary to `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`. If the harness can display a file or open a browser, show `edit/plan.html` in the review pane or browser. Otherwise, paste the summary in chat and give the file path. Ask for approval with the progress marker, for example: `Step 4/8 - Plan ready. Can I continue with the timeline?`
 
-The HTML review includes a player, clickable timecodes, the transcript context for each cut and element, and a **Textos para revisar** table. The context is there so the user can approve a cut without opening the raw transcript.
+The HTML review includes a player, clickable timecodes, the transcript context for each cut and element, and a **Texts to review** table. The context is there so the user can approve a cut without opening the raw transcript.
 
 Wait for an explicit approval. If the user changes the plan, update `edit/plan.json` and show it again. Run `textcheck <slug>` before the final approval to list every on-screen text.
 

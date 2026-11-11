@@ -1,8 +1,8 @@
 # Templates
 
-Templates usados pelo CLI para criar workspaces, projetos, perfis e starters de engine.
+Templates the CLI uses to create workspaces, projects, profiles, and engine starters.
 
-## Perfis built-in
+## Built-in profiles
 
 ```text
 templates/profiles/
@@ -11,18 +11,18 @@ templates/profiles/
 └── 3d-cartoon/
 ```
 
-Cada perfil tem `profile.json` (contrato legível por máquina) e `STYLE.md` (direção humana).
+Each profile has `profile.json` (machine-readable contract) and `STYLE.md` (human direction).
 
-## Outros templates
+## Other templates
 
-| Arquivo | Uso |
+| File | Use |
 |---|---|
-| `style.md` | Template de guia de estilo para `channels/<canal>/projects/<slug>/style.md` |
-| `plan.example.json` | Exemplo de `edit/plan.json` com cortes e elementos |
-| `install-prompt.pt-BR.md` | Prompt único de instalação + dependências + workspace |
-| `bootstrap-prompt.pt-BR.md` | Prompt de setup inspirado no vídeo de referência, adaptado ao RoosterEdit |
+| `style.md` | Style guide template for `channels/<channel>/projects/<slug>/style.md` |
+| `plan.example.json` | Example `edit/plan.json` with cuts and elements |
+| `install-prompt.md` | Install prompt via npm + environment validation |
+| `bootstrap-prompt.md` | Setup prompt inspired by the reference video, adapted to RoosterEdit |
 
-## Starters de engine (planejados)
+## Engine starters (planned)
 
 ```text
 templates/engines/
@@ -31,15 +31,15 @@ templates/engines/
 └── ffmpeg/
 ```
 
-Os starters devem ser mínimos e funcionais: uma composição, um asset de teste, um comando de preview e um comando de render.
+Starters should be minimal and functional: one composition, one test asset, one preview command, and one render command.
 
-## Como o CLI usa
+## How the CLI uses them
 
-`node scripts/rooster.mjs init` copia os perfis built-in para o workspace do usuário, se ainda não existirem. O workspace é a fonte de verdade local; os templates são apenas o ponto de partida.
+`node scripts/rooster.mjs init` copies the built-in profiles into the user workspace if they do not exist yet. The workspace is the local source of truth; templates are only the starting point.
 
-## Regras
+## Rules
 
-- Não incluir mídia pesada nos templates.
-- Não incluir fontes sem licença.
-- Não incluir chaves de API.
-- Manter os JSONs válidos e os IDs em kebab-case.
+- Do not include heavy media in templates.
+- Do not include fonts without a license.
+- Do not include API keys.
+- Keep JSON files valid and IDs in kebab-case.

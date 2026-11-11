@@ -1,17 +1,17 @@
 # Workspace
 
-O workspace é o estúdio local do usuário. Ele fica no projeto de vídeo, não no repositório da skill.
+The workspace is the user's local studio. It lives in the video project, not in the skill repository.
 
-> **Caminho do CLI:** os comandos abaixo assumem que você está na raiz do repositório RoosterEdit. Ao usar a skill em um projeto de vídeo, rode a partir do projeto e resolva o script pelo diretório da skill: `node "<skill>/scripts/rooster.mjs" ...`.
+> **CLI path:** the commands below assume you are at the root of the RoosterEdit repository. When using the skill in a video project, run from the project and resolve the script through the skill directory: `node "<skill>/scripts/rooster.mjs" ...`.
 
-## Estrutura
+## Structure
 
 ```text
 rooster/
 ├── workspace.json
 ├── config.json
 ├── channels/
-│   └── <canal>/
+│   └── <channel>/
 │       ├── channel.json
 │       ├── projects/
 │       │   └── <slug>/
@@ -46,46 +46,46 @@ rooster/
 │       ├── profiles/
 │       ├── assets/
 │       └── library/
-├── profiles/       # compartilhados
+├── profiles/       # shared
 ├── library/{music,sfx,fonts,overlays,luts,broll,images}/
-└── cache/          # inclui cache/elements/ (clipes ProRes 4444)
+└── cache/          # includes cache/elements/ (ProRes 4444 clips)
 ```
 
-O workspace é criado com:
+The workspace is created with:
 
 ```bash
 node scripts/rooster.mjs init
 ```
 
-`init` cria um canal `default` para vídeos avulsos. Canais reais são criados depois.
+`init` creates a `default` channel for standalone videos. Real channels are created afterward.
 
-## Canais
+## Channels
 
-Um canal é o padrão de produção estável de uma marca/audiência/operação. Ele guarda:
+A channel is the stable production standard for a brand, audience, or operation. It stores:
 
-- o que produz (`content`);
-- idioma;
-- formato default (`16:9`, `9:16`, `1:1` ou `auto`);
-- perfil visual;
-- política de assets;
+- what it produces (`content`);
+- language;
+- default format (`16:9`, `9:16`, `1:1`, or `auto`);
+- visual profile;
+- asset policy;
 - engine;
-- autonomia;
-- voz/TTS;
+- autonomy;
+- voice/TTS;
 - brand kit;
-- biblioteca própria.
+- its own library.
 
 ```bash
 node scripts/rooster.mjs channel new studio-a \
   --name "Studio A" \
-  --content "<o que o canal produz>" \
-  --language pt-BR \
+  --content "<what the channel produces>" \
+  --language en-US \
   --format 16:9 \
   --profile minimal \
   --voice tts \
   --assets mixed
 ```
 
-O canal nasce com um perfil base. Depois de criá-lo, defina a identidade visual e sonora dele:
+The channel starts with a base profile. After creating it, define its visual and sonic identity:
 
 ```bash
 node scripts/rooster.mjs channel design studio-a \
@@ -102,7 +102,7 @@ node scripts/rooster.mjs channel design studio-a \
   --negative "clutter, heavy gradients"
 ```
 
-O comando grava `channels/studio-a/profiles/studio-a/profile.json` e `STYLE.md`, e aponta `channel.profile` para o novo perfil. Use `--force` para refazer depois.
+The command writes `channels/studio-a/profiles/studio-a/profile.json` and `STYLE.md`, and points `channel.profile` at the new profile. Use `--force` to redo it later.
 
 ```bash
 node scripts/rooster.mjs channel list
@@ -112,18 +112,18 @@ node scripts/rooster.mjs channel use studio-a
 node scripts/rooster.mjs profile show studio-a --channel studio-a
 ```
 
-## Criar um projeto
+## Creating a project
 
-A duração é resultado da edição, não um valor padrão do canal ou do projeto. Só passe `--duration` quando você tiver declarado um alvo explícito:
+Duration is a result of the edit, not a default of the channel or the project. Only pass `--duration` when you have declared an explicit target:
 
 ```bash
 node scripts/rooster.mjs new video-x --channel studio-a
-# opcional, apenas com alvo declarado
+# optional, only with a declared target
 node scripts/rooster.mjs new video-x --channel studio-a --duration 30
 node scripts/rooster.mjs open studio-a/video-x
 ```
 
-O `open` mostra e abre `assets/source/` para você colocar os arquivos. O projeto herda o canal e pode sobrescrever:
+`open` shows and opens `assets/source/` so you can drop the files in. The project inherits the channel and can override:
 
 ```bash
 node scripts/rooster.mjs new video-special --channel studio-a \
@@ -132,60 +132,60 @@ node scripts/rooster.mjs new video-special --channel studio-a \
   --voice user
 ```
 
-`new --target filmcraft` já cria o projeto com `timeline: "filmcraft"`; `--target hyperframes|remotion` fixa o engine criativo. Sem `--target`, o projeto herda o engine do canal.
+`new --target filmcraft` already creates the project with `timeline: "filmcraft"`; `--target hyperframes|remotion` pins the creative engine. Without `--target`, the project inherits the channel engine.
 
-`project.json` registra:
+`project.json` records:
 
 - `channel`;
 - `profile`;
 - `format`;
 - `language`;
-- `engine` (renderer criativo ou renderer dos elementos no FilmCraft);
-- `timeline` (`none` ou `filmcraft`);
+- `engine` (creative renderer or the element renderer in FilmCraft);
+- `timeline` (`none` or `filmcraft`);
 - `mode` (source, voice, style, autonomy);
-- `assets` (estratégia, permissões, licença);
-- `overrides` (o que veio do projeto, não do canal).
+- `assets` (strategy, permissions, license);
+- `overrides` (what came from the project, not the channel).
 
-## Precedência
+## Precedence
 
 ```text
-projeto > canal > workspace/global > built-in
+project > channel > workspace/global > built-in
 ```
 
-O projeto pode sobrescrever qualquer default do canal. Não existe camada de categoria.
+The project can override any channel default. There is no category layer.
 
-## Subagents e handoffs
+## Subagents and handoffs
 
-O agente principal não precisa carregar o material bruto. Cada etapa pesada pode rodar em um subagent definido em `agents/`; ele grava o detalhe em disco e devolve um handoff curto.
+The main agent does not need to load the raw material. Each heavy stage can run in a subagent defined in `agents/`; it writes the detail to disk and returns a short handoff.
 
 ```text
 work/
-├── handoffs/   # um resumo por etapa, ex.: 03-transcript.md
-├── logs/       # saída bruta de build, render, FFmpeg, transcrição
-├── scratch/    # rascunhos e arquivos intermediários
-└── notes/      # detalhe produzido pelos subagents para o próximo estágio
-    └── feedback-<timestamp>.md  # rascunho de issue revisado
+├── handoffs/   # one summary per stage, e.g. 03-transcript.md
+├── logs/       # raw output from build, render, FFmpeg, transcription
+├── scratch/    # drafts and intermediate files
+└── notes/      # detail produced by subagents for the next stage
+    └── feedback-<timestamp>.md  # reviewed issue draft
 ```
 
-O principal lê os handoffs, vê o `plan.html` e 3–5 frames. A transcrição completa, o código gerado e os logs ficam fora do contexto principal. O protocolo está em [`references/subagents.md`](../references/subagents.md) e o contrato de retorno em [`agents/_handoff.md`](../agents/_handoff.md).
+The main agent reads the handoffs, looks at `plan.html` and 3–5 frames. The full transcript, the generated code, and the logs stay out of the main context. The protocol is in [`references/subagents.md`](../references/subagents.md) and the return contract in [`agents/_handoff.md`](../agents/_handoff.md).
 
-## Review e handoff
+## Review and handoff
 
-| Artefato | Comando | Uso |
+| Artifact | Command | Purpose |
 |---|---|---|
-| `style/proof/index.html` | `styleproof <slug>` | 3 frames de amostra do estilo antes do plano |
-| `edit/plan.html` | `plan <slug>` | Plano com player, contexto da transcrição, tempo no bruto e no corte final |
-| `qa/plan-review.md` | `plan <slug>` | Vãos visuais, cortes secos, textos sem lastro, b-roll sem `covers` e colisões de layout |
-| `preview/index.html` | `preview <slug>` | Player, timeline, validação, assets e checklist de QA |
-| `qa/text-review.md` | `textcheck <slug>` | Todos os textos em tela com timecodes e alertas |
-| `edit/export/` | `export <slug> --format both` | EDL/FCPXML para DaVinci ou Premiere |
-| `engine/filmcraft/<slug>.fcproj` | `timeline <slug> --open` | Timeline editável no FilmCraft (opcional) |
+| `style/proof/index.html` | `styleproof <slug>` | 3 sample frames of the style before the plan |
+| `edit/plan.html` | `plan <slug>` | Plan with player, transcript context, time in the raw footage and in the final cut |
+| `qa/plan-review.md` | `plan <slug>` | Visual gaps, hard cuts, unsupported text, b-roll without `covers`, and layout collisions |
+| `preview/index.html` | `preview <slug>` | Player, timeline, validation, assets, and QA checklist |
+| `qa/text-review.md` | `textcheck <slug>` | All on-screen text with timecodes and warnings |
+| `edit/export/` | `export <slug> --format both` | EDL/FCPXML for DaVinci or Premiere |
+| `engine/filmcraft/<slug>.fcproj` | `timeline <slug> --open` | Editable timeline in FilmCraft (optional) |
 
-O `preview` e o `styleproof` são arquivos HTML estáticos; funcionam sem servidor. O `export` é um handoff, não substitui `edit/plan.json`.
+`preview` and `styleproof` are static HTML files; they work without a server. `export` is a handoff, it does not replace `edit/plan.json`.
 
-## Timeline FilmCraft (opcional)
+## FilmCraft timeline (optional)
 
-O FilmCraft é um alvo de timeline opt-in. Ele não substitui HyperFrames ou Remotion e não é necessário para o fluxo normal.
+FilmCraft is an opt-in timeline target. It does not replace HyperFrames or Remotion and is not required for the normal flow.
 
 ```bash
 node scripts/rooster.mjs build video-x --target filmcraft
@@ -193,46 +193,46 @@ node scripts/rooster.mjs timeline video-x --open
 node scripts/rooster.mjs render video-x --draft
 ```
 
-`timeline <slug> --json` imprime o caminho do `.fcproj`, a sequência e a contagem de elementos.
+`timeline <slug> --json` prints the path of the `.fcproj`, the sequence, and the element count.
 
-O build é híbrido:
+The build is hybrid:
 
-- o FFmpeg monta o corte e o mix de áudio em `engine/filmcraft/assets/`;
-- HyperFrames ou Remotion renderizam cada elemento em `engine/filmcraft/elements/` (MOV ProRes 4444 com alpha);
-- o FilmCraft monta `<slug>.fcproj` com o source em V1 (só vídeo), o áudio mixado em A1 e os elementos em V2+, em faixas sem sobreposição.
+- FFmpeg assembles the cut and the audio mix in `engine/filmcraft/assets/`;
+- HyperFrames or Remotion render each element in `engine/filmcraft/elements/` (ProRes 4444 MOV with alpha);
+- FilmCraft assembles `<slug>.fcproj` with the source in V1 (video only), the mixed audio in A1, and the elements in V2+, on non-overlapping tracks.
 
-`--engine hyperframes|remotion` escolhe o renderer dos elementos; `auto` usa Remotion quando há elemento 3D e HyperFrames nos outros casos. `work/filmcraft.json` guarda o estado (itens, clipes, hashes e janelas) para builds incrementais.
+`--engine hyperframes|remotion` chooses the element renderer; `auto` uses Remotion when there is a 3D element and HyperFrames otherwise. `work/filmcraft.json` stores the state (items, clips, hashes, and windows) for incremental builds.
 
-- `--if-needed` pula quando plano, base, renderer e formato não mudaram.
-- Elementos inalterados são reaproveitados de `cache/elements/`.
-- Elemento alterado usa `clip.replaceFromBin` quando a janela é a mesma; janela diferente apaga e reposiciona só aquele clipe.
-- Base alterada reposiciona apenas V1/A1; clipes do usuário nas outras tracks são preservados.
-- `--force` arquiva o `.fcproj` anterior em `engine/filmcraft/archive/` e reconstrói.
-- `--rebuild-media` força o re-render da base e dos elementos.
+- `--if-needed` skips when the plan, base, renderer, and format have not changed.
+- Unchanged elements are reused from `cache/elements/`.
+- A changed element uses `clip.replaceFromBin` when the window is the same; a different window deletes and repositions only that clip.
+- A changed base repositions only V1/A1; user clips on the other tracks are preserved.
+- `--force` archives the previous `.fcproj` in `engine/filmcraft/archive/` and rebuilds.
+- `--rebuild-media` forces the base and the elements to re-render.
 
-Cuidados:
+Caveats:
 
-- `zoom` não vira clipe; aplica-se à base e é pulado com aviso.
-- Markers e legendas são criados no primeiro build; builds seguintes preservam.
-- O `.fcproj` guarda caminhos absolutos: mover a pasta quebra os links.
-- Só um processo escreve por vez; feche o FilmCraft durante o `build`.
-- ProRes 4444 ocupa espaço; o GC do cache se aplica.
-- O export do FilmCraft é CPU-bound para grading/keys; o H.264 pode usar hardware.
+- `zoom` does not become a clip; it applies to the base and is skipped with a warning.
+- Markers and captions are created on the first build; later builds preserve them.
+- The `.fcproj` stores absolute paths: moving the folder breaks the links.
+- Only one process writes at a time; close FilmCraft during `build`.
+- ProRes 4444 takes up space; the cache GC applies.
+- FilmCraft export is CPU-bound for grading/keys; H.264 can use hardware.
 
-O `export` de EDL/FCPXML continua disponível e é independente do FilmCraft.
+The EDL/FCPXML `export` remains available and is independent of FilmCraft.
 
-`doctor --json` reporta `filmcraft: { installed, cli, app, source, version, mcp }`. `filmcraft status --json` mostra detecção, MCP e um prompt de onboarding (`prompt.kind`: `connect-mcp`, `install`, `install-cli` ou `ready`). `filmcraft setup [--client opencode|claude] [--write]` imprime o snippet e, com `--write`, mescla em `opencode.json` ou `.mcp.json`, criando um backup `.bak` quando o arquivo já existe; `filmcraft mcp-config [--client ...] [--json]` só mostra o snippet. Nada é instalado nem gravado sem permissão explícita. Link: https://getartcraft.com/apps/filmcraft.
+`doctor --json` reports `filmcraft: { installed, cli, app, source, version, mcp }`. `filmcraft status --json` shows detection, MCP, and an onboarding prompt (`prompt.kind`: `connect-mcp`, `install`, `install-cli`, or `ready`). `filmcraft setup [--client opencode|claude] [--write]` prints the snippet and, with `--write`, merges it into `opencode.json` or `.mcp.json`, creating a `.bak` backup when the file already exists; `filmcraft mcp-config [--client ...] [--json]` only shows the snippet. Nothing is installed or written without explicit permission. Link: https://getartcraft.com/apps/filmcraft.
 
-Fluxo de onboarding (o agente pergunta, não decide sozinho):
+Onboarding flow (the agent asks, it does not decide on its own):
 
-- FilmCraft encontrado, MCP não registrado: "Encontrei o FilmCraft <versão> no seu PC. Deseja conectar o MCP agora? Depois de conectar, você precisará reiniciar o programa/agente para ele enxergar as tools." Opções: Conectar o MCP / Agora não.
-- FilmCraft não encontrado: "Não encontrei o FilmCraft no seu PC. Quer continuar via HyperFrames/Remotion ou instalar o FilmCraft + conectar o MCP?" Opções: Continuar via HyperFrames/Remotion / Instalar FilmCraft + conectar MCP.
-- App encontrado sem CLI: pedir para instalar o CLI ou definir `ROOSTER_FILMCRAFT_CLI`.
-- MCP já registrado: avisar que ainda pode ser necessário reiniciar o agente.
-- Nunca instalar nem escrever config de MCP sem permissão explícita.
-- O prompt completo sai de `node "<skill>/scripts/rooster.mjs" filmcraft status --json`.
+- FilmCraft found, MCP not registered: "FilmCraft was found on this PC. Connect its MCP now? After connecting, you must restart the program/agent so it can see the tools." Options: Connect MCP / Not now.
+- FilmCraft not found: "FilmCraft was not found on this PC. Continue with HyperFrames/Remotion, or install FilmCraft and connect its MCP?" Options: Continue with HyperFrames/Remotion / Install FilmCraft + connect MCP.
+- App found without a CLI: ask to install the CLI or set `ROOSTER_FILMCRAFT_CLI`.
+- MCP already registered: warn that the agent may still need a restart.
+- Never install or write MCP config without explicit permission.
+- The full prompt comes from `node "<skill>/scripts/rooster.mjs" filmcraft status --json`.
 
-## Perfis
+## Profiles
 
 ```text
 profiles/<id>/
@@ -243,22 +243,22 @@ profiles/<id>/
 └── examples/
 ```
 
-Perfis podem ser:
+Profiles can be:
 
-- **channel** — dentro de `channels/<canal>/profiles`;
-- **workspace** — compartilhado em `rooster/profiles`;
+- **channel** — inside `channels/<channel>/profiles`;
+- **workspace** — shared in `rooster/profiles`;
 - **global** — `~/.rooster/profiles`;
 - **built-in** — `templates/profiles`.
 
-`components/<name>/` guarda animações autorais reutilizáveis (`element.html`, `element.css`, `element.js`). O build procura o componente primeiro no projeto (`style/components/<name>/`), depois no canal, no perfil e nos templates. Use `component: "<name>"` no elemento `custom` do plano. Quando um visual novo funciona, salve-o no perfil ou no canal para o próximo vídeo reutilizar.
+`components/<name>/` stores reusable in-house animations (`element.html`, `element.css`, `element.js`). The build looks for the component first in the project (`style/components/<name>/`), then in the channel, the profile, and the templates. Use `component: "<name>"` in the plan's `custom` element. When a new visual works, save it to the profile or the channel so the next video can reuse it.
 
 ```bash
 node scripts/rooster.mjs profile list
 node scripts/rooster.mjs profile show minimal
-node scripts/rooster.mjs profile fork minimal --as minha-marca
+node scripts/rooster.mjs profile fork minimal --as my-brand
 ```
 
-## Biblioteca
+## Library
 
 ```text
 library/
@@ -271,9 +271,9 @@ library/
 └── images/
 ```
 
-Cada asset deve ter licença e proveniência. Não commitar mídia pesada no repositório da skill.
+Every asset must have a license and provenance. Do not commit heavy media to the skill repository.
 
-## Links de vídeo
+## Video links
 
 ```bash
 node scripts/rooster.mjs ingest studio-a/video-x \
@@ -281,16 +281,16 @@ node scripts/rooster.mjs ingest studio-a/video-x \
   --confirm-rights
 ```
 
-Leia `references/link-ingest.md` antes de baixar. O comando só funciona com `--confirm-rights`, e respeita `assets.allowDownload` do canal/workspace.
+Read `references/link-ingest.md` before downloading. The command only works with `--confirm-rights`, and it respects the channel/workspace `assets.allowDownload`.
 
-## Fluxo rápido
+## Quick flow
 
-1. `init` — cria workspace + canal `default`.
-2. `channel new` — cria o canal real.
-3. `new --channel` — cria o projeto.
-4. `ingest` — adiciona assets.
-5. `transcribe` — gera `edit/transcript.json` (via `transcript-analyst`).
-6. `digest` — lê a transcrição em partes; o principal recebe só o handoff.
-7. `plan` - aprova o plano (via `editor`).
-8. `build --target` — gera HyperFrames/Remotion (`--target hyperframes|remotion`) ou, opcionalmente, uma timeline FilmCraft (`--target filmcraft`), via `engineer`.
-9. `preview`/`render` — revisão e entrega (via `qa` + `engineer`).
+1. `init` — creates the workspace + `default` channel.
+2. `channel new` — creates the real channel.
+3. `new --channel` — creates the project.
+4. `ingest` — adds assets.
+5. `transcribe` — generates `edit/transcript.json` (via `transcript-analyst`).
+6. `digest` — reads the transcript in parts; the main agent receives only the handoff.
+7. `plan` - approves the plan (via `editor`).
+8. `build --target` — generates HyperFrames/Remotion (`--target hyperframes|remotion`) or, optionally, a FilmCraft timeline (`--target filmcraft`), via `engineer`.
+9. `preview`/`render` — review and delivery (via `qa` + `engineer`).

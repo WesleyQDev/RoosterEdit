@@ -1,6 +1,6 @@
 # Intake
 
-The intake is a short conversation, not a form. Ask the questions that change the output, infer the rest, and confirm the expensive decisions. If you are unsure about a creative, audio, or cost decision, ask one focused question at the current `Etapa X/8` instead of guessing.
+The intake is a short conversation, not a form. Ask the questions that change the output, infer the rest, and confirm the expensive decisions. If you are unsure about a creative, audio, or cost decision, ask one focused question at the current `Step X/8` instead of guessing.
 
 ## The seven dimensions
 

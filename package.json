@@ -1,7 +1,7 @@
 {
   "name": "rooster-edit",
   "version": "0.1.0",
-  "description": "A video studio for AI agents: plan, edit, and render videos with HyperFrames and Remotion.",
+  "description": "Turn the footage and assets you already have into a finished cut with AI coding agents: plan, review, and render with HyperFrames, Remotion, or FFmpeg.",
   "type": "module",
   "bin": {
     "rooster": "scripts/rooster.mjs"
@@ -10,7 +10,8 @@
     "doctor": "node scripts/rooster.mjs doctor",
     "sync": "node scripts/sync-skill.mjs",
     "validate": "node scripts/validate.mjs",
-    "test": "node --test scripts/test/*.test.mjs"
+    "test": "node --test scripts/test/*.test.mjs",
+    "prepublishOnly": "npm run validate && npm test"
   },
   "engines": {
     "node": ">=22"
@@ -21,7 +22,7 @@
     "scripts",
     "templates",
     "agents",
-    "docs",
+    "docs/*.md",
     "README.md",
     "LICENSE"
   ],
@@ -32,8 +33,19 @@
     "remotion",
     "ffmpeg",
     "ai-agent",
+    "ai-video",
     "opencode",
+    "claude-code",
+    "codex",
     "skill"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WesleyQDev/RoosterEdit.git"
+  },
+  "homepage": "https://github.com/WesleyQDev/RoosterEdit#readme",
+  "bugs": {
+    "url": "https://github.com/WesleyQDev/RoosterEdit/issues"
+  },
   "license": "MIT"
 }

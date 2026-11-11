@@ -41,7 +41,7 @@ A project can override it in `project.json`:
 ## Folder contract
 
 ```text
-channels/<canal>/projects/<slug>/assets/
+channels/<channel>/projects/<slug>/assets/
 ├── source/       files from the user
 ├── generated/    AI-generated images, audio, video
 ├── licensed/     stock, music, fonts, overlays with a recorded license

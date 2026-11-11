@@ -1,60 +1,60 @@
-# Arquitetura do RoosterEdit
+# RoosterEdit Architecture
 
-> Documento de planejamento. A skill em si (`SKILL.md`) e as referências internas ficam em inglês; esta documentação humana fica em português.
+> Planning document. The skill itself (`SKILL.md`) and the internal references are in English; this is the human documentation.
 
-## 1. Visão
+## 1. Vision
 
-RoosterEdit é uma **camada de direção e organização** para produção de vídeo com agentes. Ela não tenta substituir Remotion, HyperFrames ou FFmpeg. Ela decide o que fazer, organiza os assets, escreve o plano, escolhe o motor, conduz a implementação, revisa o resultado e entrega o pacote final.
+RoosterEdit is a **direction and organization layer** for agent-driven video production. It does not try to replace Remotion, HyperFrames, or FFmpeg. It decides what to do, organizes the assets, writes the plan, picks the engine, drives the implementation, reviews the result, and delivers the final package.
 
-O modelo mental:
+The mental model:
 
 ```text
-Intenção + assets + restrições
+Intent + assets + constraints
             │
             ▼
       ┌─────────────┐
-      │ RoosterEdit │  direção, organização, QA
+      │ RoosterEdit │  direction, organization, QA
       └─────────────┘
             │
    ┌────────┼──────────────┬──────────────┐
    ▼        ▼              ▼              ▼
-Remotion  HyperFrames  FFmpeg   FilmCraft (opcional)
+Remotion  HyperFrames  FFmpeg   FilmCraft (optional)
 ```
 
-## 2. Decisões fechadas
+## 2. Settled decisions
 
-| Decisão | Valor |
+| Decision | Value |
 |---|---|
-| Local da skill instalável | Raiz do repositório |
-| Engine padrão | `auto` |
-| Motores criativos | HyperFrames e Remotion; FFmpeg é utilitário de mídia |
-| Timeline | Review unificado + estúdios nativos; FilmCraft é um alvo de timeline opcional |
-| FilmCraft | Opt-in (`--target filmcraft`), nunca default; monta um `.fcproj` editável |
-| Geração de mídia no v1 | Código + TTS + assets do usuário; image/video gen plugável |
-| Idioma | `SKILL.md` e referências em inglês; docs humanos em pt-BR |
-| Workspace local | `rooster/` no projeto |
-| Biblioteca global | `~/.rooster/` (opcional) |
-| Precedência | projeto > workspace > global > built-in |
+| Installable skill location | Repository root |
+| Default engine | `auto` |
+| Creative engines | HyperFrames and Remotion; FFmpeg is a media utility |
+| Timeline | Unified review + native studios; FilmCraft is an optional timeline target |
+| FilmCraft | Opt-in (`--target filmcraft`), never the default; assembles an editable `.fcproj` |
+| Media generation in v1 | Code + TTS + user assets; pluggable image/video gen |
+| Language | `SKILL.md`, references, and human docs in English |
+| Local workspace | `rooster/` in the project |
+| Global library | `~/.rooster/` (optional) |
+| Precedence | project > workspace > global > built-in |
 
-## 2.1 Inspiração no vídeo de referência
+## 2.1 Inspiration from the reference video
 
-O fluxo de 6 etapas do vídeo "Como editar vídeos com IA usando o Claude Code" (Marcos Lemos) inspira o **caminho rápido** do RoosterEdit: preparar ferramentas, organizar o material, criar um guia de estilo, transcrever com Whisper, montar um plano de edição, mostrar o plano para aprovação, criar os elementos visuais e montar no HyperFrames ou no Remotion. Opcionalmente, a timeline final pode ser entregue ao FilmCraft para edição.
+The 6-step flow in the video "Como editar vídeos com IA usando o Claude Code" (Marcos Lemos) inspires RoosterEdit's **fast path**: prepare the tools, organize the material, create a style guide, transcribe with Whisper, assemble an edit plan, show the plan for approval, create the visual elements, and assemble in HyperFrames or Remotion. Optionally, the final timeline can be handed to FilmCraft for editing.
 
-O que **não** copiamos: os nomes das pastas e a estrutura rígida do vídeo. O RoosterEdit usa o workspace próprio:
+What we do **not** copy: the folder names and the rigid structure of that video. RoosterEdit uses its own workspace:
 
-| Vídeo de referência | RoosterEdit |
+| Reference video | RoosterEdit |
 |---|---|
-| `bruto/` | `channels/<canal>/projects/<slug>/assets/source/` |
-| `estilo/ESTILO.md` | `channels/<canal>/projects/<slug>/style.md` + profile resolvido |
-| `trabalho/transcricao.json` | `channels/<canal>/projects/<slug>/edit/transcript.json` |
-| `trabalho/plano.json` | `channels/<canal>/projects/<slug>/edit/plan.json` |
-| `final/` | `channels/<canal>/projects/<slug>/renders/` |
+| `bruto/` | `channels/<channel>/projects/<slug>/assets/source/` |
+| `estilo/ESTILO.md` | `channels/<channel>/projects/<slug>/style.md` + resolved profile |
+| `trabalho/transcricao.json` | `channels/<channel>/projects/<slug>/edit/transcript.json` |
+| `trabalho/plano.json` | `channels/<channel>/projects/<slug>/edit/plan.json` |
+| `final/` | `channels/<channel>/projects/<slug>/renders/` |
 
-A sequência é parecida; a organização é nossa. O plano em `edit/plan.json` é o gate mais importante: nada de timeline, engine ou render antes da aprovação.
+The sequence is similar; the organization is ours. The plan in `edit/plan.json` is the most important gate: no timeline, engine, or render before approval.
 
-Detalhes em `references/video-pipeline.md` e `references/edit-plan.md`.
+Details in `references/video-pipeline.md` and `references/edit-plan.md`.
 
-## 3. Estrutura do repositório
+## 3. Repository structure
 
 ```text
 RoosterEdit/
@@ -91,16 +91,16 @@ RoosterEdit/
 ├── docs/
 ├── examples/
 ├── evals/
-└── .opencode/skills/rooster-edit/   # cópia gerada para descoberta local
+└── .opencode/skills/rooster-edit/   # generated copy for local discovery
 ```
 
-### Por que a skill fica na raiz
+### Why the skill lives at the root
 
-O repositório inteiro é o pacote da skill. Isso simplifica a instalação e a publicação: quem copiar o repo para `~/.config/opencode/skills/rooster-edit` ou `.opencode/skills/rooster-edit` leva tudo junto. A pasta `.opencode/skills/rooster-edit` é apenas uma cópia de desenvolvimento, gerada por `scripts/sync-skill.mjs`, para o OpenCode descobrir a skill enquanto ela é editada.
+The whole repository is the skill package. This simplifies installation and publishing: anyone who copies the repo to `~/.config/opencode/skills/rooster-edit` or `.opencode/skills/rooster-edit` gets everything with it. The `.opencode/skills/rooster-edit` folder is only a development copy, generated by `scripts/sync-skill.mjs`, so OpenCode discovers the skill while it is being edited.
 
-## 3.1 Modelo de canais
+## 3.1 Channel model
 
-O workspace é dividido em **canais**. Um canal é o padrão de produção estável de marca/audiência/operação e guarda os defaults criativos:
+The workspace is divided into **channels**. A channel is the stable production standard for brand/audience/operation and holds the creative defaults:
 
 ```json
 {
@@ -124,18 +124,18 @@ O workspace é dividido em **canais**. Um canal é o padrão de produção está
 }
 ```
 
-Precedência: **projeto > canal > workspace/global > built-in**.
+Precedence: **project > channel > workspace/global > built-in**.
 
-- **Canal**: conteúdo, idioma, formato default, perfil, assets, engine, autonomia, voz.
-- **Projeto**: herda o canal, define a própria duração e registra apenas os overrides.
+- **Channel**: content, language, default format, profile, assets, engine, autonomy, voice.
+- **Project**: inherits the channel, defines its own duration, and records only the overrides.
 
-Não existe camada de categoria. O que o canal produz fica em `content`; a estrutura de cada vídeo fica no brief, no script e em `edit/plan.json`.
+There is no category layer. What the channel produces lives in `content`; the structure of each video lives in the brief, the script, and `edit/plan.json`.
 
-Todo projeto novo fica em `channels/<canal>/projects/<slug>/`. O `projects/` na raiz é legado.
+Every new project lives in `channels/<channel>/projects/<slug>/`. The root `projects/` is legacy.
 
-## 4. Workspace do usuário
+## 4. User workspace
 
-O workspace é criado no projeto onde o vídeo será produzido, não no repositório da skill. O desenho abaixo mostra a forma do workspace e de um projeto dentro de um canal.
+The workspace is created in the project where the video will be produced, not in the skill repository. The diagram below shows the shape of the workspace and of a project inside a channel.
 
 ```text
 rooster/
@@ -143,7 +143,7 @@ rooster/
 ├── config.json
 ├── README.md
 ├── channels/
-│   └── <canal>/
+│   └── <channel>/
 │       ├── channel.json
 │       ├── projects/
 │       │   └── <slug>/
@@ -207,10 +207,10 @@ rooster/
 │   ├── luts/
 │   ├── broll/
 │   └── images/
-└── cache/          # inclui cache/elements/ (clipes de elemento)
+└── cache/          # includes cache/elements/ (element clips)
 ```
 
-### Biblioteca global
+### Global library
 
 ```text
 ~/.rooster/
@@ -219,28 +219,28 @@ rooster/
 └── library/
 ```
 
-A biblioteca global é opcional. Ela existe para o usuário reutilizar perfis, fontes, músicas e overlays entre projetos. A resolução é:
+The global library is optional. It exists so the user can reuse profiles, fonts, music, and overlays across projects. Resolution is:
 
-1. Overrides do projeto (`project.json`)
-2. Perfis do workspace (`rooster/profiles`)
-3. Perfis globais (`~/.rooster/profiles`)
-4. Built-ins da skill (`templates/profiles`)
+1. Project overrides (`project.json`)
+2. Workspace profiles (`rooster/profiles`)
+3. Global profiles (`~/.rooster/profiles`)
+4. Skill built-ins (`templates/profiles`)
 
-### Variáveis de ambiente
+### Environment variables
 
-| Variável | Efeito |
+| Variable | Effect |
 |---|---|
-| `ROOSTER_WORKSPACE` | Caminho do workspace (default: `./rooster`) |
-| `ROOSTER_HOME` | Caminho da biblioteca global (default: `~/.rooster`) |
-| `ROOSTER_PROFILE` | Perfil default |
-| `ROOSTER_ENGINE` | Engine default (`auto`, `hyperframes`, `remotion`, `ffmpeg`) |
-| `ROOSTER_FILMCRAFT_CLI` | Caminho do `filmcraft-cli` (opcional) |
-| `ROOSTER_TTS_PROVIDER` | Provider de TTS default |
+| `ROOSTER_WORKSPACE` | Workspace path (default: `./rooster`) |
+| `ROOSTER_HOME` | Global library path (default: `~/.rooster`) |
+| `ROOSTER_PROFILE` | Default profile |
+| `ROOSTER_ENGINE` | Default engine (`auto`, `hyperframes`, `remotion`, `ffmpeg`) |
+| `ROOSTER_FILMCRAFT_CLI` | `filmcraft-cli` path (optional) |
+| `ROOSTER_TTS_PROVIDER` | Default TTS provider |
 | `ROOSTER_BROWSER` | `available` / `unavailable` / `unknown` |
 
 ## 5. Profiles
 
-Um profile é a identidade visual e sonora reutilizável. Ele deve ser específico o suficiente para guiar decisões, mas genérico o suficiente para servir a vários vídeos.
+A profile is the reusable visual and sonic identity. It should be specific enough to guide decisions, but generic enough to serve several videos.
 
 ```text
 profiles/<id>/
@@ -257,7 +257,7 @@ profiles/<id>/
 └── examples/
 ```
 
-Exemplo de `profile.json`:
+Example `profile.json`:
 
 ```json
 {
@@ -315,22 +315,22 @@ Exemplo de `profile.json`:
 }
 ```
 
-Regras:
+Rules:
 
-- `extends` permite herdar de `base` ou de outro perfil.
-- `scope` indica se o perfil é `project`, `workspace` ou `global`.
-- `rooster profile fork <id> --as <novo>` cria uma cópia editável.
-- Perfis nunca devem conter assets sem licença documentada.
+- `extends` inherits from `base` or from another profile.
+- `scope` states whether the profile is `project`, `workspace`, or `global`.
+- `rooster profile fork <id> --as <new>` creates an editable copy.
+- Profiles must never contain assets without a documented license.
 
 ## 6. Project
 
-O projeto é a instância concreta. Ele combina channel + profile + overrides.
+The project is the concrete instance. It combines channel + profile + overrides.
 
 ```json
 {
   "schema": "rooster.project/v1",
   "slug": "meu-video",
-  "name": "Meu Vídeo",
+  "name": "My Video",
   "channel": "en-tech",
   "profile": "tech-neon",
   "engine": "auto",
@@ -363,109 +363,109 @@ O projeto é a instância concreta. Ele combina channel + profile + overrides.
 }
 ```
 
-Status possíveis: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, `rendering`, `done`, `blocked`.
+Possible statuses: `intake`, `planning`, `assets`, `building`, `preview`, `qa`, `rendering`, `done`, `blocked`.
 
-`format.duration` começa como `null`. A duração só é gravada quando o usuário declara um alvo explícito; caso contrário, o plano e a mídia definem o comprimento, e a timeline registra a duração real da edição.
+`format.duration` starts as `null`. The duration is only recorded when the user declares an explicit target; otherwise the plan and the media define the length, and the timeline records the real duration of the edit.
 
-`timeline` aceita `none` ou `filmcraft`. Quando é `filmcraft`, `engine` registra o renderer dos elementos (`hyperframes` ou `remotion`), não um terceiro motor.
+`timeline` accepts `none` or `filmcraft`. When it is `filmcraft`, `engine` records the renderer for the elements (`hyperframes` or `remotion`), not a third engine.
 
-## 7. Fluxo de trabalho
+## 7. Workflow
 
-### 7.0 Delegação por etapa
+### 7.0 Per-stage delegation
 
-O agente principal é o diretor: mantém a conversa, o brief, as decisões e os gates. As etapas pesadas rodam em subagents com contexto descartável, definidos em `agents/` e coordenados por `references/subagents.md`.
+The main agent is the director: it keeps the conversation, the brief, the decisions, and the gates. The heavy stages run in subagents with disposable context, defined in `agents/` and coordinated by `references/subagents.md`.
 
-| Etapa | Papel | O principal lê |
+| Stage | Role | What the main agent reads |
 |---|---|---|
-| Brief | `producer` | resumo + perguntas abertas |
-| Pesquisa | `researcher` | achados + fontes + licenças |
-| Transcrição/análise | `transcript-analyst` | handoff, nunca `transcript.json` |
-| Roteiro | `scriptwriter` | hook + beats |
-| Plano/timeline | `editor` | `plan.html` + riscos |
-| Estilo/storyboard | `art-director` | tokens + cenas + assets |
-| Áudio | `audio-director` | voz, música e mix |
-| Build/render | `engineer` | status + caminhos + probe |
-| QA | `qa` | veredito + evidências + frames |
+| Brief | `producer` | summary + open questions |
+| Research | `researcher` | findings + sources + licenses |
+| Transcription/analysis | `transcript-analyst` | handoff, never `transcript.json` |
+| Script | `scriptwriter` | hook + beats |
+| Plan/timeline | `editor` | `plan.html` + risks |
+| Style/storyboard | `art-director` | tokens + scenes + assets |
+| Audio | `audio-director` | voice, music, and mix |
+| Build/render | `engineer` | status + paths + probe |
+| QA | `qa` | verdict + evidence + frames |
 
-Cada subagent grava o detalhe em disco e devolve um handoff curto em `work/handoffs/`; logs e rascunhos ficam em `work/logs/` e `work/scratch/`. O principal lê o handoff, vê o `plan.html` e 3–5 frames. Não lê transcrição bruta, código gerado, logs completos nem JSON gigante. Aprovação, licença e julgamento visual final continuam no principal.
+Each subagent writes the detail to disk and returns a short handoff in `work/handoffs/`; logs and drafts stay in `work/logs/` and `work/scratch/`. The main agent reads the handoff, looks at `plan.html` and 3–5 frames. It does not read the raw transcript, generated code, full logs, or giant JSON. Approval, licensing, and final visual judgment stay with the main agent.
 
-O nome da ferramenta e do tipo de agente varia entre harnesses (OpenCode, Claude Code, Codex, etc.); o papel em `agents/` é o contrato. Sem agente com contexto novo, ou se o spawn falhar, a etapa roda inline com os mesmos arquivos.
+The tool name and the agent type vary between harnesses (OpenCode, Claude Code, Codex, etc.); the role in `agents/` is the contract. Without an agent with fresh context, or if the spawn fails, the stage runs inline with the same files.
 
-Sem subagents, a etapa roda inline, mas os arquivos e o handoff continuam existindo. O protocolo completo está em `references/subagents.md`.
+Without subagents, the stage runs inline, but the files and the handoff still exist. The full protocol is in `references/subagents.md`.
 
 ### 7.1 Doctor
 
-`node scripts/rooster.mjs doctor --json` detecta:
+`node scripts/rooster.mjs doctor --json` detects:
 
-- SO, arquitetura, Node, npm, Python, FFmpeg, FFprobe, Git, yt-dlp.
-- Presença de HyperFrames, Remotion, Three.js no projeto.
-- FilmCraft: CLI, app, versão, origem e registro do MCP (`filmcraft` no JSON).
-- Browser disponível? (via `ROOSTER_BROWSER` ou convenção do harness)
-- Subagents disponíveis? (o agente sabe; o CLI reporta `unknown`)
-- Providers de TTS configurados (variáveis de ambiente e CLIs).
+- OS, architecture, Node, npm, Python, FFmpeg, FFprobe, Git, yt-dlp.
+- Presence of HyperFrames, Remotion, Three.js in the project.
+- FilmCraft: CLI, app, version, origin, and MCP registration (`filmcraft` in the JSON).
+- Browser available? (via `ROOSTER_BROWSER` or harness convention)
+- Subagents available? (the agent knows; the CLI reports `unknown`)
+- Configured TTS providers (environment variables and CLIs).
 - GPU (NVIDIA via `nvidia-smi`).
 
-O resultado é um objeto JSON estável, usado pela skill para escolher o caminho.
+The result is a stable JSON object, used by the skill to choose the path.
 
 ### 7.2 Intake
 
-Perguntas que mudam o output:
+Questions that change the output:
 
-1. Qual é o objetivo do vídeo?
-2. Quem é o público?
-3. Onde vai ser publicado? (YouTube, Shorts, Reels, TikTok, site, apresentação)
-4. Qual a duração alvo?
-5. Qual o formato? (16:9, 9:16, 1:1, custom)
-6. Você tem footage real, quer gerar tudo ou um híbrido?
-7. Você tem narração, quer TTS ou prefere sem fala?
-8. Você tem assets próprios? (áudio, imagens, fontes, efeitos, logo, música)
-9. Você tem um guia de estilo/perfil ou quer que a IA crie?
-10. Qual o nível de autonomia? (auto, guided, manual)
+1. What is the goal of the video?
+2. Who is the audience?
+3. Where will it be published? (YouTube, Shorts, Reels, TikTok, site, presentation)
+4. What is the target duration?
+5. What is the format? (16:9, 9:16, 1:1, custom)
+6. Do you have real footage, do you want everything generated, or a hybrid?
+7. Do you have narration, do you want TTS, or do you prefer no speech?
+8. Do you have your own assets? (audio, images, fonts, effects, logo, music)
+9. Do you have a style guide/profile, or do you want the AI to create one?
+10. What is the level of autonomy? (auto, guided, manual)
 
-Não perguntar tudo de uma vez. Perguntar só o que falta e o que muda a decisão.
+Do not ask everything at once. Ask only what is missing and what changes the decision.
 
 ### 7.3 Brief + script + beats
 
-- `brief.md`: objetivo, público, plataforma, duração, tom, CTA, referências.
-- `script.md` / `script.json`: falas, texto na tela, marcações de cena.
-- `beats.json`: estrutura narrativa com timings.
+- `brief.md`: goal, audience, platform, duration, tone, CTA, references.
+- `script.md` / `script.json`: lines, on-screen text, scene marks.
+- `beats.json`: narrative structure with timings.
 
-### 7.4 Resolução de estilo
+### 7.4 Style resolution
 
-- `style: user` → usar guia/arquivos do usuário.
-- `style: profile` → resolver perfil do workspace/global/built-in.
-- `style: ai` → criar um guia novo a partir de referências e do brief.
-- `style: reference` → extrair estilo de um vídeo/imagem de referência.
+- `style: user` → use the user's guide/files.
+- `style: profile` → resolve the profile from workspace/global/built-in.
+- `style: ai` → create a new guide from references and the brief.
+- `style: reference` → extract the style from a reference video/image.
 
-Gerar `style.md` com paleta, tipografia, motion, referências e prompts.
+Generate `style.md` with palette, typography, motion, references, and prompts.
 
-Depois de resolver o perfil, rodar `styleproof <slug>` para gerar `style/proof/index.html` com três frames (hook, dado, legenda/lower third). Aprovar o look antes do plano; mudar estilo depois do build é caro.
+After resolving the profile, run `styleproof <slug>` to generate `style/proof/index.html` with three frames (hook, data point, caption/lower third). Approve the look before the plan; changing the style after the build is expensive.
 
 ### 7.5 Assets
 
-- Ingerir em `assets/source`, `assets/generated` ou `assets/licensed`.
-- Gerar `assets/manifest.json` com hash, tipo, dimensões, duração, codec, licença e proveniência.
-- Criar proxies e thumbnails para inspeção.
-- Nunca apagar o original do usuário.
+- Ingest into `assets/source`, `assets/generated`, or `assets/licensed`.
+- Generate `assets/manifest.json` with hash, type, dimensions, duration, codec, license, and provenance.
+- Create proxies and thumbnails for inspection.
+- Never delete the user's original.
 
-#### Ingestão de links (yt-dlp)
+#### Link ingestion (yt-dlp)
 
-Quando o usuário manda um link de vídeo (YouTube, Vimeo, etc.) como material de origem, o RoosterEdit pode baixar o vídeo com `yt-dlp` para `assets/source/<slug>/`, junto com:
+When the user sends a video link (YouTube, Vimeo, etc.) as source material, RoosterEdit can download the video with `yt-dlp` to `assets/source/<slug>/`, along with:
 
-- `info.json` — título, autor, duração, capítulos, descrição, thumbnail;
-- `thumbnail.jpg` — capa;
-- `subtitles/*.srt` ou `.vtt` — legendas existentes e automáticas, quando disponíveis;
-- `video.mp4` — arquivo principal, preferindo H.264/AAC para compatibilidade.
+- `info.json` — title, author, duration, chapters, description, thumbnail;
+- `thumbnail.jpg` — cover;
+- `subtitles/*.srt` or `.vtt` — existing and automatic subtitles, when available;
+- `video.mp4` — main file, preferring H.264/AAC for compatibility.
 
-O fluxo deve:
+The flow must:
 
-1. Verificar se `yt-dlp` está instalado (`doctor`).
-2. Perguntar/confirmar que o usuário tem direito de usar o conteúdo.
-3. Baixar com limite de resolução e formato compatível.
-4. Registrar URL, autor, licença declarada e data de download no manifest.
-5. Nunca versionar cookies, tokens ou arquivos baixados no repositório da skill.
+1. Check whether `yt-dlp` is installed (`doctor`).
+2. Ask/confirm that the user has the right to use the content.
+3. Download with a resolution limit and a compatible format.
+4. Record URL, author, declared license, and download date in the manifest.
+5. Never version cookies, tokens, or downloaded files in the skill repository.
 
-Comandos de referência (detalhes em `references/link-ingest.md`):
+Reference commands (details in `references/link-ingest.md`):
 
 ```bash
 yt-dlp \
@@ -480,94 +480,94 @@ yt-dlp \
   "<url>"
 ```
 
-Para cortes específicos, usar `--download-sections "*00:01:20-00:02:10"` com moderação; alguns sites só entregam o arquivo completo. Para ambientes bloqueados, usar `--cookies-from-browser` localmente, nunca commitar o cookies.txt.
+For specific cuts, use `--download-sections "*00:01:20-00:02:10"` sparingly; some sites only deliver the full file. In blocked environments, use `--cookies-from-browser` locally, and never commit the cookies.txt.
 
-**Direitos e limites:** baixar apenas conteúdo próprio, com permissão, licença aberta ou domínio público. Não contornar DRM, paywall, login ou controle de acesso. Respeitar os termos da plataforma e as leis de copyright. O RoosterEdit não deve ser usado para reupload de conteúdo de terceiros.
+**Rights and limits:** download only your own content, content you have permission for, openly licensed content, or public domain content. Do not bypass DRM, paywalls, logins, or access control. Respect platform terms and copyright law. RoosterEdit must not be used to reupload third-party content.
 
 ### 7.6 Storyboard + timeline
 
-- `storyboard/storyboard.json`: cenas, frames, duração, transições, overlays.
-- `edit/timeline.json`: tracks, clips, scenes, captions, áudio e markers.
-- O storyboard é aprovado antes do build.
+- `storyboard/storyboard.json`: scenes, frames, duration, transitions, overlays.
+- `edit/timeline.json`: tracks, clips, scenes, captions, audio, and markers.
+- The storyboard is approved before the build.
 
 ### 7.7 Build
 
-- Escolher o alvo: `build <slug> --target auto|hyperframes|remotion|filmcraft` (o default vem do projeto/canal).
-- HyperFrames/Remotion: scaffold do projeto, cenas/componentes, 3D determinístico com Three.js e footage via EDL + FFmpeg.
-- FilmCraft (`--target filmcraft`): build híbrido. O FFmpeg monta o corte e o mix de áudio; HyperFrames ou Remotion renderizam cada elemento visual como clipe separado com alpha; o FilmCraft monta o `.fcproj` editável.
-- No FilmCraft, `--engine hyperframes|remotion` escolhe o renderer dos elementos; `auto` usa Remotion quando há elemento 3D e HyperFrames nos outros casos.
+- Choose the target: `build <slug> --target auto|hyperframes|remotion|filmcraft` (the default comes from the project/channel).
+- HyperFrames/Remotion: project scaffold, scenes/components, deterministic 3D with Three.js, and footage via EDL + FFmpeg.
+- FilmCraft (`--target filmcraft`): hybrid build. FFmpeg assembles the cut and the audio mix; HyperFrames or Remotion render each visual element as a separate clip with alpha; FilmCraft assembles the editable `.fcproj`.
+- In FilmCraft, `--engine hyperframes|remotion` chooses the element renderer; `auto` uses Remotion when there is a 3D element and HyperFrames otherwise.
 
 ### 7.8 Preview
 
-- `node scripts/rooster.mjs preview <slug>` escreve `preview/index.html` com player, plano, timeline, legendas, áudio, assets faltando e checklist de QA.
-- Estúdios nativos: Remotion Studio ou HyperFrames preview.
-- Com timeline FilmCraft, o `preview` aponta para `engine/filmcraft/<slug>.fcproj`; `timeline <slug> --open` abre no FilmCraft.
-- Browser agents podem abrir, tirar screenshot e inspecionar console.
+- `node scripts/rooster.mjs preview <slug>` writes `preview/index.html` with player, plan, timeline, captions, audio, missing assets, and QA checklist.
+- Native studios: Remotion Studio or HyperFrames preview.
+- With a FilmCraft timeline, `preview` points to `engine/filmcraft/<slug>.fcproj`; `timeline <slug> --open` opens it in FilmCraft.
+- Browser agents can open it, take a screenshot, and inspect the console.
 
 ### 7.9 QA
 
-Checklist técnico e editorial em `references/qa.md`:
+Technical and editorial checklist in `references/qa.md`:
 
-- resolução, aspect, fps, duração;
+- resolution, aspect, fps, duration;
 - black frames, freeze frames;
-- loudness, clipping, silêncio;
-- cortes no meio de palavras;
-- legendas: sync, leitura, safe area;
-- textos em tela (`textcheck` e `qa/text-review.md`);
+- loudness, clipping, silence;
+- cuts in the middle of words;
+- captions: sync, reading, safe area;
+- on-screen text (`textcheck` and `qa/text-review.md`);
 - safe areas: 90% action, 80% title;
-- licenças e assets faltando;
-- hook, ritmo, clareza, CTA, consistência de marca;
-- assistir ao draft inteiro uma vez.
+- licenses and missing assets;
+- hook, pacing, clarity, CTA, brand consistency;
+- watch the whole draft once.
 
-### 7.10 Render + entrega
+### 7.10 Render + delivery
 
-- Draft rápido para revisão.
-- Final em alta qualidade.
-- Validar com FFprobe.
-- Entregar MP4, SRT/VTT, thumbnail, metadata e arquivo do projeto.
-- Com timeline FilmCraft, `render <slug> --draft|--final` exporta H.264 pelo FilmCraft; draft usa escala 0.5 e final usa o tamanho cheio.
-- `export <slug>` para EDL/FCPXML quando o usuário quiser finalizar no DaVinci ou Premiere. Esse caminho continua independente do FilmCraft.
+- Fast draft for review.
+- Final in high quality.
+- Validate with FFprobe.
+- Deliver MP4, SRT/VTT, thumbnail, metadata, and project file.
+- With a FilmCraft timeline, `render <slug> --draft|--final` exports H.264 through FilmCraft; draft uses a 0.5 scale and final uses full size.
+- `export <slug>` for EDL/FCPXML when the user wants to finish in DaVinci or Premiere. That path stays independent of FilmCraft.
 
 ### 7.11 Learn
 
-- Salvar perfil/componente reutilizável.
-- Registrar decisões e feedback no `review.md`.
-- Promover perfil local para global se o usuário quiser.
-- Se um comando falhou, o render teve avisos ou o usuário teve dificuldade, perguntar uma vez se pode abrir uma issue no repositório. Rascunhar com `feedback <slug> --json`, mostrar o texto e só criar com `feedback <slug> --create --yes`. Nunca incluir mídia, transcrição, cookies, tokens ou chaves; o comando remove caminhos e segredos comuns, mas o usuário revisa o rascunho. Repositório: <https://github.com/WesleyQDev/RoosterEdit/issues>.
+- Save a reusable profile/component.
+- Record decisions and feedback in `review.md`.
+- Promote a local profile to global if the user wants.
+- If a command failed, the render had warnings, or the user had trouble, ask once whether you may open an issue in the repository. Draft it with `feedback <slug> --json`, show the text, and create it only with `feedback <slug> --create --yes`. Never include media, transcript, cookies, tokens, or keys; the command removes common paths and secrets, but the user reviews the draft. Repository: <https://github.com/WesleyQDev/RoosterEdit/issues>.
 
 ## 8. Engines
 
-Os dois motores criativos são **HyperFrames** e **Remotion**. O FFmpeg é utilitário de mídia: probe, corte, legendas, mix e assembly. O FilmCraft é um alvo de timeline opcional, não um terceiro motor criativo.
+The two creative engines are **HyperFrames** and **Remotion**. FFmpeg is a media utility: probe, cut, captions, mix, and assembly. FilmCraft is an optional timeline target, not a third creative engine.
 
-| Engine | Melhor para | Evitar |
+| Engine | Best for | Avoid |
 |---|---|---|
-| HyperFrames | HTML/CSS/GSAP, motion graphics, kinetic type, charts, maps, 3D via Three.js, preview rápido | Projetos que já são React |
-| Remotion | React, componentes complexos, dados, `@remotion/three`, Player, Lambda | Vídeos simples que só precisam de corte |
-| FFmpeg | Corte de footage real, legendas queimadas, mix, assembly (utilitário) | Motion graphics complexo |
+| HyperFrames | HTML/CSS/GSAP, motion graphics, kinetic type, charts, maps, 3D via Three.js, fast preview | Projects that are already React |
+| Remotion | React, complex components, data, `@remotion/three`, Player, Lambda | Simple videos that only need a cut |
+| FFmpeg | Cutting real footage, burned-in captions, mix, assembly (utility) | Complex motion graphics |
 
-### FilmCraft (timeline opcional)
+### FilmCraft (optional timeline)
 
-O FilmCraft não substitui HyperFrames nem Remotion e não é escolhido pelo `auto` por conta própria. Ele só é usado com `--target filmcraft` ou quando o projeto já registra `timeline: "filmcraft"`. O build é híbrido:
+FilmCraft does not replace HyperFrames or Remotion and is not chosen by `auto` on its own. It is only used with `--target filmcraft` or when the project already records `timeline: "filmcraft"`. The build is hybrid:
 
-1. O FFmpeg monta o corte e o mix de áudio da base.
-2. HyperFrames ou Remotion renderizam cada elemento visual como um clipe separado (MOV ProRes 4444 com alpha). O Remotion exige um `npm install` único em `engine/filmcraft/remotion`; o build informa esse caminho quando o CLI não está instalado.
-3. O FilmCraft monta um `.fcproj` editável com o source em V1, o áudio mixado em A1, os elementos em V2+ e markers de capítulos, elementos e cortes.
+1. FFmpeg assembles the cut and the audio mix of the base.
+2. HyperFrames or Remotion render each visual element as a separate clip (MOV ProRes 4444 with alpha). Remotion requires a one-time `npm install` in `engine/filmcraft/remotion`; the build reports that path when the CLI is not installed.
+3. FilmCraft assembles an editable `.fcproj` with the source on V1, the mixed audio on A1, the elements on V2+ and markers for chapters, elements, and cuts.
 
-O CLI é usado para builds determinísticos. O MCP/bridge serve para edição interativa e não é necessário para `build`. O FilmCraft é MIT/Apache-2.0, nativo em Windows/macOS/Linux, mas ainda alpha; o README do projeto reporta ~86% de cobertura de funcionalidades e ~56% de prontidão para uso real, e o Windows é menos testado.
+The CLI is used for deterministic builds. The MCP/bridge serves interactive editing and is not required for `build`. FilmCraft is MIT/Apache-2.0, native on Windows/macOS/Linux, but still alpha; the project README reports ~86% feature coverage and ~56% readiness for real use, and Windows is less tested.
 
-### Regra de decisão (`auto`)
+### Decision rule (`auto`)
 
-1. Se o usuário pediu um engine, use.
-2. Se o projeto tem footage real e o corte é o núcleo, `ffmpeg` ou `remotion`.
-3. Se o projeto é 3D/data-driven e já tem React, `remotion`.
-4. Se o projeto é HTML/GSAP/motion graphics, `hyperframes`.
-5. Se o ambiente não tem Node/FFmpeg, produza o plano e explique que o render precisa de Node/FFmpeg.
-6. Se houver dúvida, prefira `hyperframes` para motion e `ffmpeg` para corte.
-7. FilmCraft nunca é escolhido pelo `auto`; só entra por pedido explícito (`--target filmcraft`) ou projeto já configurado para ele.
+1. If the user asked for an engine, use it.
+2. If the project has real footage and the cut is the core, `ffmpeg` or `remotion`.
+3. If the project is 3D/data-driven and already has React, `remotion`.
+4. If the project is HTML/GSAP/motion graphics, `hyperframes`.
+5. If the environment has no Node/FFmpeg, produce the plan and explain that the render needs Node/FFmpeg.
+6. If in doubt, prefer `hyperframes` for motion and `ffmpeg` for cutting.
+7. FilmCraft is never chosen by `auto`; it only enters by explicit request (`--target filmcraft`) or a project already configured for it.
 
 ## 9. Timeline
 
-O `timeline.json` é engine-agnostic e serve para revisão, QA e geração de código.
+`timeline.json` is engine-agnostic and serves review, QA, and code generation.
 
 ```json
 {
@@ -602,110 +602,110 @@ O `timeline.json` é engine-agnostic e serve para revisão, QA e geração de c�
 
 ### FilmCraft
 
-`build --target filmcraft` grava `engine/filmcraft/<slug>.fcproj` e mantém `edit/timeline.json` como visão engine-agnostic. No `.fcproj`:
+`build --target filmcraft` writes `engine/filmcraft/<slug>.fcproj` and keeps `edit/timeline.json` as the engine-agnostic view. In the `.fcproj`:
 
-| Track | Conteúdo |
+| Track | Content |
 |---|---|
-| V1 | source de vídeo, só vídeo (sem áudio); ausente quando o projeto é só áudio |
-| A1 | áudio mixado pelo FFmpeg |
-| V2+ | um clipe por elemento, em faixas sem sobreposição |
-| markers | capítulos, elementos e cortes |
-| captions | importadas de SRT/VTT em `edit/captions/` quando existem |
+| V1 | video source, video only (no audio); absent when the project is audio only |
+| A1 | audio mixed by FFmpeg |
+| V2+ | one clip per element, on non-overlapping tracks |
+| markers | chapters, elements, and cuts |
+| captions | imported from SRT/VTT in `edit/captions/` when they exist |
 
-O estado fica em `work/filmcraft.json`. `--if-needed` compara plano, base, renderer e formato e pula quando nada mudou. Clipes inalterados vêm de `cache/elements/`; um elemento alterado usa `clip.replaceFromBin` quando a janela de tempo é a mesma; se a janela mudou, só aquele clipe é apagado e reposicionado. Uma base nova reposiciona apenas V1/A1 e preserva clipes do usuário nas outras tracks. `--force` arquiva o `.fcproj` anterior em `engine/filmcraft/archive/`; `--rebuild-media` força base e elementos.
+The state lives in `work/filmcraft.json`. `--if-needed` compares plan, base, renderer, and format and skips when nothing changed. Unchanged clips come from `cache/elements/`; a changed element uses `clip.replaceFromBin` when the time window is the same; if the window changed, only that clip is deleted and repositioned. A new base repositions only V1/A1 and preserves the user's clips on the other tracks. `--force` archives the previous `.fcproj` in `engine/filmcraft/archive/`; `--rebuild-media` forces base and elements.
 
-Cuidados: `zoom` não vira clipe (aplica-se à base e é pulado com aviso); markers e legendas são criados no primeiro build e preservados depois; edições manuais em um clipe gerenciado (V1, A1 ou clipe de elemento) são sobrescritas quando aquele clipe muda, mas edições em outras tracks/clipes são preservadas; V1 e A1 são gerenciados em par, então recortar V1 à mão não move o mix de A1 (mude o plano e rebuild, ou remixe no FilmCraft); o `.fcproj` guarda caminhos absolutos, então mover a pasta quebra os links; só um processo deve escrever por vez (feche o FilmCraft durante o build); ProRes 4444 ocupa espaço e o GC do cache se aplica.
+Caveats: `zoom` does not become a clip (it applies to the base and is skipped with a warning); markers and captions are created on the first build and preserved afterward; manual edits to a managed clip (V1, A1, or element clip) are overwritten when that clip changes, but edits to other tracks/clips are preserved; V1 and A1 are managed as a pair, so trimming V1 by hand does not move the A1 mix (change the plan and rebuild, or remix in FilmCraft); the `.fcproj` stores absolute paths, so moving the folder breaks the links; only one process should write at a time (close FilmCraft during the build); ProRes 4444 takes space and the cache GC applies.
 
 ### Preview v1
 
-- Página de review com:
-  - player do engine (iframe ou player nativo);
-  - timeline com tracks e playhead;
+- Review page with:
+  - engine player (iframe or native player);
+  - timeline with tracks and playhead;
   - storyboard;
-  - checklist de QA;
-  - status do render.
-- Endpoints JSON para agentes: `/api/project`, `/api/timeline`, `/api/status`.
-- Atributos `data-testid` para automação.
-- Modo `--static` para gerar HTML standalone em ambientes headless.
+  - QA checklist;
+  - render status.
+- JSON endpoints for agents: `/api/project`, `/api/timeline`, `/api/status`.
+- `data-testid` attributes for automation.
+- `--static` mode to generate standalone HTML in headless environments.
 
 ### v2
 
-- Drag/trim no browser.
-- Edição de propriedades de clip.
-- Histórico de undo/redo.
-- Colaboração.
+- Drag/trim in the browser.
+- Clip property editing.
+- Undo/redo history.
+- Collaboration.
 
 ## 10. Harness
 
-A skill deve funcionar em ambientes muito diferentes. O `doctor` e a seção de harness definem o caminho.
+The skill must work in very different environments. `doctor` and the harness section define the path.
 
-| Capacidade | Com | Sem |
+| Capability | With | Without |
 |---|---|---|
-| Subagents | Isolar as etapas pesadas e devolver só handoffs | Rodar inline e manter o material bruto em arquivos |
-| Browser | Preview, screenshots, console | Renderizar frames e ler imagens |
-| Node | Remotion/HyperFrames | FFmpeg (cortes/áudio); sem render de motion |
-| FFmpeg | Probe, corte, mix, render | Plano apenas; instalar FFmpeg ou usar outro ambiente |
-| yt-dlp | Baixar links autorizados como material de origem | Pedir o arquivo ao usuário ou instalar com permissão |
-| TTS | Gerar narração | Voz do usuário, legendas ou silêncio |
-| GPU | 3D/render mais rápido | Render em CPU, reduzir qualidade |
-| FilmCraft | Timeline editável + export H.264, opcional | Continuar em HyperFrames/Remotion |
+| Subagents | Isolate the heavy stages and return only handoffs | Run inline and keep the raw material in files |
+| Browser | Preview, screenshots, console | Render frames and read images |
+| Node | Remotion/HyperFrames | FFmpeg (cuts/audio); no motion render |
+| FFmpeg | Probe, cut, mix, render | Plan only; install FFmpeg or use another environment |
+| yt-dlp | Download authorized links as source material | Ask the user for the file or install with permission |
+| TTS | Generate narration | The user's voice, captions, or silence |
+| GPU | Faster 3D/render | CPU render, reduced quality |
+| FilmCraft | Editable timeline + H.264 export, optional | Continue in HyperFrames/Remotion |
 
-## 11. Segurança e licenças
+## 11. Security and licenses
 
-- Não executar comandos destrutivos sem confirmação.
-- Não apagar assets originais.
-- Registrar licença e proveniência de cada asset.
-- Não usar músicas/fontes sem licença.
-- Não baixar conteúdo protegido sem autorização.
-- Não contornar DRM, paywall, login ou controle de acesso.
-- Não commitar cookies, tokens ou arquivos baixados de terceiros.
-- Não fazer upload automático para plataformas.
-- Não baixar conteúdo protegido sem autorização.
-- Respeitar limites de API e custos.
+- Do not run destructive commands without confirmation.
+- Do not delete original assets.
+- Record the license and provenance of every asset.
+- Do not use music/fonts without a license.
+- Do not download protected content without authorization.
+- Do not bypass DRM, paywalls, logins, or access control.
+- Do not commit cookies, tokens, or files downloaded from third parties.
+- Do not upload automatically to platforms.
+- Do not download protected content without authorization.
+- Respect API limits and costs.
 
-## 12. Fases
+## 12. Phases
 
-### Fase 1 — Fundação
+### Phase 1 — Foundation
 
 - `SKILL.md` draft.
-- Workspace, canais e profiles.
-- CLI `doctor`, `init`, `new`, `list`, `check`.
-- Schemas e docs.
-- Sync local para OpenCode.
+- Workspace, channels, and profiles.
+- `doctor`, `init`, `new`, `list`, `check` CLI.
+- Schemas and docs.
+- Local sync for OpenCode.
 
-### Fase 2 - Pipeline de mídia
+### Phase 2 - Media pipeline
 
-- `ingest` (arquivos e links via yt-dlp), `probe`, `transcribe`, `cut-plan`.
-- `transcribe` implementado e testado com HyperFrames/Parakeet; falta o cut-plan automático.
+- `ingest` (files and links via yt-dlp), `probe`, `transcribe`, `cut-plan`.
+- `transcribe` implemented and tested with HyperFrames/Parakeet; automatic cut-plan still missing.
 - TTS adapter.
-- Mix e loudness.
-- Legendas.
+- Mix and loudness.
+- Captions.
 
-### Fase 3 - Engines e timeline
+### Phase 3 - Engines and timeline
 
 - HyperFrames adapter (smoke test: init, check, render).
 - Remotion adapter (smoke test: scaffold, still, render).
-- Build automático de `edit/plan.json` para HyperFrames/Remotion (v1).
-- Build mais rico: b-roll, gráficos, listas e 3D.
+- Automatic build from `edit/plan.json` to HyperFrames/Remotion (v1).
+- Richer build: b-roll, charts, lists, and 3D.
 - FFmpeg adapter.
-- FilmCraft como alvo opcional de timeline (`build --target filmcraft`, `timeline`, `render`).
-- `preview` unificado.
-- `render` e `package`.
+- FilmCraft as an optional timeline target (`build --target filmcraft`, `timeline`, `render`).
+- Unified `preview`.
+- `render` and `package`.
 
-### Fase 4 — 3D e qualidade
+### Phase 4 — 3D and quality
 
-- Starter 3D (Three.js).
-- Perfis completos.
-- Exemplos.
-- Evals e iteração com skill-creator.
-- Empacotamento.
+- 3D starter (Three.js).
+- Complete profiles.
+- Examples.
+- Evals and iteration with skill-creator.
+- Packaging.
 
-## 13. Fora de escopo no v1
+## 13. Out of scope in v1
 
-- NLE completo no browser.
-- Geração de vídeo por modelos (Veo/Kling/Runway) como core.
-- Avatar/UGC gerado.
+- Full NLE in the browser.
+- Video generation by models (Veo/Kling/Runway) as core.
+- Generated avatar/UGC.
 - Cloud render.
-- Upload automático para YouTube/TikTok.
-- Color grading avançado.
-- Edição colaborativa em tempo real.
+- Automatic upload to YouTube/TikTok.
+- Advanced color grading.
+- Real-time collaborative editing.

@@ -1,38 +1,38 @@
-# Testes do fluxo
+# Workflow tests
 
-Data: 2026-11-03
+Date: 2026-11-03
 
-Ambiente: Windows, Node.js 24.14, FFmpeg 8.1, HyperFrames 0.9.8, Remotion 4.0.540, Python 3.13.
+Environment: Windows, Node.js 24.14, FFmpeg 8.1, HyperFrames 0.9.8, Remotion 4.0.540, Python 3.13.
 
-## 1. Transcrição com HyperFrames
+## 1. Transcription with HyperFrames
 
-Arquivo de teste: amostra pública `jfk.wav` do repositório whisper.cpp.
+Test file: the public `jfk.wav` sample from the whisper.cpp repository.
 
 ```bash
 node "<skill>/scripts/rooster.mjs" transcribe demo --language en --model small
 ```
 
-Resultado:
+Result:
 
-- `edit/transcript.json` com schema `rooster.transcript/v1`;
-- 3 segmentos e 22 palavras com timestamps;
-- `edit/captions/transcript.srt` gerado;
-- engine usada: `hyperframes` (Parakeet);
-- texto reconhecido: “And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.”
+- `edit/transcript.json` with schema `rooster.transcript/v1`;
+- 3 segments and 22 words with timestamps;
+- `edit/captions/transcript.srt` generated;
+- engine used: `hyperframes` (Parakeet);
+- recognized text: “And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.”
 
-## 2. Plano de edição
+## 2. Edit plan
 
-`edit/plan.json` criado com:
+`edit/plan.json` created with:
 
-- 1 corte (`long-pause`, 4.24–5.2s);
-- 3 elementos (`letreiro`, `caption-emphasis`, `caption-emphasis`);
-- 1 capítulo.
+- 1 cut (`long-pause`, 4.24–5.2s);
+- 3 elements (`letreiro`, `caption-emphasis`, `caption-emphasis`);
+- 1 chapter.
 
 ```bash
 node "<skill>/scripts/rooster.mjs" plan demo
 ```
 
-Resultado: `0 error(s), 0 warning(s)`. O comando mostra o resumo e lembra que o plano precisa de aprovação antes do build.
+Result: `0 error(s), 0 warning(s)`. The command shows the summary and reminds you that the plan needs approval before the build.
 
 ## 3. HyperFrames
 
@@ -42,12 +42,12 @@ npx hyperframes check --json
 npx hyperframes render --quality draft -o out.mp4
 ```
 
-Resultado:
+Result:
 
-- composição de 10.64s, 1920×1080, 30 fps, com áudio;
-- `check`: 0 erros, 0 warnings após ajustar o primeiro frame e o tamanho do rodapé;
+- 10.64s composition, 1920×1080, 30 fps, with audio;
+- `check`: 0 errors, 0 warnings after adjusting the first frame and the footer size;
 - render: MP4 H.264/AAC, 10.66s, 1920×1080, ~599 KB;
-- frames em 1s e 6s inspecionados visualmente.
+- frames at 1s and 6s inspected visually.
 
 ## 4. Remotion
 
@@ -57,186 +57,186 @@ npx remotion still src/index.ts JFKTest out-still.png --frame=30
 npx remotion render src/index.ts JFKTest out.mp4
 ```
 
-Resultado:
+Result:
 
-- composição `JFKTest`, 320 frames, 30 fps, 1920×1080, com áudio;
-- still em PNG inspecionado visualmente;
+- `JFKTest` composition, 320 frames, 30 fps, 1920×1080, with audio;
+- still in PNG inspected visually;
 - render: MP4 H.264/AAC, 10.667s, 1920×1080, ~707 KB;
-- frame em 6s inspecionado visualmente.
+- frame at 6s inspected visually.
 
-## 5. Build automático
+## 5. Automatic build
 
 ```bash
 node "<skill>/scripts/rooster.mjs" build demo --engine hyperframes --force
 node "<skill>/scripts/rooster.mjs" build demo --engine remotion --force
 ```
 
-Resultado:
+Result:
 
-- HyperFrames: 9.44s (o corte de 4.24–5.2s foi aplicado), 1920×1080, 30 fps, H.264/AAC, ~464 KB.
+- HyperFrames: 9.44s (the 4.24–5.2s cut was applied), 1920×1080, 30 fps, H.264/AAC, ~464 KB.
 - Remotion: 9.472s, 1920×1080, 30 fps, H.264/AAC, ~546 KB.
-- Os dois builds aplicaram os cortes com FFmpeg, remapearam os tempos dos elementos, geraram o projeto do engine e renderizaram frames inspecionados visualmente.
-- O tema veio do profile `minimal` (fundo claro, tipografia escura, acento terracota).
+- Both builds applied the cuts with FFmpeg, remapped the element times, generated the engine project, and rendered frames that were inspected visually.
+- The theme came from the `minimal` profile (light background, dark typography, terracotta accent).
 
-## 6. Teste com vídeo real (pitch de produto)
+## 6. Test with real footage (product pitch)
 
-Vídeo de entrada: `pitch.mp4` (8:57, 1920×1080, 60 fps, 416 MB).
+Input video: `pitch.mp4` (8:57, 1920×1080, 60 fps, 416 MB).
 
-- Transcrição com faster-whisper `base` (o `small` estava trocando acentos por `?`): 74 segmentos.
-- Plano inicial de highlight (88s) rejeitado pelo usuário: o painel cobria a tela e os cortes eram agressivos demais.
-- Plano corrigido: vídeo completo (537.13s), sem cortes, apenas lower thirds pequenos nos momentos-chave.
-- Render HyperFrames: 8:57.1, 1920×1080, 30 fps, H.264/AAC, ~86.4 MB.
-- Áudio normalizado em pós-processamento: -14.07 LUFS, true peak -1.37 dBFS.
-- `npx hyperframes check`: 0 erros, 0 warnings.
-- Frames inspecionados: slide/timer originais visíveis, sem painel cobrindo; lower-thirds legíveis com fundo escuro.
-- Tempo de render: ~11m55s com 6 workers.
+- Transcription with faster-whisper `base` (`small` was replacing accents with `?`): 74 segments.
+- Initial highlight plan (88s) rejected by the user: the panel covered the screen and the cuts were too aggressive.
+- Corrected plan: full video (537.13s), no cuts, only small lower thirds at the key moments.
+- HyperFrames render: 8:57.1, 1920×1080, 30 fps, H.264/AAC, ~86.4 MB.
+- Audio normalized in post-processing: -14.07 LUFS, true peak -1.37 dBFS.
+- `npx hyperframes check`: 0 errors, 0 warnings.
+- Frames inspected: original slide/timer visible, no panel covering the screen; lower thirds readable on a dark background.
+- Render time: ~11m55s with 6 workers.
 
-Lição: para footage real com slide estático, não cobrir a tela com um painel. Usar apenas lower-thirds/captions pequenos e deixar o vídeo contínuo. O `layout: speaker-left-panel` continua disponível para casos em que o usuário pedir explicitamente.
+Lesson: for real footage with a static slide, do not cover the screen with a panel. Use only small lower thirds/captions and keep the video continuous. `layout: speaker-left-panel` is still available for cases where the user explicitly asks for it.
 
-## 7. Handoff de subagent (smoke test)
+## 7. Subagent handoff (smoke test)
 
-Teste em workspace temporário, com o papel `agents/producer.md`:
+Test in a temporary workspace with the `agents/producer.md` role:
 
-- o subagent leu o papel e escreveu `brief.md` e `work/handoffs/02-producer.md`;
-- devolveu um handoff de 17 linhas, sem transcrição, log ou JSON;
-- apontou uma inconsistência real: o intake pedia TTS pt-BR, mas `project.json` tinha `mode.voice: none`;
-- o agente principal recebeu só o handoff e o caminho do artefato.
+- the subagent read the role and wrote `brief.md` and `work/handoffs/02-producer.md`;
+- it returned a 17-line handoff, with no transcript, log, or JSON;
+- it pointed out a real inconsistency: the intake asked for pt-BR TTS, but `project.json` had `mode.voice: none`;
+- the main agent received only the handoff and the artifact path.
 
-O teste confirma o contrato de retorno e o isolamento de contexto. Ainda falta testar a cadeia completa (transcript → plan → build → QA → render) com subagents em um projeto real.
+The test confirms the return contract and the context isolation. The full chain (transcript → plan → build → QA → render) with subagents in a real project still needs testing.
 
-## 8. Style proof, preview, textcheck, export e sample build
+## 8. Style proof, preview, textcheck, export, and sample build
 
-Teste em projeto temporário de 10s, com um corte e quatro elementos:
+Test in a 10s temporary project, with one cut and four elements:
 
-- `styleproof` gerou `style/proof/index.html` com os três frames e `proof.json`.
-- `preview` gerou `preview/index.html` com player, plano, timeline, validação, assets e checklist.
-- `textcheck` gerou `qa/text-review.md` com 4 textos e 0 alertas; ao adicionar um storyboard com texto duplicado, gerou 1 alerta.
-- `export` gerou `edit/export/cuts.edl` e `timeline.fcpxml`; o FCPXML passou no parser XML do Python.
-- `check` avisou que o corte começava no meio da palavra "importante".
-- `build --sample 3` gerou 3 dos 4 elementos; o HyperFrames check passou.
-- `build --force` gerou o projeto completo; o check passou.
-- `paths` mostrou a visão bruto/estilo/trabalho/final.
+- `styleproof` generated `style/proof/index.html` with the three frames and `proof.json`.
+- `preview` generated `preview/index.html` with player, plan, timeline, validation, assets, and checklist.
+- `textcheck` generated `qa/text-review.md` with 4 texts and 0 alerts; adding a storyboard with duplicate text produced 1 alert.
+- `export` generated `edit/export/cuts.edl` and `timeline.fcpxml`; the FCPXML passed Python's XML parser.
+- `check` warned that the cut started in the middle of the word "importante".
+- `build --sample 3` generated 3 of the 4 elements; the HyperFrames check passed.
+- `build --force` generated the full project; the check passed.
+- `paths` showed the source/style/work/final view.
 
-Ainda falta testar em um projeto real, com mídia longa, legendas queimadas e importação do FCPXML no DaVinci.
+Testing in a real project, with long media, burned-in captions, and FCPXML import in DaVinci, still needs to happen.
 
-## 9. FilmCraft (smoke test manual)
+## 9. FilmCraft (manual smoke test)
 
-Teste de fumaça em workspace temporário. Não é benchmark; registre o resultado ao rodar.
+Smoke test in a temporary workspace. This is not a benchmark; record the result when you run it.
 
-Requer FilmCraft e `filmcraft-cli` instalados (confira em `doctor --json`).
+Requires FilmCraft and `filmcraft-cli` installed (check with `doctor --json`).
 
 ```bash
 node "<skill>/scripts/rooster.mjs" doctor --json
 node "<skill>/scripts/rooster.mjs" build demo --target filmcraft
 node "<skill>/scripts/rooster.mjs" timeline demo
 node "<skill>/scripts/rooster.mjs" render demo --draft
-# edite um elemento em edit/plan.json
+# edit an element in edit/plan.json
 node "<skill>/scripts/rooster.mjs" build demo --if-needed
 ```
 
-O que conferir:
+What to check:
 
-- `doctor --json` traz `filmcraft.installed`, `cli`, `app`, `version` e `mcp`.
-- o build cria `engine/filmcraft/demo.fcproj`, `work/filmcraft.json` e clipes em `engine/filmcraft/elements/`.
-- `timeline demo` mostra o caminho do `.fcproj`; `--open` abre no FilmCraft.
-- `render --draft` exporta H.264 em meia escala (`renders/draft.mp4`).
-- depois de editar um elemento, `build --if-needed` re-renderiza só aquele elemento; os demais vêm do cache e os clipes de usuário em outras tracks continuam onde estavam.
+- `doctor --json` returns `filmcraft.installed`, `cli`, `app`, `version`, and `mcp`.
+- the build creates `engine/filmcraft/demo.fcproj`, `work/filmcraft.json`, and clips in `engine/filmcraft/elements/`.
+- `timeline demo` shows the `.fcproj` path; `--open` opens it in FilmCraft.
+- `render --draft` exports H.264 at half scale (`renders/draft.mp4`).
+- after editing an element, `build --if-needed` re-renders only that element; the others come from cache and the user clips on other tracks stay where they were.
 
-Se o FilmCraft não estiver instalado, use `filmcraft status --json` para ver o prompt de onboarding. Não instale nem grave config de MCP sem permissão.
+If FilmCraft is not installed, use `filmcraft status --json` to see the onboarding prompt. Do not install anything or write MCP config without permission.
 
-## 10. Feedback issue (smoke test manual)
+## 10. Feedback issue (manual smoke test)
 
-Teste sem criar issue de verdade:
+Test without creating a real issue:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" feedback demo --title "Teste de feedback" --notes "Descrição do usuário" --json
 ```
 
-O que conferir:
+What to check:
 
-- o JSON traz `title`, `body`, `repo`, `gh`, `draftPath` e `issueUrl: null`;
-- o corpo tem Summary, What happened, Environment, Project, Validation e Privacy;
-- caminhos locais viram `~`, `<workspace>` e `<project>`; tokens e chaves comuns são removidos;
-- o rascunho é gravado em `work/notes/feedback-<timestamp>.md`;
-- `--no-diagnostics` remove ambiente, projeto, validação e logs;
-- `--create` sem `--yes` falha de propósito e não envia nada;
-- não rode `--create --yes` em teste automatizado; a criação real exige aprovação do usuário.
+- the JSON returns `title`, `body`, `repo`, `gh`, `draftPath`, and `issueUrl: null`;
+- the body has Summary, What happened, Environment, Project, Validation, and Privacy;
+- local paths become `~`, `<workspace>`, and `<project>`; common tokens and keys are removed;
+- the draft is written to `work/notes/feedback-<timestamp>.md`;
+- `--no-diagnostics` removes environment, project, validation, and logs;
+- `--create` without `--yes` fails on purpose and sends nothing;
+- do not run `--create --yes` in an automated test; real creation requires user approval.
 
-Se `gh` não estiver instalado ou autenticado, o comando falha com instruções e mantém o rascunho local. O usuário pode abrir a issue manualmente em <https://github.com/WesleyQDev/RoosterEdit/issues>.
+If `gh` is not installed or authenticated, the command fails with instructions and keeps the local draft. The user can open the issue manually at <https://github.com/WesleyQDev/RoosterEdit/issues>.
 
-## 11. Templates estruturados e corte suave (smoke test manual)
+## 11. Structured templates and cut smoothing (manual smoke test)
 
-Teste feito em workspace temporário com um source de 6 s:
+Test run in a temporary workspace with a 6 s source:
 
 ```powershell
 $env:ROOSTER_WORKSPACE = "$env:TEMP\rooster-structured"
 node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" channel new demo --language pt-BR --format 16:9 --profile tech-neon
 node "<skill>/scripts/rooster.mjs" new teste --channel demo --duration 6
-# escreva edit/plan.json com chapter, diagram, counter, emphasis e broll layout:pip
+# write edit/plan.json with chapter, diagram, counter, emphasis, and broll layout:pip
 node "<skill>/scripts/rooster.mjs" plan teste --check
 node "<skill>/scripts/rooster.mjs" plan teste
 node "<skill>/scripts/rooster.mjs" build teste --target filmcraft --engine hyperframes --strict-plan --force --rebuild-media
 node "<skill>/scripts/rooster.mjs" render teste --draft --force
 ```
 
-O que conferir:
+What to check:
 
-- `plan.html` mostra duas colunas: `No bruto` (player) e `No corte` (tempo final).
-- `qa/plan-review.md` lista vãos visuais, cortes secos, textos sem lastro, b-roll sem `covers` e colisões de layout.
-- `plan --check` acusa dois cards no mesmo canto e um b-roll sem `covers`.
-- `build --strict-plan` recusa o plano com warning; depois de corrigir, passa.
-- Os MOVs em `engine/filmcraft/elements/` mostram chapter, diagrama com nós/setas, contador, ênfase riscada e PIP.
-- `build` falha com `zoom` no FilmCraft e explica como seguir; `--allow-skipped-elements` permite omitir de propósito.
-- O draft renderiza os elementos na posição certa e o PIP não cobre o rosto.
-- O log do build lista os elementos pulados por id e tipo.
+- `plan.html` shows two columns: `No bruto` (player) and `No corte` (final time).
+- `qa/plan-review.md` lists visual gaps, dry cuts, text with no grounding, b-roll without `covers`, and layout collisions.
+- `plan --check` flags two cards in the same corner and a b-roll without `covers`.
+- `build --strict-plan` refuses the plan with a warning; after the fix, it passes.
+- The MOVs in `engine/filmcraft/elements/` show chapter, diagram with nodes/arrows, counter, struck-through emphasis, and PIP.
+- `build` fails with `zoom` in FilmCraft and explains how to proceed; `--allow-skipped-elements` lets you skip it on purpose.
+- The draft renders the elements in the right position and the PIP does not cover the face.
+- The build log lists the skipped elements by id and type.
 
-## 12. Custom component (smoke test manual)
+## 12. Custom component (manual smoke test)
 
-No mesmo workspace de 6 s:
+In the same 6 s workspace:
 
 ```powershell
-# crie style/components/glow-ring/{element.html,element.css,element.js}
-# no plan.json: { "id":"el-006", "type":"custom", "template":"custom", "component":"glow-ring", "start":0.5, "end":1.4 }
+# create style/components/glow-ring/{element.html,element.css,element.js}
+# in plan.json: { "id":"el-006", "type":"custom", "template":"custom", "component":"glow-ring", "start":0.5, "end":1.4 }
 node "<skill>/scripts/rooster.mjs" plan teste --check
 node "<skill>/scripts/rooster.mjs" build teste --engine hyperframes --force
 node "<skill>/scripts/rooster.mjs" render teste --draft --force
 node "<skill>/scripts/rooster.mjs" build teste --target filmcraft --engine hyperframes --force
 ```
 
-O que conferir:
+What to check:
 
-- `plan --check` resolve o componente no projeto, canal, perfil ou templates.
-- O `index.html` do HyperFrames contém o markup, o CSS e o `tl.fromTo` do `element.js`.
-- O draft mostra o anel/círculo animado no tempo certo.
-- O build do FilmCraft renderiza o componente como clipe ProRes com alpha.
-- Componente inexistente vira erro com a lista de pastas procuradas.
-- `--target filmcraft --engine remotion` com elemento custom falha com mensagem clara; Remotion não executa HTML/JS.
+- `plan --check` resolves the component in the project, channel, profile, or templates.
+- The HyperFrames `index.html` contains the markup, the CSS, and the `tl.fromTo` from `element.js`.
+- The draft shows the animated ring/circle at the right time.
+- The FilmCraft build renders the component as a ProRes clip with alpha.
+- A missing component becomes an error with the list of folders it searched.
+- `--target filmcraft --engine remotion` with a custom element fails with a clear message; Remotion does not run HTML/JS.
 
-## O que funcionou
+## What worked
 
-- `doctor` detecta Node, FFmpeg, yt-dlp, HyperFrames CLI e Whisper (quando instalado).
-- `transcribe` usa HyperFrames/Parakeet e normaliza o resultado para `edit/transcript.json`.
-- `plan` valida `edit/plan.json` e mostra cortes, elementos e capítulos.
-- `build` gera projetos HyperFrames e Remotion a partir do plano, aplica cortes e copia os assets.
-- HyperFrames renderiza um MP4 real a partir de uma composição HTML/GSAP.
-- Remotion renderiza um MP4 real a partir de uma composição React.
+- `doctor` detects Node, FFmpeg, yt-dlp, the HyperFrames CLI, and Whisper (when installed).
+- `transcribe` uses HyperFrames/Parakeet and normalizes the result to `edit/transcript.json`.
+- `plan` validates `edit/plan.json` and shows cuts, elements, and chapters.
+- `build` generates HyperFrames and Remotion projects from the plan, applies cuts, and copies the assets.
+- HyperFrames renders a real MP4 from an HTML/GSAP composition.
+- Remotion renders a real MP4 from a React composition.
 
-## O que ainda não foi testado
+## What has not been tested yet
 
-- Transcrição em português com whisper.cpp: o ambiente usou Parakeet (inglês). Para português, é preciso instalar whisper.cpp ou o Whisper CLI.
-- Download de link do YouTube com `yt-dlp`: o YouTube bloqueia este ambiente com bot check. O código e o gate de direitos estão implementados, mas o download real precisa ser testado em uma máquina/rede autorizada.
-- Build v1 cobre letreiros, caption-emphasis, cards e cortes. Templates estruturados (chapter, diagram, counter, list, emphasis, callout, terminal, end-card), b-roll em PIP/split e suavização de corte estão implementados; cenas 3D ainda precisam de starter próprio.
-- Preview unificado no browser e render wrapper do CLI.
+- Portuguese transcription with whisper.cpp: this environment used Parakeet (English). For Portuguese, you need to install whisper.cpp or the Whisper CLI.
+- Downloading a YouTube link with `yt-dlp`: YouTube blocks this environment with a bot check. The code and the rights gate are implemented, but the real download needs to be tested on an authorized machine or network.
+- Build v1 covers title cards, caption-emphasis, cards, and cuts. Structured templates (chapter, diagram, counter, list, emphasis, callout, terminal, end-card), b-roll in PIP/split, and cut smoothing are implemented; 3D scenes still need their own starter.
+- Unified preview in the browser and the CLI render wrapper.
 
-## Reproduzir
+## Reproduce
 
-1. Crie um workspace e um canal:
+1. Create a workspace and a channel:
    ```bash
    node "<skill>/scripts/rooster.mjs" init
    node "<skill>/scripts/rooster.mjs" channel new demo --language pt-BR --format 16:9 --profile minimal
    node "<skill>/scripts/rooster.mjs" new meu-video --channel demo
    ```
-2. Coloque um áudio/vídeo em `rooster/channels/demo/projects/meu-video/assets/source/`.
-3. Rode `transcribe`, crie `edit/plan.json` e rode `plan`.
-4. Use `npx hyperframes` ou `npx remotion` para montar e renderizar.
+2. Put an audio/video file in `rooster/channels/demo/projects/meu-video/assets/source/`.
+3. Run `transcribe`, write `edit/plan.json`, and run `plan`.
+4. Use `npx hyperframes` or `npx remotion` to assemble and render.

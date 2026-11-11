@@ -1,53 +1,53 @@
 # Minimal
 
-Editorial, limpo, com muito espaço negativo. A ideia é parecer uma revista impressa que se move, não um template de startup.
+Editorial, clean, with plenty of negative space. The idea is to look like a printed magazine that moves, not a startup template.
 
-## Quando usar
+## When to use
 
-- explicações sérias;
-- conteúdo educacional;
-- marcas com identidade tipográfica forte;
-- vídeos em que o texto é o protagonista.
+- serious explanations;
+- educational content;
+- brands with a strong typographic identity;
+- videos where text is the protagonist.
 
-## Paleta
+## Palette
 
-- Fundo: `#f7f5f2` (off-white quente).
-- Texto: `#111111`.
-- Apoio: `#6b6b6b`.
-- Acento: `#e4572e` (terracota).
-- Use o acento com moderação; uma palavra ou um elemento por cena.
+- Background: `#f7f5f2` (warm off-white).
+- Text: `#111111`.
+- Support: `#6b6b6b`.
+- Accent: `#e4572e` (terracotta).
+- Use the accent sparingly; one word or one element per scene.
 
-## Tipografia
+## Typography
 
-- Display: Inter 700, tamanho grande, tracking apertado.
-- Corpo: Inter 400.
-- Mono: JetBrains Mono 500 para números, código e labels.
-- Evite mais de duas famílias na mesma cena.
+- Display: Inter 700, large size, tight tracking.
+- Body: Inter 400.
+- Mono: JetBrains Mono 500 for numbers, code, and labels.
+- Avoid more than two families in the same scene.
 
-## Movimento
+## Motion
 
-- Entradas rápidas e limpas (0.15–0.3 s).
-- Sem bounce, sem elástico, sem excesso de overshoot.
-- Transições por corte; fade só quando o ritmo pede respiro.
-- Movimento deve revelar hierarquia, não decorar.
+- Fast, clean entrances (0.15–0.3 s).
+- No bounce, no elastic easing, no excessive overshoot.
+- Cut transitions; use a fade only when the pacing needs a breath.
+- Motion should reveal hierarchy, not decorate.
 
-## Legendas
+## Captions
 
-- Inter 600, fundo claro, texto escuro.
-- Máximo 34 caracteres por linha.
-- Posição inferior, dentro da safe area.
-- Sem sombra pesada; use um leve stroke ou caixa.
+- Inter 600, light background, dark text.
+- Maximum 34 characters per line.
+- Bottom position, inside the safe area.
+- No heavy shadow; use a light stroke or box.
 
-## Áudio
+## Audio
 
-- Música ambiente discreta.
-- SFX sutis, quase imperceptíveis.
+- Discreet ambient music.
+- Subtle SFX, almost imperceptible.
 - Loudness -14 LUFS.
-- Voz humana ou TTS calmo.
+- Human voice or calm TTS.
 
-## Evitar
+## Avoid
 
-- Neon, glitch, 3D realista.
-- Gradientes coloridos.
-- Muitos elementos competindo por atenção.
-- Tipografia display em blocos longos.
+- Neon, glitch, realistic 3D.
+- Colorful gradients.
+- Many elements competing for attention.
+- Display typography in long blocks.

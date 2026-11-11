@@ -18,7 +18,7 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 
 ## Progress and questions
 
-Every layer starts with the current `Etapa X/8` marker. If a choice would change the cut, the look, the audio, or the cost, ask before proceeding instead of guessing.
+Every layer starts with the current `Step X/8` marker. If a choice would change the cut, the look, the audio, or the cost, ask before proceeding instead of guessing.
 
 ## Status
 

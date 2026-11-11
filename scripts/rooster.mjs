@@ -79,6 +79,7 @@ import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./featur
 import { getBrollIndex } from "./lib/broll-index.mjs";
 import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
 import { generateVoiceover } from "./lib/tts-runner.mjs";
+import { harnessIds, installSkill } from "./lib/install.mjs";
 import {
   fasterWhisperArgs,
   hyperFramesTranscribeArgs,
@@ -114,21 +115,21 @@ const AUTONOMY_IDS = ["auto", "guided", "manual"];
 const STATUS_IDS = ["intake", "planning", "assets", "building", "preview", "qa", "rendering", "done", "blocked"];
 
 const MOTION_TEMPLATES = [
-  { id: "title", label: "Título", description: "Título grande; abre o vídeo ou um bloco." },
-  { id: "chapter", label: "Capítulo", description: "Kicker + título + linha; separa seções." },
-  { id: "diagram", label: "Diagrama", description: "Nós e setas para relações e fluxos." },
-  { id: "counter", label: "Contador", description: "Números grandes com rótulo; comparações." },
-  { id: "list", label: "Lista", description: "Itens numerados entrando em sequência." },
-  { id: "lower-third", label: "Lower third", description: "Nome e cargo no canto inferior." },
-  { id: "emphasis", label: "Ênfase", description: "Frase-âncora com destaque ou risco." },
-  { id: "terminal", label: "Terminal", description: "Comando em uma janela de terminal." },
-  { id: "end-card", label: "End card", description: "Fechamento com CTA." },
-  { id: "callout", label: "Callout", description: "Etiqueta curta de canto." },
-  { id: "broll", label: "B-roll", description: "Clipe ou imagem de apoio em PIP, split ou full." },
-  { id: "parallax", label: "Parallax 2.5D", description: "Cena em camadas com câmera lenta; um plano com profundidade." },
-  { id: "zoom", label: "Zoom", description: "Punch-in no rosto, produto ou detalhe." },
-  { id: "transition", label: "Transição", description: "Wipe ou flash entre blocos." },
-  { id: "custom", label: "Custom", description: "HTML/CSS/GSAP próprio ou componente reutilizável." },
+  { id: "title", label: "Title", description: "Large title; opens the video or a block." },
+  { id: "chapter", label: "Chapter", description: "Kicker + title + line; separates sections." },
+  { id: "diagram", label: "Diagram", description: "Nodes and arrows for relationships and flows." },
+  { id: "counter", label: "Counter", description: "Large numbers with a label; comparisons." },
+  { id: "list", label: "List", description: "Numbered items entering in sequence." },
+  { id: "lower-third", label: "Lower third", description: "Name and role in the lower corner." },
+  { id: "emphasis", label: "Emphasis", description: "Anchor phrase with highlight or strike." },
+  { id: "terminal", label: "Terminal", description: "Command in a terminal window." },
+  { id: "end-card", label: "End card", description: "Closing card with a CTA." },
+  { id: "callout", label: "Callout", description: "Short corner label." },
+  { id: "broll", label: "B-roll", description: "Support clip or image in PIP, split, or full frame." },
+  { id: "parallax", label: "Parallax 2.5D", description: "Layered scene with slow camera; a shot with depth." },
+  { id: "zoom", label: "Zoom", description: "Punch-in on a face, product, or detail." },
+  { id: "transition", label: "Transition", description: "Wipe or flash between blocks." },
+  { id: "custom", label: "Custom", description: "Custom HTML/CSS/GSAP or reusable component." },
 ];
 
 const ASPECTS = {
@@ -520,7 +521,7 @@ function buildChannel(id, args, workspaceDefaults = {}, config = {}) {
     id,
     name: typeof args.name === "string" ? args.name : id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
     content: typeof args.content === "string" ? args.content : "",
-    language: typeof args.language === "string" ? args.language : workspaceDefaults.language || "pt-BR",
+    language: typeof args.language === "string" ? args.language : workspaceDefaults.language || "en-US",
     format: typeof args.format === "string" ? args.format : "16:9",
     profile: typeof args.profile === "string" ? args.profile : workspaceDefaults.profile || "minimal",
     source: SOURCE_IDS.includes(args.source) ? args.source : "hybrid",
@@ -836,7 +837,7 @@ function initWorkspace(args) {
       aspect: "16:9",
       fps: 30,
       loudnessLufs: -14,
-      language: "pt-BR",
+      language: "en-US",
       autonomy: "guided",
       assets: "mixed"
     },
@@ -853,7 +854,7 @@ function initWorkspace(args) {
     tts: {
       provider: process.env.ROOSTER_TTS_PROVIDER || "auto",
       voice: null,
-      language: "pt-BR",
+      language: "en-US",
     },
     render: {
       draftScale: 0.5,
@@ -883,23 +884,23 @@ function initWorkspace(args) {
     path.join(target, "README.md"),
     `# RoosterEdit workspace
 
-Este é o workspace local do RoosterEdit.
+This is the local RoosterEdit workspace.
 
-## Estrutura
+## Structure
 
-- \`channels/\` — canais com idioma, formato, perfil, assets e projetos.
-- \`profiles/\` — identidades visuais/sonoras compartilhadas.
-- \`library/\` — música, SFX, fontes, overlays, LUTs, b-roll e imagens.
-- \`cache/\` — transcrições, proxies e artefatos temporários.
+- \`channels/\` — channels with language, format, profile, assets, and projects.
+- \`profiles/\` — shared visual and audio identities.
+- \`library/\` — music, SFX, fonts, overlays, LUTs, b-roll, and images.
+- \`cache/\` — transcripts, proxies, and temporary artifacts.
 
-## Começar
+## Get started
 
 \`\`\`bash
-node <skill>/scripts/rooster.mjs channel new meu-canal --language pt-BR --format 16:9 --profile minimal
-node <skill>/scripts/rooster.mjs new meu-video --channel meu-canal
+node <skill>/scripts/rooster.mjs channel new my-channel --language en-US --format 16:9 --profile minimal
+node <skill>/scripts/rooster.mjs new my-video --channel my-channel
 \`\`\`
 
-A skill fica na raiz do repositório RoosterEdit. Este workspace pertence ao projeto de vídeo, não à skill.
+The skill lives at the RoosterEdit repository root. This workspace belongs to the video project, not to the skill.
 `
   );
 
@@ -918,8 +919,8 @@ A skill fica na raiz do repositório RoosterEdit. Este workspace pertence ao pro
   console.log(`  ${target}`);
   console.log("\nNext:");
   const cli = path.join(SKILL_ROOT, "scripts", "rooster.mjs");
-  console.log(`  node "${cli}" channel new meu-canal --language pt-BR --format 16:9 --profile minimal`);
-  console.log(`  node "${cli}" new meu-video --channel meu-canal`);
+  console.log(`  node "${cli}" channel new my-channel --language en-US --format 16:9 --profile minimal`);
+  console.log(`  node "${cli}" new my-video --channel my-channel`);
 }
 
 function copyDir(src, dest) {
@@ -930,6 +931,61 @@ function copyDir(src, dest) {
     if (entry.isDirectory()) copyDir(from, to);
     else fs.copyFileSync(from, to);
   }
+}
+
+// ---------------------------------------------------------------------------
+// install
+// ---------------------------------------------------------------------------
+
+function installCommand(args) {
+  const harness = String(args.harness || "opencode").toLowerCase();
+  if (args.harness && !harnessIds().includes(harness)) {
+    fail(`Unknown harness "${args.harness}". Use one of: ${harnessIds().join(", ")}. Or pass --dir <skills-folder>.`);
+  }
+
+  let result;
+  try {
+    result = installSkill({
+      source: SKILL_ROOT,
+      cwd: CWD,
+      harness,
+      dir: args.dir,
+      global: Boolean(args.global),
+      force: Boolean(args.force),
+      "dry-run": Boolean(args["dry-run"]),
+      version: VERSION,
+    });
+  } catch (error) {
+    fail(error?.message || String(error));
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (result.status === "dry-run") {
+    heading("Install preview");
+    console.log(`  target: ${result.dest}`);
+    console.log(`  version: ${result.version || "unknown"}`);
+    console.log(`  copy: ${result.copied.join(", ")}`);
+    console.log("\nRun without --dry-run to install.");
+    return;
+  }
+
+  heading(result.status === "updated" ? "Skill updated" : "Skill installed");
+  console.log(`  ${result.dest}`);
+  console.log(`  version: ${result.version || "unknown"}`);
+  console.log(`  files: ${result.copied.length}`);
+  if (result.skipped.length) {
+    console.log(`  skipped: ${result.skipped.join(", ")}`);
+  }
+
+  console.log("\nNext:");
+  console.log("  1. Open your agent in the project where you want to make videos.");
+  console.log('  2. Say: "Set up RoosterEdit and check my environment."');
+  console.log("  3. Or run: npx rooster-edit doctor");
+  console.log("\nUpdate later with: npx rooster-edit@latest install --force");
 }
 
 // ---------------------------------------------------------------------------
@@ -1010,7 +1066,7 @@ function newProject(args) {
     ? args.autonomy
     : channel.autonomy || workspaceDefaults.autonomy || "guided";
   const language =
-    typeof args.language === "string" ? args.language : channel.language || workspaceDefaults.language || "pt-BR";
+    typeof args.language === "string" ? args.language : channel.language || workspaceDefaults.language || "en-US";
   const music =
     channel.audio?.music !== undefined
       ? Boolean(channel.audio.music)
@@ -1279,11 +1335,11 @@ function pathsCommand(args) {
     return;
   }
   heading(`Paths — ${project.slug}`);
-  console.log(`  bruto    ${paths.source}`);
-  console.log(`  estilo   ${paths.style}`);
-  console.log(`  trabalho ${paths.work.join(" + ")}`);
-  console.log(`  final    ${paths.final}`);
-  console.log(`  projeto  ${paths.project}`);
+  console.log(`  source  ${paths.source}`);
+  console.log(`  style   ${paths.style}`);
+  console.log(`  work    ${paths.work.join(" + ")}`);
+  console.log(`  final   ${paths.final}`);
+  console.log(`  project ${paths.project}`);
 }
 
 
@@ -1396,7 +1452,7 @@ function configCommand(args) {
   const config = readJson(configPath, { schema: "rooster.config/v1" });
   const workspace = readJson(workspacePath, { schema: "rooster.workspace/v1", defaults: {} });
   workspace.defaults = {
-    language: "pt-BR",
+    language: "en-US",
     autonomy: "guided",
     assets: "mixed",
     ...(workspace.defaults || {}),
@@ -2553,7 +2609,7 @@ function planHtml(plan, project, transcript = null) {
       : `<p class="empty">Nenhum corte.</p>`;
 
   return `<!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -2692,7 +2748,7 @@ function styleProofHtml(project, profile, theme, format, styleText) {
         .find((line) => line && !/^[#\-*]/.test(line)) || ""
     : "";
   return `<!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -4192,7 +4248,7 @@ async function ttsCommand(args) {
 
   const providers = detectTtsProviders();
   const provider = args.provider || providers.defaultProvider || "edge-tts";
-  const language = String(args.language || project.config.language || "pt-BR");
+  const language = String(args.language || project.config.language || "en-US");
   const voice =
     args.voice ||
     process.env.ROOSTER_TTS_VOICE ||
@@ -8571,7 +8627,7 @@ function previewHtml(project, plan, timeline, validation, manifest) {
     items.length ? `<ul class="${className}">${items.map((item) => `<li>${htmlEscape(item)}</li>`).join("")}</ul>` : `<p class="muted">None.</p>`;
 
   return `<!doctype html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9230,13 +9286,16 @@ RoosterEdit ${VERSION}
 
 Usage:
   node scripts/rooster.mjs <command> [options]
+  npx rooster-edit <command> [options]
 
 Commands:
   doctor [--json] [--deep]        Detect tools, engines, TTS, and workspace
   init [--dir <path>] [--force]   Create a workspace
+  install [--global] [--harness <id>] [--dir <path>]
+                                  Install the skill into an agent skills folder
   new <slug> [options]            Create a project inside a channel
   open <slug> [--project] [--print] Open assets/source or the project folder
-  paths <slug> [--json]           Show bruto/estilo/trabalho/final paths
+  paths <slug> [--json]           Show source/style/work/final paths
   list [--json]                   List channels, projects, and profiles
   channel list|show|new|design|set|use Manage channels, their defaults, and their identity
   check <slug> [--json]           Validate project and timeline
@@ -9296,6 +9355,14 @@ Transcribe options:
 Doctor options:
   --deep                          Probe Parakeet and deep engine details
   --refresh                       Ignore the capabilities cache
+
+Install options:
+  --global                        Install for every project on this machine
+  --harness <id>                  opencode (default) | claude | agents
+  --dir <path>                    Skills folder; rooster-edit is appended
+  --force                         Update an existing install
+  --dry-run                       Show the target without copying
+  --json                          Machine-readable output
 
 Plan options:
   --check                         Validate only
@@ -9528,10 +9595,10 @@ Environment:
 
 Examples:
   node scripts/rooster.mjs init
-  node scripts/rooster.mjs channel new meu-canal --language pt-BR --format 16:9 --profile minimal --voice tts
-  node scripts/rooster.mjs channel design meu-canal --from minimal --accent "#e4572e" --display Inter --motion calm
-  node scripts/rooster.mjs new video-x --channel meu-canal
-  node scripts/rooster.mjs new video-x --channel meu-canal --duration 60  # only with a declared target
+  node scripts/rooster.mjs channel new my-channel --language en-US --format 16:9 --profile minimal --voice tts
+  node scripts/rooster.mjs channel design my-channel --from minimal --accent "#e4572e" --display Inter --motion calm
+  node scripts/rooster.mjs new video-x --channel my-channel
+  node scripts/rooster.mjs new video-x --channel my-channel --duration 60  # only with a declared target
   node scripts/rooster.mjs open meu-canal/video-x
   node scripts/rooster.mjs config set assets.strategy user
   node scripts/rooster.mjs profile fork minimal --as my-brand
@@ -9631,8 +9698,8 @@ function filmcraftCommand(args) {
       console.log("\n  Install: https://getartcraft.com/apps/filmcraft");
       console.log("  Or continue with HyperFrames/Remotion: build <slug> --target hyperframes|remotion");
     }
-    console.log(`\n  ${prompt.questionPt || prompt.question}`);
-    for (const option of prompt.optionsPt?.length ? prompt.optionsPt : prompt.options) {
+    console.log(`\n  ${prompt.question || prompt.questionPt}`);
+    for (const option of prompt.options?.length ? prompt.options : prompt.optionsPt) {
       console.log(`   - ${option}`);
     }
     return;
@@ -9972,6 +10039,9 @@ async function main() {
     }
     case "init":
       initWorkspace(args);
+      return;
+    case "install":
+      installCommand(args);
       return;
     case "channel":
       channelCommand(args);

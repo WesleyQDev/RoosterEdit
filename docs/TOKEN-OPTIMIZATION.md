@@ -1,44 +1,44 @@
-# Otimização de tokens
+# Token optimization
 
-Vídeo gasta tokens naturalmente: transcrição, frames, plano, logs de render e código gerado. A ideia não é cortar qualidade; é tirar ruído do contexto e deixar tokens para decisões criativas.
+Video consumes tokens naturally: transcript, frames, plan, render logs, and generated code. The point is not to cut quality; it is to remove noise from the context and leave tokens for creative decisions.
 
-## Os maiores ladrões
+## The biggest thieves
 
-1. **Logs de render/check** — HyperFrames e Remotion imprimem milhares de linhas. Redirecione para arquivo e leia só o final.
-2. **Transcrição completa com palavras** — use `digest` e leia só os segmentos.
-3. **Plano JSON cru** - use `plan`.
-4. **Referências inteiras** — leia só a seção necessária.
-5. **Muitos frames** — 3 a 5 frames representativos bastam.
-6. **Re-renderizar por mudança pequena** — use still/snapshot ou draft.
+1. **Render/check logs** — HyperFrames and Remotion print thousands of lines. Redirect them to a file and read only the end.
+2. **Full transcript with words** — use `digest` and read only the segments.
+3. **Raw plan JSON** - use `plan`.
+4. **Whole references** — read only the section you need.
+5. **Too many frames** — 3 to 5 representative frames are enough.
+6. **Re-rendering for a small change** — use still/snapshot or a draft.
 
-## A maior economia: subagents por etapa
+## The biggest saving: subagents per stage
 
-Cortar log e usar `digest` ajuda, mas o ganho grande vem de não trazer o material bruto para o agente principal. Ele dirige: fala com o usuário, guarda o brief, toma as decisões e abre os gates. Cada etapa pesada roda em um subagent com contexto próprio, que morre no fim da etapa. O subagent lê a transcrição, roda o build, varre o QA e devolve um handoff de 15–25 linhas. A transcrição e a análise ficam em `edit/`; logs e rascunhos ficam em `work/`, fora do contexto principal.
+Clipping logs and using `digest` helps, but the big gain comes from not bringing the raw material into the main agent. It drives: it talks to the user, keeps the brief, makes the decisions, and opens the gates. Each heavy stage runs in a subagent with its own context, which dies at the end of the stage. The subagent reads the transcript, runs the build, scans the QA, and returns a 15–25 line handoff. The transcript and the analysis stay in `edit/`; logs and drafts stay in `work/`, outside the main context.
 
-| Etapa | Subagent | O que o principal recebe |
+| Stage | Subagent | What the main agent receives |
 |---|---|---|
-| Brief | `producer` | um parágrafo + perguntas abertas |
-| Pesquisa | `researcher` | 5 achados + fontes + licenças |
-| Transcrição | `transcript-analyst` | duração, tópicos, beats, flags |
-| Roteiro | `scriptwriter` | hook + resumo dos beats |
-| Plano | `editor` | resumo do plano + riscos |
-| Estilo/storyboard | `art-director` | tokens + cenas + assets |
-| Timeline | `editor` | duração + markers + riscos |
-| Áudio | `audio-director` | voz, música e mix |
-| Build | `engineer` | status + caminhos + bloqueio |
-| QA | `qa` | veredito + evidências + frames |
-| Render | `engineer` | caminho final + probe |
+| Brief | `producer` | one paragraph + open questions |
+| Research | `researcher` | 5 findings + sources + licenses |
+| Transcription | `transcript-analyst` | duration, topics, beats, flags |
+| Script | `scriptwriter` | hook + summary of the beats |
+| Plan | `editor` | plan summary + risks |
+| Style/storyboard | `art-director` | tokens + scenes + assets |
+| Timeline | `editor` | duration + markers + risks |
+| Audio | `audio-director` | voice, music, and mix |
+| Build | `engineer` | status + paths + blocker |
+| QA | `qa` | verdict + evidence + frames |
+| Render | `engineer` | final path + probe |
 
-A regra prática: se a etapa lê ou produz mais de uma tela de material bruto, delegue. Não delegue a conversa de intake, o gate de aprovação, a decisão de licença ou o julgamento visual final. O principal lê o handoff, vê o `plan.html` e 3–5 frames; nunca a transcrição inteira, o código gerado ou o log de render.
+The rule of thumb: if a step reads or produces more than one screen of raw material, delegate it. Do not delegate the intake conversation, the approval gate, the license decision, or the final visual judgment. The main agent reads the handoff, sees `plan.html` and 3–5 frames; never the full transcript, the generated code, or the render log.
 
-O protocolo completo, o template de spawn e o contrato de handoff estão em [`references/subagents.md`](../references/subagents.md) e nos papéis em [`agents/`](../agents/README.md).
+The full protocol, the spawn template, and the handoff contract are in [`references/subagents.md`](../references/subagents.md) and in the roles under [`agents/`](../agents/README.md).
 
-Isso é uma capacidade, não um nome de ferramenta: cada harness chama o subagent de um jeito (OpenCode, Claude Code, Codex, etc.). Se o harness não tiver agente com contexto novo, ou se o spawn falhar, rode a etapa inline e mantenha os arquivos; não bloqueie o projeto esperando delegação.
+This is a capability, not a tool name: each harness calls the subagent something different (OpenCode, Claude Code, Codex, etc.). If the harness has no agent with a fresh context, or if the spawn fails, run the stage inline and keep the files; do not block the project waiting for a delegation.
 
-## Comandos
+## Commands
 
 ```bash
-# Render barulhento
+# Noisy render
 npx hyperframes render --quiet -o ../../renders/draft.mp4 > ../../work/logs/render.log 2>&1
 tail -n 20 ../../work/logs/render.log
 
@@ -52,30 +52,30 @@ npx remotion render src/index.ts RoosterVideo out.mp4 --log=error
 # FFmpeg
 ffmpeg -v error -i input.mp4 ...
 
-# Transcrição compacta
+# Compact transcript
 node "<skill>/scripts/rooster.mjs" digest meu-video --from 0 --to 60
 ```
 
-## Regras de contexto
+## Context rules
 
-- Não cole logs no chat; leia o `Fix:` ou as últimas 30 linhas.
-- Use `digest` em vez de `transcript.json`.
-- Use `plan` em vez de ler `plan.json`; o comando também gera `edit/plan.html` e `qa/plan-review.md` para revisão.
-- Leia só o reference da fase atual.
-- Inspecione 3–5 frames por revisão.
-- Renderize draft uma vez; final só depois da aprovação.
-- Reuse transcrição, TTS e projetos; não refaça o que não mudou.
-- Para transcrição longa, use `transcript-analyst`: ele grava `edit/analysis.json` e devolve só os beats e as flags.
-- Para build e render, use `engineer`: os logs ficam em `work/logs/` e o principal recebe só status e caminhos.
-- `styleproof` e `preview` geram HTML; abra no navegador em vez de colar o HTML no chat.
-- `textcheck` grava `qa/text-review.md`; leia só os alertas e os textos, não o JSON.
-- Feche a tarefa em 5–10 linhas: resultado, caminhos e uma próxima pergunta. Detalhes ficam nos arquivos.
+- Do not paste logs into the chat; read the `Fix:` or the last 30 lines.
+- Use `digest` instead of `transcript.json`.
+- Use `plan` instead of reading `plan.json`; the command also generates `edit/plan.html` and `qa/plan-review.md` for review.
+- Read only the reference for the current phase.
+- Inspect 3–5 frames per review.
+- Render the draft once; the final only after approval.
+- Reuse transcript, TTS, and projects; do not redo what did not change.
+- For a long transcript, use `transcript-analyst`: it writes `edit/analysis.json` and returns only the beats and flags.
+- For build and render, use `engineer`: logs stay in `work/logs/` and the main agent receives only status and paths.
+- `styleproof` and `preview` generate HTML; open it in the browser instead of pasting the HTML into the chat.
+- `textcheck` writes `qa/text-review.md`; read only the alerts and the texts, not the JSON.
+- Close the task in 5–10 lines: result, paths, and one next question. Details stay in the files.
 
-## O que não cortar
+## What not to cut
 
-- Aprovação do plano.
-- Inspeção visual de frames.
-- Revisão editorial do resultado.
-- Qualidade do render final.
+- Plan approval.
+- Visual frame inspection.
+- Editorial review of the result.
+- Final render quality.
 
-Economize no ruído, não no julgamento.
+Save on noise, not on judgment.

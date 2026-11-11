@@ -35,7 +35,7 @@ The default is `auto`. Respect the user's preference when they have one.
 
 `auto` is a safe default, not a silent decision. Before the first build, ask once per project:
 
-> "Como você quer montar este vídeo? HyperFrames é o padrão e já está pronto. Remotion é melhor para React/3D, mas não está instalado. FilmCraft abre a timeline para edição manual, mas o MCP ainda não está configurado. Qual prefere?"
+> "How do you want to build this video? HyperFrames is the default and already works. Remotion is better for React/3D, but it is not installed. FilmCraft opens the timeline for manual editing, but the MCP is not configured yet. Which do you prefer?"
 
 - Match the question to `doctor --json` and `filmcraft status --json`. Do not claim something is missing when it is installed.
 - Skip the question when the user already chose an engine or explicitly asked for `auto`.

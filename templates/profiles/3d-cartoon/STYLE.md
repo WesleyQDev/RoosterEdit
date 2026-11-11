@@ -1,75 +1,75 @@
 # 3D Cartoon
 
-Low-poly, fofo, legível no celular. A regra é silhueta primeiro, textura depois.
+Low-poly, cute, readable on mobile. The rule is silhouette first, texture second.
 
-## Quando usar
+## When to use
 
-- personagens e mascotes;
-- explicações visuais para redes sociais;
-- produtos estilizados;
-- shorts educativos com humor leve.
+- characters and mascots;
+- visual explanations for social media;
+- stylized products;
+- educational shorts with light humor.
 
-## Paleta
+## Palette
 
-- Fundo: `#0d1020` ou gradiente suave.
-- Texto: `#ffffff`.
-- Apoio: `#9aa3c7`.
-- Acento 1: `#ff8a5c` (coral).
-- Acento 2: `#22d3ee` (ciano).
-- Acento 3: `#ffe66d` (amarelo).
-- Use no máximo três cores dominantes por cena.
+- Background: `#0d1020` or a soft gradient.
+- Text: `#ffffff`.
+- Support: `#9aa3c7`.
+- Accent 1: `#ff8a5c` (coral).
+- Accent 2: `#22d3ee` (cyan).
+- Accent 3: `#ffe66d` (yellow).
+- Use at most three dominant colors per scene.
 
-## Forma
+## Shape
 
-- Silhueta arredondada, proporções exageradas.
-- Cabeça maior, mãos simples, olhos grandes.
-- Materiais: clay, plástico fosco, toy.
-- Evite realismo, cabelo complexo e tecido simulado.
+- Rounded silhouette, exaggerated proportions.
+- Bigger head, simple hands, big eyes.
+- Materials: clay, matte plastic, toy.
+- Avoid realism, complex hair, and simulated fabric.
 
-## Iluminação
+## Lighting
 
-- Key light suave, fill e rim light.
-- Sombras suaves ou desligadas.
-- Fundo simples; o personagem é o foco.
-- Evite global illumination pesada.
+- Soft key light, fill, and rim light.
+- Soft or disabled shadows.
+- Simple background; the character is the focus.
+- Avoid heavy global illumination.
 
-## Movimento
+## Motion
 
-- Squash e stretch.
-- Antecipação e follow-through.
-- Overshoot leve.
-- Câmera lenta e motivada; sem tremores.
+- Squash and stretch.
+- Anticipation and follow-through.
+- Slight overshoot.
+- Slow, motivated camera; no shake.
 
-## Câmera
+## Camera
 
-- Vertical: sujeito centralizado, altura dos olhos.
-- Horizontal: composição com espaço para texto.
-- Orbit lento para produtos; dolly para revelações.
-- Evite movimentos rápidos que causam desconforto.
+- Vertical: centered subject, eye level.
+- Horizontal: composition with room for text.
+- Slow orbit for products; dolly for reveals.
+- Avoid fast movements that cause discomfort.
 
-## Legendas
+## Captions
 
-- Nunito 800, branco, stroke escuro.
-- Máximo 28 caracteres por linha.
-- Posição inferior.
-- Em vídeos sem fala, as legendas são obrigatórias.
+- Nunito 800, white, dark stroke.
+- Maximum 28 characters per line.
+- Bottom position.
+- In videos without speech, captions are mandatory.
 
-## Áudio
+## Audio
 
-- Música divertida e leve.
-- SFX cartunescos: pop, whoosh, boing, click.
+- Fun, light music.
+- Cartoon SFX: pop, whoosh, boing, click.
 - Loudness -14 LUFS.
-- Não competir com a narração.
+- Do not compete with the narration.
 
 ## Render
 
-- Teste um still por cena antes do render completo.
-- Reduza polígonos, sombras e post-processing se estiver lento.
-- Verifique frames pretos, geometria faltando e câmera cortando o sujeito.
+- Test a still per scene before the full render.
+- Reduce polygons, shadows, and post-processing if it is slow.
+- Check for black frames, missing geometry, and the camera cutting off the subject.
 
-## Evitar
+## Avoid
 
-- Realismo, pele, cabelo, tecido.
-- Excesso de partículas.
-- Fundo complexo competindo com o personagem.
-- Movimento de câmera rápido demais.
+- Realism, skin, hair, fabric.
+- Excessive particles.
+- Complex background competing with the character.
+- Camera movement that is too fast.

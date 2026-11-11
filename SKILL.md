@@ -36,12 +36,17 @@ Do not create a `scripts/` directory in the user's project just to satisfy the c
 
 ## Where to install the skill
 
-When the user asks you to install RoosterEdit, ask first whether the install should be **local to the project (recommended)** or **global**. Use the skill folder the current harness actually reads; do not assume OpenCode.
+Install with npm. Do not clone the repository unless the user is developing RoosterEdit.
 
-- **Local:** the harness's project-level skill folder plus `rooster-edit` (for example `.opencode/skills`, `.claude/skills`, or `.agents/skills`). Recommended because the version stays with the project and cannot surprise other work.
-- **Global:** the harness's global skill folder plus `rooster-edit` (for example `~/.config/opencode/skills` or `~/.claude/skills`). Use it only when the user wants RoosterEdit in every project on the machine.
+```bash
+npx rooster-edit@latest install              # local to the project (recommended)
+npx rooster-edit@latest install --global     # every project on the machine
+npx rooster-edit@latest install --harness claude
+```
 
-If you cannot determine the harness's folders, inspect its skill discovery paths or ask the user. Wait for the answer before cloning. This choice is about where the skill lives, not where the video workspace lives (`./rooster`).
+Ask whether the install should be **local to the project (recommended)** or **global** before running it. Pass the harness the user is actually running: `--harness` accepts `opencode` (default), `claude`, or `agents`. The command copies the skill into that harness's skills folder and prints the path; it does not create a workspace.
+
+If the user is developing the skill, cloning into the skills folder is fine. This choice is about where the skill lives, not where the video workspace lives (`./rooster`).
 
 ### Reporting
 
@@ -71,11 +76,11 @@ Use a compact step marker in status updates and at every approval gate. Keep one
 
 Examples:
 
-- `Etapa 3/8 — Transcrição concluída. 42 trechos, 10:12 de duração.`
-- `Etapa 4/8 — Plano pronto em edit/plan.html. Posso seguir com a timeline?`
-- `Etapa 6/8 — Plano aprovado. Quer HyperFrames, Remotion (instalar) ou FilmCraft (conectar o MCP)?`
-- `Etapa 6/8 — Build concluído. Posso abrir o preview e rodar o QA?`
-- `Etapa 8/8 — Preview aprovado. Posso renderizar o final?`
+- `Step 3/8 — Transcript complete. 42 segments, 10:12 long.`
+- `Step 4/8 — Plan ready at edit/plan.html. Can I continue with the timeline?`
+- `Step 6/8 — Plan approved. HyperFrames, Remotion (install), or FilmCraft (connect the MCP)?`
+- `Step 6/8 — Build complete. Can I open the preview and run QA?`
+- `Step 8/8 — Preview approved. Can I render the final?`
 
 Skip steps that do not apply and say why. Do not print the full checklist on every message; show the current step, what changed, and the next gate. Do not combine timeline and final render in one approval: preview and QA sit between them. Step 6 starts with the engine/timeline question; do not build before the user answers or explicitly delegates the choice.
 
@@ -122,7 +127,7 @@ Approval gates never move to a subagent. The subagent proposes; the user and the
 
 If the workspace does not exist yet, do a short onboarding before creating any project. The workspace is created as part of the channel step; do not ask where it lives.
 
-**First ask (one message):** "Quer criar o primeiro canal agora? Pensa nele como a pasta daquele projeto: dentro dela ficam os vídeos, o estilo e os arquivos da marca ou cliente. Se sim, me diga o nome do canal e o que ele vai produzir?"
+**First ask (one message):** "Do you want to create your first channel now? Think of it as the project folder: it holds the videos, the style, and the brand or client files. If yes, tell me the channel name and what it will produce?"
 
 If the answer is no, stop and create nothing. If they answer only one part, ask for the missing name or content.
 
@@ -130,7 +135,7 @@ If the answer is yes:
 
 1. Use the name the user gave (slugified) as the channel id. If they described the content but gave no name, propose a short kebab-case name and confirm it.
 2. Use the content sentence verbatim and infer language, format, source, assets, engine, autonomy, and voice. Keep the profile at `minimal` for now; the identity step defines it. Do not infer a visual style from the topic. Do not ask for a duration.
-3. Show the inferred defaults in one compact line and ask "Está bom ou quer ajustar algo?" Ask a follow-up only when a field is genuinely ambiguous, such as the platform or whether the source is real footage.
+3. Show the inferred defaults in one compact line and ask "Does that look right, or do you want to adjust anything?" Ask a follow-up only when a field is genuinely ambiguous, such as the platform or whether the source is real footage.
 4. On confirmation, run `init`, then `channel new <id> ...` with the answers.
 5. Create the channel identity: ask three questions (palette, typography, motion/audio) and run `channel design <id> ...`. This writes `channels/<id>/profiles/<id>/profile.json` + `STYLE.md` and sets `channel.profile`. Show a short summary and stop.
 
@@ -298,7 +303,7 @@ For footage-driven projects, run transcription and analysis through `transcript-
 
 Before creating any engine project, ask once per project:
 
-> "Como você quer montar este vídeo? HyperFrames é o padrão e já está pronto. Remotion é melhor para React/3D, mas não está instalado. FilmCraft abre a timeline para edição manual, mas o MCP ainda não está configurado. Qual prefere?"
+> "How do you want to build this video? HyperFrames is the default and already works. Remotion is better for React/3D, but it is not installed. FilmCraft opens the timeline for manual editing, but the MCP is not configured yet. Which do you prefer?"
 
 Adapt the sentence to what `doctor --json` and `filmcraft status --json` reported. Only mention a limitation that is actually true.
 
@@ -516,7 +521,7 @@ node "<skill>/scripts/rooster.mjs" init
 node "<skill>/scripts/rooster.mjs" doctor --json
 
 # Channel
-node "<skill>/scripts/rooster.mjs" channel new studio-a --language pt-BR --format 16:9 --profile minimal --voice tts
+node "<skill>/scripts/rooster.mjs" channel new studio-a --language en-US --format 16:9 --profile minimal --voice tts
 node "<skill>/scripts/rooster.mjs" channel design studio-a --from minimal --accent "#22d3ee" --motion calm
 
 # Project

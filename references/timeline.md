@@ -132,7 +132,7 @@ Scenes are the bridge between the storyboard and the engine. The storyboard desc
   "id": "cap-001",
   "start": 0.4,
   "end": 3.2,
-  "text": "A maioria dos modelos de linguagem não pensa como você imagina.",
+  "text": "Most language models do not think the way you imagine.",
   "speaker": "narrator",
   "style": "profile",
   "position": "bottom"

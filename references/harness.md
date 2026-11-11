@@ -145,6 +145,6 @@ Do not describe a video as "beautiful" or "correct" without seeing at least repr
 
 When a capability is missing, say so plainly and offer the best available path:
 
-> "Este ambiente não tem FFmpeg, então não consigo fazer probe nem render local. Posso gerar o brief, o roteiro, o storyboard e o plano de edição. Se quiser, também posso te passar o comando de instalação do FFmpeg."
+> "This environment does not have FFmpeg, so I cannot probe or render locally. I can still produce the brief, script, storyboard, and edit plan. If you want, I can also give you the FFmpeg install command."
 
 This is better than silently producing a lower-quality result or pretending the tool exists.

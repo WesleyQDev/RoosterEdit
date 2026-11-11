@@ -8,7 +8,7 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
 {
   "schema": "rooster.project/v1",
   "slug": "meu-video",
-  "name": "Meu Vídeo",
+  "name": "My Video",
   "channel": "en-tech",
   "profile": "tech-neon",
   "engine": "auto",
@@ -141,7 +141,7 @@ The compact editorial map produced by `transcript-analyst`. It is the input for 
 {
   "schema": "rooster.analysis/v1",
   "source": "assets/source/video.mp4",
-  "language": "pt-BR",
+  "language": "en-US",
   "durationSec": 612.4,
   "topics": [
     { "start": 0, "end": 42.5, "label": "Opening" }
@@ -213,7 +213,7 @@ The `style/proof/index.html` file is the review artifact; `proof.json` records w
   "schema": "rooster.plan/v1",
   "source": "assets/source/video.mp4",
   "style": "style.md",
-  "language": "pt-BR",
+  "language": "en-US",
   "duration": 612.4,
   "editMode": "cleanup",
   "summary": "What the video is about",
@@ -234,7 +234,7 @@ The `style/proof/index.html` file is the review artifact; `proof.json` records w
     { "id": "el-001", "type": "letreiro", "start": 3.0, "end": 6.0, "text": "A virada", "description": "Title card" }
   ],
   "chapters": [
-    { "start": 0, "title": "Introdução" }
+    { "start": 0, "title": "Introduction" }
   ],
   "notes": []
 }
@@ -409,7 +409,7 @@ Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `voice`, `eng
     "aspect": "16:9",
     "fps": 30,
     "loudnessLufs": -14,
-    "language": "pt-BR",
+    "language": "en-US",
     "autonomy": "guided",
     "assets": "mixed"
   }
@@ -424,7 +424,7 @@ Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `voice`, `eng
   "tts": {
     "provider": "auto",
     "voice": null,
-    "language": "pt-BR"
+    "language": "en-US"
   },
   "render": {
     "draftScale": 0.5,
