@@ -210,7 +210,7 @@ test("detectCapabilities runs probes in parallel and keeps doctor fields", async
   const caps = await detectCapabilities({ ...options, runAsync, timeout: 1234 });
 
   assert.equal(caps.schema, "rooster.doctor/v1");
-  assert.equal(caps.version, "0.1.0");
+  assert.equal(caps.version, "0.2.0");
   assert.equal(caps.os, process.platform);
   assert.equal(caps.arch, process.arch);
   assert.equal(caps.cwd, path.resolve(options.cwd));

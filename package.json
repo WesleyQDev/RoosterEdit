@@ -1,6 +1,6 @@
 {
   "name": "rooster-edit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turn the footage and assets you already have into a finished cut with AI coding agents: plan, review, and render with HyperFrames, Remotion, or FFmpeg.",
   "type": "module",
   "bin": {

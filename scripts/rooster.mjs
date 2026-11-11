@@ -94,7 +94,7 @@ import { normalizeTranscript } from "./features/transcript.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SKILL_ROOT = path.resolve(__dirname, "..");
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const REMOTION_VERSION = "4.0.540";
 
 const CWD = process.cwd();
@@ -10020,13 +10020,13 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._.shift();
 
-  if (!command || command === "help" || args.help) {
-    help();
+  if (command === "version" || args.version) {
+    console.log(VERSION);
     return;
   }
 
-  if (command === "version" || args.version) {
-    console.log(VERSION);
+  if (!command || command === "help" || args.help) {
+    help();
     return;
   }
 

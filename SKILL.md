@@ -15,7 +15,7 @@ compatibility: >-
   Best with Node.js 22+, FFmpeg/ffprobe, and a browser. The skill degrades to
   brief, script, storyboard, and edit plan when those tools are missing.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # RoosterEdit
