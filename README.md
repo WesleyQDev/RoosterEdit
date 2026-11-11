@@ -32,22 +32,25 @@ Com o RoosterEdit você edita gravações, cria vídeos narrados com imagens e g
 
 Um showcase de 40 s feito com o próprio pipeline: o cursor entra no chat, digita “Edite o meu vídeo”, o agente monta o plano, o preview cresce e vira o documental **A cidade às 5h**. O documental começa em 00:12.
 
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="76%">
+      <a href="docs/assets/previews/rooster-city-5am-16x9.mp4"><img src="docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat que vira o documental A cidade às 5h" width="100%" /></a>
+    </td>
+    <td align="center" width="24%">
+      <a href="docs/assets/previews/rooster-city-5am-9x16.mp4"><img src="docs/assets/previews/rooster-city-5am-9x16.webp" alt="Corte vertical do documental A cidade às 5h" width="100%" /></a>
+    </td>
+  </tr>
+</table>
+
 <p align="center">
-  <a href="docs/assets/previews/rooster-city-5am-16x9.mp4">
-    <img src="docs/assets/previews/rooster-city-5am-16x9.webp" alt="Chat que vira o documental A cidade às 5h" height="360" />
-  </a>
-  &nbsp;&nbsp;&nbsp;
-  <a href="docs/assets/previews/rooster-city-5am-9x16.mp4">
-    <img src="docs/assets/previews/rooster-city-5am-9x16.webp" alt="Corte vertical do documental A cidade às 5h" height="360" />
-  </a>
-  <br />
   <sub><strong>16:9</strong> · 40 s · chat → documental com parallax</sub>
   &nbsp;&nbsp;&nbsp;
   <sub><strong>9:16</strong> · 28 s · corte vertical do documental</sub>
 </p>
 
 <p align="center">
-  <sub>Prévias geradas com <strong>DeepSeek V4.1 Flash 1017 (No High)</strong> — a prova de que não é preciso um modelo caro para começar a editar vídeos.</sub>
+  <sub>Prévias geradas com <strong>DeepSeek V4.1 Flash 1017 (High)</strong> — a prova de que não é preciso um modelo caro para começar a editar vídeos.</sub>
 </p>
 
 <p align="center">
