@@ -251,6 +251,7 @@ Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
 Element fields:
 
 - `type`: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`, `custom`.
+- `engine`: optional. `hyperframes`, `remotion`, or `auto` (inherit the project element engine). An element may pick its own engine; a mixed plan renders with `--target filmcraft`, which builds one clip per element. A single-composition target still draws every element with one engine and rejects the mismatch.
 - `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `parallax`, `custom`. See `references/edit-plan.md`.
 - `component`: on a `custom` element, the name of a reusable component folder (`style/components/<name>/`).
 - `html`, `css`, `animation`: inline custom markup, CSS, and GSAP statements. The animation receives `root`, `start`, `duration`, and `tl`.
@@ -438,6 +439,72 @@ Required: `schema`, `id`, `name`, `language`, `format`, `profile`, `voice`, `eng
 ```
 
 Keep provider keys in environment variables, never in `config.json`.
+
+## qa.json
+
+Written by `qa` to `qa/qa.json`; `qa/qa-report.md` is the short human view.
+
+```json
+{
+  "schema": "rooster.qa/v1",
+  "project": "en-tech/video-x",
+  "video": "renders/draft.mp4",
+  "quality": "draft",
+  "status": "warn",
+  "counts": { "error": 0, "warning": 2, "info": 1 },
+  "key": "…",
+  "metrics": {
+    "duration": 40.0, "width": 1920, "height": 1080, "fps": 30,
+    "lufs": -14.2, "truePeakDb": -1.4, "clipping": 0,
+    "cuts": 6, "faces": 8, "faceSamples": 8
+  },
+  "findings": [
+    { "severity": "warning", "code": "audio.loudness", "message": "…" }
+  ],
+  "vision": ["qa/vision/frame-12.0s.jpg"]
+}
+```
+
+`status` is `pass`, `warn`, or `fail`. `key` invalidates the cache when the video, plan, or options change. Thresholds live in `scripts/lib/qa.mjs`.
+
+## OCR result
+
+Written by `ocr` to `qa/ocr/`:
+
+```json
+{
+  "schema": "rooster.ocr/v1",
+  "provider": "winrt",
+  "source": "assets/source/screen-recording.mp4",
+  "time": 12.5,
+  "language": "pt-BR",
+  "width": 1920,
+  "height": 1080,
+  "text": "Configurações > Exportar",
+  "words": [
+    { "id": "w1", "text": "Configurações", "x": 120, "y": 300, "width": 210, "height": 42, "confidence": null }
+  ],
+  "wordCount": 1
+}
+```
+
+`provider` is `winrt`, `vision`, `tesseract`, or `wasm`. Boxes are pixels in the frame; confidence is 0..1 when the provider reports it.
+
+## block manifest
+
+When a registry block is installed, the project keeps `style/blocks/<name>/installed.json`:
+
+```json
+{
+  "schema": "rooster.block/v1",
+  "name": "extruded-logo",
+  "source": "hyperframes-registry",
+  "installedAt": "2026-11-11T18:00:00.000Z",
+  "vars": { "text": "ROOSTER" }
+}
+```
+
+The block itself is `compositions/<name>.html` plus its assets. `build` copies that tree into the engine project.
 
 ## Validation rules
 

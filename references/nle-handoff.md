@@ -82,7 +82,7 @@ node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --rebuild-
 node "<skill>/scripts/rooster.mjs" timeline meu-video --open
 ```
 
-- `--engine hyperframes|remotion` selects the element renderer; `auto` picks Remotion for 3D and HyperFrames otherwise. FFmpeg is rejected here because it builds the base, not the element clips.
+- `--engine hyperframes|remotion` selects the element renderer; `auto` uses HyperFrames, because registry blocks and the generated plan only run there. Pass `--engine remotion` when the project has a hand-written React/Three element. FFmpeg is rejected here because it builds the base, not the element clips.
 - `new --target filmcraft` records `timeline: "filmcraft"` in `project.json`; later `build` calls with no target keep using FilmCraft.
 - `build --target filmcraft` runs FFmpeg for the base cut and audio mix, renders each element as a transparent clip, and assembles the `.fcproj`.
 - HyperFrames elements are MOV ProRes 4444 with alpha, one composition per element. Remotion elements are ProRes 4444 with PNG frames and `yuva444p10le`, one composition per element. Remotion needs a one-time `npm install` in `engine/filmcraft/remotion`; the build reports that path when the CLI is missing.
@@ -98,7 +98,7 @@ node "<skill>/scripts/rooster.mjs" timeline meu-video --open
 - Program markers for chapters, elements, and cut boundaries.
 - Captions imported from `edit/captions/*.srt` or `.vtt` when present.
 
-`zoom` elements are not standalone clips: they apply to the base, so they are skipped with a note.
+`zoom` and overlay `transition` elements are not standalone clips: they apply to the base, so the build fails by default. Use `--target hyperframes`/`remotion`, replace them with PIP/split b-roll and punch-ins, or pass `--allow-skipped-elements` when the omission is deliberate.
 
 ### Files and state
 
@@ -139,6 +139,44 @@ node "<skill>/scripts/rooster.mjs" filmcraft mcp-config --client claude --json
 ```
 
 `doctor --json` includes `filmcraft: { installed, cli, app, source, version, mcp }`. `filmcraft status --json` adds `prompt` with `kind` (`connect-mcp`, `install`, `install-cli`, `ready`). `mcp-config` prints only the snippet; `setup` prints it and can write it. `setup --write` merges the entry into the project config (`opencode.json` or `.mcp.json`) and keeps a `.bak` backup of an existing file; it never writes without `--write`. Restart the agent after connecting. `timeline <slug> --json` reports the project file, sequence, element count, and `updatedAt`; `filmcraft open <slug>` is an alias for `timeline <slug> --open`. `ROOSTER_FILMCRAFT_CLI` overrides the CLI path. The onboarding question is in `references/onboarding.md`.
+
+### Live co-editing (MCP bridge)
+
+The MCP is how the agent edits the same timeline the user has open. There are two modes:
+
+| Mode | Config entry | What the agent sees |
+|---|---|---|
+| Headless | `command: [cli, "mcp"]` | its own copy of the project; the open app is not involved |
+| Bridge | `command: [cli, "mcp", "--bridge", "127.0.0.1:<port>"]` | the document the user has open in the app |
+
+Setup:
+
+```bash
+filmcraft --control 8790
+node "<skill>/scripts/rooster.mjs" filmcraft setup --client opencode --bridge 8790 --write
+```
+
+`--write` keeps a `.bak` of the existing config; restart the agent afterward. Use the same port in both commands.
+
+Tools exposed by the server (FilmCraft 0.19):
+
+| Group | Tools | Use |
+|---|---|---|
+| Read | `doc_inspect`, `project_inspect`, `sequence_inspect`, `command_list` | the current state, before every edit |
+| Edit | `command_run`, `command_batch`, `media_import` | commands by id: `timeline.place`, `clip.replaceFromBin`, `markers.add`, `file.exportMedia`, and the rest of `command_list` |
+| Frames | `render_frame`, `render_preview` | one frame from the active sequence at a timecode |
+| Live UI | `ui_inspect`, `ui_elements`, `ui_screenshot`, `ui_click`, `ui_drag`, `ui_key`, `ui_type`, `ui_control` | the shared window; only works with `--bridge` |
+
+Rules:
+
+- Inspect before every edit. The user moves clips while the agent thinks; re-read `sequence_inspect` after any user action.
+- One change per call, announced with its track and timecode. Never tidy, realign, rename, or reorder what the user did.
+- Prefer `command_run` over `ui_*`: commands are deterministic, while UI actions depend on selection, zoom, and panel layout.
+- Do not run `build`, `timeline --open`, or the CLI `render` while the app is open. They open a headless copy, and `--force` archives the live document. Export inside the session with `command_run` and `file.exportMedia`.
+- The plan is frozen while the session lasts: the `.fcproj` is the source of truth. `check`, `preview`, and `qa` still read `edit/plan.json`, so say which file you mean when reporting.
+- If the bridge drops (app closed or restarted), the command and `ui_*` tools fail. Ask the user to reopen the app with `--control` and the same port; do not retry in a loop.
+
+Recovery: after the session, save in the app and run `timeline <slug> --json` for the recorded state. Folding the manual edits back into `edit/plan.json` is a manual step; there is no automatic read-back yet. If the edit has to live in the plan, rebuild from the plan and redo the manual changes deliberately.
 
 ### Caveats
 

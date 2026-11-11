@@ -15,6 +15,9 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | Charts | `features/charts.md` | Real bar/line/pie graphics |
 | TTS | `features/tts.md` | Script to voiceover |
 | Multicam | `features/multicam.md` | Camera selection, J/L cuts, speed ramps |
+| QA | `../qa.md` | Machine pass, thresholds, and the human checklist |
+| OCR | `features/ocr.md` | Text and boxes from a frame, without Python |
+| 3D blocks | `engines.md` | Registry blocks, install, and offline caveat |
 
 ## Progress and questions
 
@@ -38,6 +41,9 @@ node "<skill>/scripts/rooster.mjs" audio <slug>
 node "<skill>/scripts/rooster.mjs" color <slug> [--update-plan]
 node "<skill>/scripts/rooster.mjs" tts <slug> [--generate]
 node "<skill>/scripts/rooster.mjs" multicam <slug> [--render] [--update-plan]
+node "<skill>/scripts/rooster.mjs" qa <slug> [--draft|--final] [--vision] [--fix-audio]
+node "<skill>/scripts/rooster.mjs" ocr <slug> --at 12.5 [--lang pt-BR] [--provider auto]
+node "<skill>/scripts/rooster.mjs" tools list
 node "<skill>/scripts/rooster.mjs" export <slug> [--format edl|fcpxml|both]
 ```
 `zoom`, `transition` and chart elements are part of `edit/plan.json` and are consumed by `build`.

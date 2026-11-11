@@ -154,7 +154,7 @@ node scripts/rooster.mjs new test-video --channel demo
 
 - Source of truth: the repository root.
 - `.opencode/skills/rooster-edit/` is a local build artifact, git-ignored.
-- Run `npm run sync` (or `node scripts/sync-skill.mjs`) after changing `SKILL.md`, `references/`, `scripts/`, `templates/`, or `agents/`, if you need to test in OpenCode.
+- Run `npm run sync` (or `node scripts/sync-skill.mjs`) after changing `SKILL.md`, `references/`, `scripts/`, `templates/`, `agents/`, or `docs/`, if you need to test in OpenCode.
 - Never edit files in `.opencode/` directly.
 
 ## 11. Performance

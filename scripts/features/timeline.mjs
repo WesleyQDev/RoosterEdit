@@ -12,6 +12,27 @@
 const SCHEMA = "rooster.timeline/v1";
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
+
+/** Engines that can render one element on their own. */
+export const ELEMENT_ENGINES = ["hyperframes", "remotion"];
+
+/**
+ * Resolve the engine that renders one element.
+ *
+ * An element may carry `engine: "hyperframes" | "remotion"`; otherwise it
+ * inherits the project's element engine. `auto`, unknown values, and a missing
+ * fallback resolve to null, and validation reports the unknown ones.
+ *
+ * @param {{engine?: string}|null|undefined} element
+ * @param {string|null|undefined} fallback
+ * @returns {string|null}
+ */
+export function elementEngine(element, fallback) {
+  const declared = String(element?.engine || "").trim().toLowerCase();
+  if (ELEMENT_ENGINES.includes(declared)) return declared;
+  const base = String(fallback || "").trim().toLowerCase();
+  return ELEMENT_ENGINES.includes(base) ? base : null;
+}
 const DEFAULT_FPS = 30;
 const MIN_ELEMENT_DURATION = 0.1;
 const NON_RENDERABLE_TYPES = new Set(["zoom"]);
@@ -137,6 +158,9 @@ export function elementId(element, index, used = null) {
 export function elementSpecs(plan, options = {}) {
   const elements = isRecord(plan) && Array.isArray(plan.elements) ? plan.elements : [];
   const used = new Set();
+  const fallbackEngine = ELEMENT_ENGINES.includes(String(options?.engine || "").toLowerCase())
+    ? String(options.engine).toLowerCase()
+    : null;
 
   const specs = elements.map((element, index) => {
     const source = isRecord(element) ? element : {};
@@ -158,6 +182,7 @@ export function elementSpecs(plan, options = {}) {
       start,
       end: round3(start + duration),
       duration,
+      engine: elementEngine(source, fallbackEngine),
       element: source,
       renderable,
       reason: !within
@@ -175,6 +200,33 @@ export function elementSpecs(plan, options = {}) {
   return specs
     .map((spec) => byId.get(spec.id) || { ...spec, trackIndex: null })
     .sort((a, b) => compareSpecs(a, a.index, b, b.index));
+}
+
+/**
+ * Group render specs by the engine that has to draw them.
+ *
+ * Elements without an engine inherit `fallbackEngine`. Groups keep the input
+ * order inside each engine and are returned in a stable engine order, so a
+ * build renders the same way twice.
+ *
+ * @param {Array<object>} specs
+ * @param {string|null|undefined} fallbackEngine
+ * @returns {Array<{engine: string, specs: Array<object>}>}
+ */
+export function groupSpecsByEngine(specs, fallbackEngine) {
+  const list = Array.isArray(specs) ? specs : [];
+  const groups = new Map();
+  for (const spec of list) {
+    if (!spec?.renderable) continue;
+    const engine = spec.engine || elementEngine(spec.element, fallbackEngine);
+    if (!engine) continue;
+    if (!groups.has(engine)) groups.set(engine, []);
+    groups.get(engine).push(spec);
+  }
+  return ELEMENT_ENGINES.filter((engine) => groups.has(engine)).map((engine) => ({
+    engine,
+    specs: groups.get(engine),
+  }));
 }
 
 /**

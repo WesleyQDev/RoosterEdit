@@ -19,7 +19,7 @@ rooster/
 │       │       ├── brief.md
 │       │       ├── script.md
 │       │       ├── style.md
-│       │       ├── style/{proof/,components/}
+│       │       ├── style/{proof/,components/,blocks/}
 │       │       ├── storyboard/
 │       │       ├── assets/{source,generated,licensed}/
 │       │       ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/,export/}
@@ -41,7 +41,7 @@ rooster/
 │       │       │   └── filmcraft.json
 │       │       ├── preview/
 │       │       ├── renders/
-│       │       ├── qa/{report.md,text-review.md,plan-review.md,frames/}
+│       │       ├── qa/{qa.json,qa-report.md,report.md,text-review.md,plan-review.md,frames/,vision/,ocr/}
 │       │       └── review.md
 │       ├── profiles/
 │       ├── assets/
@@ -178,6 +178,10 @@ The main agent reads the handoffs, looks at `plan.html` and 3–5 frames. The fu
 | `qa/plan-review.md` | `plan <slug>` | Visual gaps, hard cuts, unsupported text, b-roll without `covers`, and layout collisions |
 | `preview/index.html` | `preview <slug>` | Player, timeline, validation, assets, and QA checklist |
 | `qa/text-review.md` | `textcheck <slug>` | All on-screen text with timecodes and warnings |
+| `qa/qa.json`, `qa/qa-report.md` | `qa <slug>` | Machine QA: loudness, peak, silence, cuts, faces, engine check |
+| `qa/vision/` | `qa <slug> --vision` | At most five frames at the flagged times |
+| `qa/ocr/` | `ocr <slug> --at <s>` | Text and boxes from a frame (screen recordings, slides) |
+| `style/blocks/<name>/` | `build --allow-download` | Installed 3D/registry block, kept across `--force` builds |
 | `edit/export/` | `export <slug> --format both` | EDL/FCPXML for DaVinci or Premiere |
 | `engine/filmcraft/<slug>.fcproj` | `timeline <slug> --open` | Editable timeline in FilmCraft (optional) |
 

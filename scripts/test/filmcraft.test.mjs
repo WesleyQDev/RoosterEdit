@@ -23,6 +23,7 @@ import {
   inspect,
   markers,
   mergeFilmCraftMcpConfig,
+  normalizeFilmCraftBridge,
   parseFilmCraftVersion,
   place,
   renderFrame,
@@ -280,6 +281,87 @@ test("mergeFilmCraftMcpConfig creates both shapes, preserves keys and is idempot
     assert.equal(result.changed, false);
     assert.equal(result.config, null);
   }
+});
+
+test("bridge mode points the MCP at the live app", () => {
+  const opencode = filmCraftMcpConfig({
+    client: "opencode",
+    cli: "/opt/filmcraft-cli",
+    bridge: "8790",
+  });
+  assert.deepEqual(opencode.mcp[FILMCRAFT_MCP_NAME].command, [
+    "/opt/filmcraft-cli",
+    "mcp",
+    "--bridge",
+    "127.0.0.1:8790",
+  ]);
+
+  const claude = filmCraftMcpConfig({
+    client: "claude",
+    cli: "/opt/filmcraft-cli",
+    bridge: "127.0.0.1:9999",
+  });
+  assert.deepEqual(claude.mcpServers[FILMCRAFT_MCP_NAME].args, [
+    "mcp",
+    "--bridge",
+    "127.0.0.1:9999",
+  ]);
+
+  const headless = filmCraftMcpConfig({ client: "opencode", cli: "/opt/filmcraft-cli" });
+  assert.deepEqual(headless.mcp[FILMCRAFT_MCP_NAME].command, ["/opt/filmcraft-cli", "mcp"]);
+
+  assert.equal(normalizeFilmCraftBridge(8790), "127.0.0.1:8790");
+  assert.equal(normalizeFilmCraftBridge(" localhost:8790 "), "localhost:8790");
+  assert.equal(normalizeFilmCraftBridge(""), null);
+  assert.throws(() => normalizeFilmCraftBridge("0"), /port between 1 and 65535/);
+  assert.throws(() => normalizeFilmCraftBridge("nope"), /use a port/);
+  assert.match(
+    filmCraftMcpSnippet({ client: "claude", cli: "/opt/filmcraft-cli", bridge: 8790 }),
+    /Bridge mode/
+  );
+  assert.match(
+    filmCraftMcpSnippet({ client: "claude", cli: "/opt/filmcraft-cli" }),
+    /Headless mode/
+  );
+});
+
+test("mergeFilmCraftMcpConfig replaces the entry when the bridge changes", () => {
+  const first = mergeFilmCraftMcpConfig(
+    {},
+    { client: "opencode", cli: "/opt/filmcraft-cli", bridge: 8790 }
+  );
+  assert.equal(first.changed, true);
+  assert.deepEqual(first.config.mcp[FILMCRAFT_MCP_NAME].command, [
+    "/opt/filmcraft-cli",
+    "mcp",
+    "--bridge",
+    "127.0.0.1:8790",
+  ]);
+
+  const again = mergeFilmCraftMcpConfig(first.config, {
+    client: "opencode",
+    cli: "/opt/filmcraft-cli",
+    bridge: 8790,
+  });
+  assert.equal(again.changed, false);
+  assert.deepEqual(again.config, first.config);
+
+  const headless = mergeFilmCraftMcpConfig(again.config, {
+    client: "opencode",
+    cli: "/opt/filmcraft-cli",
+  });
+  assert.equal(headless.changed, true);
+  assert.deepEqual(headless.config.mcp[FILMCRAFT_MCP_NAME].command, ["/opt/filmcraft-cli", "mcp"]);
+
+  const claude = mergeFilmCraftMcpConfig(
+    {},
+    { client: "claude", cli: "/opt/filmcraft-cli", bridge: "9999" }
+  );
+  assert.deepEqual(claude.config.mcpServers[FILMCRAFT_MCP_NAME].args, [
+    "mcp",
+    "--bridge",
+    "127.0.0.1:9999",
+  ]);
 });
 
 test("filmCraftMcpConfigFiles returns project and global paths for both clients", (t) => {

@@ -225,6 +225,8 @@ Incremental builds update only what changed: unchanged element clips are reused,
 
 Open the result with `timeline <slug> --open`; `preview <slug>` points to the `.fcproj` when it exists. Read `references/nle-handoff.md` for export, caveats, and the difference from the EDL/FCPXML path.
 
+For live co-editing, the MCP server runs with `--bridge <host:port>` against the open app (`filmcraft --control <port>`) instead of opening its own copy; the agent then reads `sequence_inspect` and edits with `command_run`. See `references/nle-handoff.md` for the setup and the rules.
+
 ## Review page
 
 `node "<skill>/scripts/rooster.mjs" preview <slug>` writes `preview/index.html` and prints the path. `--open` opens it when the harness has a browser. The page works without a build step or a server; it is a single HTML file with vanilla JS/CSS.
@@ -242,6 +244,23 @@ It includes:
 - **Links**: `qa/report.md` and `style/proof/index.html` when they exist.
 
 The page should work without a build step. Keep it readable and fast; this is a review tool, not a full NLE.
+
+### Live page (watch)
+
+`watch <slug>` starts a local server (`127.0.0.1`, random port) and serves a live page with the current stage, each stage's duration, the plan summary, the generated files, and the last log lines. `new` starts it automatically and opens the browser unless `--no-watch` is passed.
+
+- Files are grouped by kind: **videos** (renders, generated/source/licensed media, FilmCraft element clips) with an inline player, **images** (proof frames, QA frames, storyboard, generated), **HTML artifacts** (plan, preview, proof page, HyperFrames compositions, HTML components) in an inline frame, and **components/code** (`style/components`, Remotion and Remotion-in-FilmCraft sources) as lazy text.
+- React components render for real: the server bundles the file with the project's own esbuild (Remotion ships one) and serves it at `/component/<relative>`, which the page loads in an iframe. It needs React installed in that project; without a bundler the iframe shows why instead of rendering. The page never asks an agent for this.
+- React previews take props from a fixture when one exists. Order: `<Name>.preview.tsx|jsx|ts|json`, `<Name>.props.json`, then `preview.tsx|jsx|ts|json` in the component folder. A `.json` is the props object; a module's `props` export is the props object; a module's default export is a wrapper component (useful for framing or several variants). Editing the fixture rebuilds the bundle; the page marks the file with "with props".
+- Without a fixture, a `component.json` or `meta.json` in the folder supplies `props`; with no props there, values are inferred from the destructured parameter names (`title`/`text`/`label`… get the manifest `description`, numbers 3, lists `[]`, booleans false, colors the accent) and the page marks it "auto props". Unknown props are left out so the component's own defaults apply.
+- `/file/<relative>` serves the project media with the right content type, so a component's own CSS/JS and a composition's relative assets resolve. It never serves files outside the project directory.
+- The server is self-contained: `watch` needs only Node and the project. No agent, no build step, no network.
+
+- `watch <slug> --json` prints `{url, port, pid, running}` and reuses a running server.
+- `watch <slug> --stop` stops it; `--serve` is the foreground mode used by the detached child.
+- Routes: `/` page, `/api/state` snapshot, `/events` SSE, `/file/<relative>` project media.
+- Timing comes from `work/watch-state.json` (first sighting and finish per stage), so durations survive a restart.
+- The page is read-only: approvals stay in the chat. It serves nothing outside the project directory.
 
 ### JSON endpoints
 

@@ -43,6 +43,20 @@ The default is `auto`. Respect the user's preference when they have one.
 - **FilmCraft:** it needs the CLI and the MCP. Ask before writing MCP config; the user must restart the agent for the tools to appear. FilmCraft is a timeline target, not an engine: still choose HyperFrames or Remotion for the element clips.
 - Record the decision in `project.json` (`engine`, `timeline`) and in `review.md`.
 
+## Per-element engines
+
+The engine is not a project-wide lock. Every element may carry `engine` (`hyperframes`, `remotion`, or `auto`); anything without it inherits the project element engine. The build groups the elements by engine and renders each group separately.
+
+| Target | Mixed plan | Why |
+|---|---|---|
+| `--target filmcraft` | works | one transparent clip per element, assembled on the timeline |
+| `--engine hyperframes` or `remotion` | refused | one composition is written by one engine; `plan --check` and `build` name the mismatching elements |
+| no element declares an engine | works | no mix: one engine draws everything |
+
+Choose per element, not per project: a 3D product scene can go to Remotion while the chapter cards stay in HyperFrames, and a custom HTML element stays in HyperFrames even when the project default is Remotion. FilmCraft does not change the element engines; it only assembles their clips.
+
+A mixed build costs time and disk: each group renders separately, and every element is a ProRes 4444 clip with alpha. Keep the single-engine path whenever every element can share one engine.
+
 ## Build from plan
 
 Once the plan is approved, generate the engine project:
@@ -59,10 +73,30 @@ The build:
 - remaps element and chapter timings to the cut timeline;
 - copies the base media and element assets into the engine project;
 - writes a working composition for the chosen engine;
-- runs `npx hyperframes check --json` after a HyperFrames build and prints a one-line summary plus the first findings. `--strict` fails the build on an error; `--no-check` skips it;
+- runs `hyperframes check --json` with the binary resolved on disk after a HyperFrames build and prints a one-line summary plus the first findings. `--strict` fails the build on an error; `--no-check` skips it;
 - writes `work/build-state.json` and updates `project.json` with the engine and `preview` status.
 
 Use `--force` to rebuild an existing engine project, `--if-needed` to skip when the build state is unchanged, `--rebuild-media` to force FFmpeg again, and `--no-cache` to bypass the cache. `--sample 3` now builds a short montage around the selected elements instead of the whole timeline.
+
+| Flag | Effect |
+|---|---|
+| `--sample <n>` | Short montage around `n` elements, for approval before the full build |
+| `--strict` | Fail when the HyperFrames check reports an error |
+| `--no-check` | Skip the post-build HyperFrames check |
+| `--force` | Rebuild an existing engine project (archives the FilmCraft project first) |
+| `--if-needed` | Skip when the build state key is unchanged |
+| `--rebuild-media` | Re-run FFmpeg and the element renders |
+| `--no-cuts` | Ignore `plan.cuts` and use the original source |
+| `--strict-plan` | Refuse the build on any `plan --check` warning |
+| `--allow-cut-only` | Accept a plan with no visual elements |
+| `--allow-download` | Fetch a missing 3D/registry block into `style/blocks/` once |
+| `--allow-no-music` | Accept a plan with no music decision |
+| `--allow-skipped-elements` | Build even when the target cannot render an element |
+| `--cut-punch <scale>` / `--cut-fade <s>` | Tune the punch-in and the audio micro-fade at each cut |
+
+`plan <slug> --check` reports the warnings the build refuses under `--strict-plan`: density gaps, long silence jumps without b-roll or a transition, orphan reactions, b-roll without `covers`/`intent`/`sourceTime`, b-roll taken from a later scene, on-screen text that does not match the transcript, and element types the target engine cannot render. Read `references/edit-plan.md` for the heuristics behind them.
+
+`template: "custom"` is the escape hatch when the built-in motion graphics are not enough: the plan carries `html`, `css`, and a GSAP `animation`, or a reusable `component` from `style/components/<name>/`. HyperFrames renders custom elements; Remotion does not execute custom HTML/JS.
 
 Render through the CLI so the cache key, quality tier, workers, frame cache, and probe are consistent:
 
@@ -73,6 +107,8 @@ node "<skill>/scripts/rooster.mjs" render meu-video --draft --print
 ```
 
 `--force` re-renders even when the key matches. HyperFrames accepts `--workers`, `--gpu`, `--resume`, and `--frames-cache-dir`; Remotion accepts `--concurrency`, `--gl`, and `--frames`.
+
+`render --target filmcraft` (or `--engine filmcraft`) exports through FilmCraft when the `.fcproj` exists, even on a project without it. The reverse is not allowed: a project whose `timeline` is `filmcraft` always renders through FilmCraft, because manual timeline edits exist only there. Delete `timeline` from `project.json` and rebuild if the user wants the MP4 straight from the engine instead.
 
 ## FilmCraft (optional timeline target)
 
@@ -93,7 +129,7 @@ node "<skill>/scripts/rooster.mjs" timeline meu-video --open
 node "<skill>/scripts/rooster.mjs" render meu-video --draft
 ```
 
-`--engine hyperframes|remotion` selects the element renderer; `auto` picks Remotion for 3D elements and HyperFrames otherwise. The CLI is used for deterministic builds; the MCP server is for interactive editing and is not required for `build`. The project records `timeline: "filmcraft"` and `engine` as the element renderer.
+`--engine hyperframes|remotion` selects the element renderer; `auto` uses HyperFrames, because registry blocks and the generated plan only run there. Pass `--engine remotion` when the project has a hand-written React/Three element. The CLI is used for deterministic builds; the MCP server is for interactive editing and is not required for `build`. The project records `timeline: "filmcraft"` and `engine` as the element renderer.
 
 FilmCraft cannot animate the base clip or apply overlay transitions. A plan with `zoom` or `transition` fails the FilmCraft build instead of silently dropping the motion; use `--target hyperframes`/`remotion`, replace those layers with punch-ins and PIP/split b-roll, or pass `--allow-skipped-elements` if the omission is deliberate.
 
@@ -149,7 +185,7 @@ engine/hyperframes/
 
 ### Generated project
 
-The adapter writes one `compositions/el-<n>.html` per visual element and mounts each one from `index.html` with `data-composition-src`. Every scene registers its own paused timeline, so the root only holds the base media, scene hosts, zooms, and transitions. The main text, kicker, and subtitle of chapter/title and parallax scenes are declared as composition variables and bound with `data-var-text`, so the Studio Variables panel can edit them. Text and media use the profile tokens (`--display`, `--body`, `--mono`, `--radius`, `--space`); sizes are expressed in short-side units (`--u`), so 9:16 and 1:1 keep readable type instead of the 16:9 pixel layout. `npx hyperframes check` runs after the build unless `--no-check` is passed.
+The adapter writes one `compositions/el-<n>.html` per visual element and mounts each one from `index.html` with `data-composition-src`. Registry blocks are the exception: their own `compositions/<name>.html` is copied and mounted directly. Every scene registers its own paused timeline, so the root only holds the base media, scene hosts, zooms, and transitions. The main text, kicker, and subtitle of chapter/title and parallax scenes are declared as composition variables and bound with `data-var-text`, so the Studio Variables panel can edit them. Text and media use the profile tokens (`--display`, `--body`, `--mono`, `--radius`, `--space`); sizes are expressed in short-side units (`--u`), so 9:16 and 1:1 keep readable type instead of the 16:9 pixel layout. `npx hyperframes check` runs after the build unless `--no-check` is passed.
 
 Before hand-building a named effect, search the registry:
 
@@ -172,11 +208,29 @@ npx hyperframes add <name> --json
 
 ### 3D in HyperFrames
 
+- Prefer a registry block (`hyperframes catalog --tag three-js`) over hand-writing Three.js. See "Registry blocks" below.
 - Use a paused Three.js clock driven by the GSAP timeline, not real time.
 - Keep geometry low-poly and lighting simple.
 - Avoid post-processing unless the render budget allows it.
 - Snapshot midpoints of every 3D scene; a blank or tiny object usually means a mount defect.
 - Prefer deterministic procedural motion over physics unless the physics is seeded.
+
+### Registry blocks
+
+`build` can turn a plan element into a registry block:
+
+```json
+{ "type": "scene", "template": "block", "block": "extruded-logo",
+  "vars": { "text": "ROOSTER" }, "start": 12, "end": 17 }
+```
+
+- `hyperframes catalog --tag three-js|webgl` lists candidates.
+- The block lives in `<project>/style/blocks/<name>/compositions/`.
+- A missing block stops the build with the exact `hyperframes add` command; `--allow-download` fetches it once and keeps the copy in the project, so `build --force` does not delete it.
+- Blocks are HyperFrames-only; Remotion rejects the element with a clear message.
+- The block's native `data-width`/`data-height` should match the plan. `build` warns when they differ; a 1920 block in a 1280 project can crop the scene.
+- Official blocks import Three.js from a CDN. The first build/render needs network or a warm browser cache; do not promise an offline render without testing.
+- A custom 3D scene is also a block: save it as `style/blocks/<name>/compositions/<name>.html`.
 
 ### Pitfalls
 

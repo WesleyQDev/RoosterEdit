@@ -61,7 +61,7 @@ Ele edita o material que você já tem. Entregue um brief e o seu conteúdo, e e
 - **Material existente primeiro.** Talking heads, entrevistas, tutoriais, demos, gravações de tela, ensaios com fotos e b-roll que você já possui. Ele limpa silêncio, vícios de fala e takes abandonados antes de acrescentar qualquer coisa.
 - **Plano primeiro.** Todo corte começa em um `edit/plan.json` revisável. Você aprova o plano, três frames de estilo e o preview no browser antes do render caro.
 - **Um canal, um padrão.** Idioma, formato, estilo, voz e política de assets ficam em um canal. Vídeos novos herdam o padrão em vez de recomeçar de um prompt.
-- **Pequeno de propósito.** Só Node.js e FFmpeg: sem Python, sem conta de provedor, sem nuvem. O pacote npm tem menos de 1 MB.
+- **Pequeno de propósito.** Node.js e FFmpeg são as únicas ferramentas obrigatórias: sem Python, sem conta de provedor, sem nuvem. O pacote npm tem menos de 1 MB; ferramentas opcionais, como OCR, só baixam para um cache do usuário quando você aprova.
 - **Barato em contexto.** As etapas pesadas rodam em subagents e devolvem um handoff curto, então o agente principal nunca lê a transcrição inteira nem o log de build.
 - **Deixa a porta aberta.** Exporte EDL/FCPXML para DaVinci Resolve ou Premiere, ou gere uma timeline editável no FilmCraft. Sua edição não morre dentro da ferramenta.
 
@@ -99,7 +99,7 @@ Requisitos: **Node.js 22+**, **FFmpeg/FFprobe** e um browser. Whisper, `yt-dlp` 
 - Entrevistas, tutoriais, demos e gravações de tela cortados em uma história objetiva.
 - Promos de produto, reels, Shorts e cortes verticais a partir de material existente.
 - Explicadores narrados com TTS, legendas, b-roll e gráficos.
-- Motion graphics e cenas 3D com HyperFrames ou Remotion.
+- Motion graphics e cenas 3D com blocos do registry do HyperFrames (instalados sob demanda) ou uma cena Three.js/Remotion escrita à mão.
 
 ## Como funciona
 
@@ -107,7 +107,7 @@ Requisitos: **Node.js 22+**, **FFmpeg/FFprobe** e um browser. Whisper, `yt-dlp` 
 2. **Intake** — entregue um brief ao agente e coloque o material no projeto.
 3. **Plano** — o agente transcreve e propõe cortes, capítulos, gráficos, b-roll e música em `edit/plan.json`.
 4. **Aprovação** — revise o plano, três frames de estilo e o preview no browser.
-5. **Build e render** — o engine escolhido monta o projeto; o QA roda antes do render final.
+5. **Build e render** — o engine escolhido monta o projeto; o `qa` confere plano, áudio, cortes e rostos, e extrai só os quadros que precisam de revisão antes do render final.
 
 O plano é o ponto de controle. Se ele estiver errado, o vídeo está errado.
 

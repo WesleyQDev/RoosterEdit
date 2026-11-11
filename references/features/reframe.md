@@ -80,8 +80,10 @@ Aspect ratio is recorded in more than one place; keep them consistent:
 Run the CLI:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" reframe <slug> --format 9:16 [--mode center|left|right|focus] [--focus-x 0.5] [--focus-y 0.42] [--update-plan]
+node "<skill>/scripts/rooster.mjs" reframe <slug> --format 9:16 [--mode center|left|right|focus] [--focus-x 0.5] [--focus-y 0.42] [--focus auto] [--update-plan]
 ```
+
+`--focus auto` samples the source with `hyperframes measure face`, takes the median center of the detected faces, and uses it as the focus point. It needs HyperFrames (opencv.js is downloaded once by HyperFrames, no Python). With no face, it warns and falls back to center.
 
 The output defaults to `assets/generated/reframed-<aspect>.mp4`. With `--update-plan`, `plan.source` points at the new file and `project.json`/`timeline.json` formats are updated to the target aspect; preview the crop before rendering.
 
@@ -133,8 +135,8 @@ This module is not called by `build` yet. Treat the steps above as an adapter un
 
 ## Limitations
 
-- **No ML subject tracking.** There is no face detection, saliency model, or auto pan-and-scan. `center` is a geometric guess and can cut off a speaker.
-- **Fixed focus.** `focus` uses one normalized point (`focusX`, `focusY`) for the entire clip. It does not follow movement or animate over time.
+- **Face box, not object tracking.** `--focus auto` uses one median face box for the whole clip. There is no saliency model, no object tracker, and no animated pan-and-scan. `center` is a geometric guess and can still cut off a speaker.
+- **Fixed focus.** `focus` and `--focus auto` use one normalized point (`focusX`, `focusY`) for the entire clip. It does not follow movement over time.
 - **One framing per run.** Use separate runs and a timeline for different framings per scene.
 - **Extreme crops lose area.** A centered 16:9 → 9:16 crop keeps only about 32% of the source width (608 of 1920 px). Review faces, hands, and on-screen text.
 - **Rotation is not detected.** `probeMedia` reports coded dimensions, not display-matrix rotation. A phone clip flagged as landscape may need swapped dimensions; check `ffprobe` side data first.

@@ -7,7 +7,7 @@ RoosterEdit is a skill: the whole repository is the payload, with no build step.
 - Node.js 22+ (22 or 24 recommended)
 - FFmpeg and FFprobe
 - A browser (for the HyperFrames and Remotion preview/render)
-- Optional: Whisper, `yt-dlp`, a GPU
+- Optional: Whisper, `yt-dlp`, a GPU, OCR (native on Windows/macOS, Tesseract on Linux, or `rooster tools install ocr-wasm --approve`)
 
 `doctor` checks all of it:
 

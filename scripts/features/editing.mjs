@@ -9,6 +9,8 @@
  * so the review UI and the build agree on where a beat lands.
  */
 
+import { ELEMENT_ENGINES } from "./timeline.mjs";
+
 const SILENCE_REASONS = new Set(["silence", "long-pause", "pause"]);
 const BROLL_INTENTS = new Set(["evidence", "texture", "transition"]);
 const VISUAL_TYPES = new Set([
@@ -21,6 +23,7 @@ const VISUAL_TYPES = new Set([
   "transition",
   "end-card",
   "custom",
+  "scene",
 ]);
 const TEXT_TYPES = new Set(["letreiro", "grafico", "lista", "caption-emphasis"]);
 const CHAPTER_ROLES = new Set(["chapter", "section", "divider"]);
@@ -327,19 +330,25 @@ export function visualGaps(plan, options = {}) {
 /**
  * Which element types the target engine can render as visual layers.
  *
+ * An element may declare its own `engine`; otherwise it inherits the target.
+ * A mixed plan is valid for the FilmCraft target (one clip per element) and is
+ * reported as unsupported for a single-composition target, which still draws
+ * every element with one engine.
+ *
  * FilmCraft accepts overlay clips, but it does not apply zooms or overlay
  * transitions to the base clip. Pretending otherwise silently drops motion
  * from the plan, which is worse than warning the editor.
  *
  * @param {object} plan
  * @param {string} engine
- * @returns {{supported:string[], unsupported:Array<{id:string,type:string,reason:string}>}}
+ * @returns {{supported:string[], unsupported:Array<{id:string,type:string,reason:string}>, fallback:Array<object>, mixed:Array<object>}}
  */
 export function elementSupport(plan, engine) {
-  const target = String(engine || "").toLowerCase();
+  const assembly = String(engine || "").toLowerCase();
   const unsupported = [];
   const supported = [];
   const fallback = [];
+  const mixed = [];
   const knownTemplates = new Set([
     "chapter",
     "title",
@@ -355,12 +364,23 @@ export function elementSupport(plan, engine) {
     "parallax",
     "chart",
     "custom",
+    "block",
   ]);
   const elements = Array.isArray(plan?.elements) ? plan.elements : [];
   for (const element of elements) {
     const type = String(element?.type || "");
     if (!type) continue;
     const template = String(element?.template || "");
+    const raw = String(element?.engine || "").trim().toLowerCase();
+    if (raw && raw !== "auto" && !ELEMENT_ENGINES.includes(raw)) {
+      unsupported.push({
+        id: element.id || null,
+        type,
+        reason: `unknown engine "${raw}"; use hyperframes, remotion, or auto`,
+      });
+      continue;
+    }
+    const declared = raw === "auto" ? "" : raw;
     if (template && !knownTemplates.has(template)) {
       unsupported.push({
         id: element.id || null,
@@ -369,7 +389,11 @@ export function elementSupport(plan, engine) {
       });
       continue;
     }
-    if (target === "filmcraft" && (type === "zoom" || type === "transition")) {
+    const target = ELEMENT_ENGINES.includes(declared) ? declared : assembly;
+    if (ELEMENT_ENGINES.includes(declared)) {
+      mixed.push({ id: element.id || null, type, engine: declared });
+    }
+    if (assembly === "filmcraft" && (type === "zoom" || type === "transition")) {
       unsupported.push({
         id: element.id || null,
         type,
@@ -382,7 +406,19 @@ export function elementSupport(plan, engine) {
       unsupported.push({
         id: element.id || null,
         type,
-        reason: "Remotion cannot execute custom HTML/JS; use HyperFrames for this element",
+        reason: `Remotion cannot execute custom HTML/JS; set "engine": "hyperframes" on this element`,
+      });
+    } else if (target === "remotion" && (type === "scene" || template === "block")) {
+      unsupported.push({
+        id: element.id || null,
+        type,
+        reason: `registry blocks run in HyperFrames; set "engine": "hyperframes" on this element`,
+      });
+    } else if (declared && assembly !== "filmcraft" && declared !== assembly) {
+      unsupported.push({
+        id: element.id || null,
+        type,
+        reason: `this element declares ${declared}, but the ${assembly || "single"} target draws every element with one engine; use --target filmcraft for a mixed build`,
       });
     } else {
       supported.push(type);
@@ -399,7 +435,7 @@ export function elementSupport(plan, engine) {
       }
     }
   }
-  return { supported: Array.from(new Set(supported)), unsupported, fallback };
+  return { supported: Array.from(new Set(supported)), unsupported, fallback, mixed };
 }
 
 function isChapterCard(element) {

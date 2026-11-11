@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   assignOverlayTracks,
+  elementEngine,
   elementId,
   elementSpecs,
+  groupSpecsByEngine,
   summarizeTimeline,
   timelineFromPlan,
   timelineMarkers,
@@ -45,6 +47,39 @@ test("elementId falls back to el-00N and suffixes duplicates", () => {
 // ---------------------------------------------------------------------------
 // elementSpecs
 // ---------------------------------------------------------------------------
+
+test("elementSpecs resolves a per-element engine and groups by engine", () => {
+  const specs = elementSpecs(
+    {
+      elements: [
+        { id: "a", type: "grafico", start: 0, end: 2 },
+        { id: "b", type: "custom", template: "custom", engine: "hyperframes", start: 1, end: 3 },
+        { id: "c", type: "scene", template: "block", engine: "auto", start: 4, end: 5 },
+        { id: "d", type: "zoom", start: 6, end: 7 },
+      ],
+    },
+    { engine: "remotion" }
+  );
+
+  assert.equal(specs.find((spec) => spec.id === "a").engine, "remotion");
+  assert.equal(specs.find((spec) => spec.id === "b").engine, "hyperframes");
+  assert.equal(specs.find((spec) => spec.id === "c").engine, "remotion");
+  assert.equal(specs.find((spec) => spec.id === "d").engine, "remotion");
+
+  assert.equal(elementEngine({ engine: "hyperframes" }, "remotion"), "hyperframes");
+  assert.equal(elementEngine({ engine: "auto" }, "remotion"), "remotion");
+  assert.equal(elementEngine({ engine: "aftereffects" }, "remotion"), "remotion");
+  assert.equal(elementEngine({}, null), null);
+
+  const groups = groupSpecsByEngine(specs, "remotion");
+  assert.deepEqual(
+    groups.map((group) => [group.engine, group.specs.map((spec) => spec.id)]),
+    [
+      ["hyperframes", ["b"]],
+      ["remotion", ["a", "c"]],
+    ]
+  );
+});
 
 test("elementSpecs sorts, clamps, and marks renderability", () => {
   const elements = [

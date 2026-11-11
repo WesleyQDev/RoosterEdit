@@ -222,6 +222,27 @@ What to check:
 - HyperFrames renders a real MP4 from an HTML/GSAP composition.
 - Remotion renders a real MP4 from a React composition.
 
+## 2026-11-11 — machine QA, blocks, OCR, face focus
+
+Environment: Windows, Node.js 24.14, FFmpeg 8.1, HyperFrames 0.9.33.
+
+Test workspace: temporary channel `demo`, project `test-video`, 12 s synthetic source with burned-in text, a plan with a `letreiro` and a `scene` block.
+
+Results:
+
+- `plan --check` validates the `scene` block and reports missing descriptions.
+- `build --engine hyperframes` installs the local block from `style/blocks/`, copies `compositions/extruded-logo.html`, and mounts it with `data-composition-src` and `data-variable-values`.
+- `build --force` with a missing block fails before deleting the previous engine; the exact `hyperframes add` command is printed.
+- `hyperframes check` loads the page with the 3D block and reaches the sample/craft pass.
+- `qa` measures -21.8 LUFS, true peak -13.9 dBTP, zero clipping, no cuts, and writes `qa/qa.json` + `qa/qa-report.md`; it also surfaces the HyperFrames findings.
+- `qa --vision` writes three frames at the flagged times.
+- `qa --fix-audio` writes a corrected copy; measured result -13.0 LUFS, no clipping.
+- `reframe --format 9:16 --focus auto` measures 16 frames; with no face it warns and falls back to center.
+- `ocr --at 1` on Windows returns `rooster.ocr/v1` with word boxes via WinRT, no Python and no download.
+- `tools install ocr-wasm --approve` installs tesseract.js 6.0.1 outside the package; `ocr --provider wasm` returns text and boxes.
+
+Not tested here: a real face video for `--focus auto` (the synthetic source has no face), macOS Vision, a system Tesseract install, and a full 3D render with network disabled.
+
 ## What has not been tested yet
 
 - Portuguese transcription with whisper.cpp: this environment used Parakeet (English). For Portuguese, you need to install whisper.cpp or the Whisper CLI.

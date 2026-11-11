@@ -24,7 +24,7 @@ RoosterEdit is a video studio for agents. It does not replace Remotion, HyperFra
 
 The most important rule: **do not render before the plan and the preview are approved**, unless the user explicitly asks for no stops. Rendering is the cheapest part of the pipeline and the most expensive mistake to undo.
 
-### Running the CLI
+## Running the CLI
 
 This skill ships its CLI at `scripts/rooster.mjs` relative to the skill's base directory. Run it from the user's project directory, resolving the script against the skill base. In the examples below, `<skill>` means that base directory:
 
@@ -34,21 +34,9 @@ node "<skill>/scripts/rooster.mjs" doctor --json
 
 Do not create a `scripts/` directory in the user's project just to satisfy the command. The workspace (`rooster/`) belongs to the project; the CLI belongs to the skill. If the shell's working directory is the skill directory, the CLI will create the workspace in the wrong place.
 
-## Where to install the skill
+The skill is already installed in the folder the harness reads — that is why this file is being read. Do not run the installer from inside a project and do not copy the skill into a new folder to "set it up". When the user asks how to install, update, or uninstall RoosterEdit in another project, the steps are in `docs/INSTALL.md`.
 
-Install with npm. Do not clone the repository unless the user is developing RoosterEdit.
-
-```bash
-npx rooster-edit@latest install              # local to the project (recommended)
-npx rooster-edit@latest install --global     # every project on the machine
-npx rooster-edit@latest install --harness claude
-```
-
-Ask whether the install should be **local to the project (recommended)** or **global** before running it. Pass the harness the user is actually running: `--harness` accepts `opencode` (default), `claude`, or `agents`. The command copies the skill into that harness's skills folder and prints the path; it does not create a workspace.
-
-If the user is developing the skill, cloning into the skills folder is fine. This choice is about where the skill lives, not where the video workspace lives (`./rooster`).
-
-### Reporting
+## Reporting
 
 End-of-task replies are short by default: 5-10 lines or one compact table. Include only what the user needs to act:
 
@@ -59,9 +47,7 @@ End-of-task replies are short by default: 5-10 lines or one compact table. Inclu
 
 Do not repeat the brief, paste logs, list every command, or explain the whole skill unless the user asks. Put details in workspace files or link the reference docs. A plan, QA report, or delivery package can be longer only because the user must review its contents.
 
-Installation and workspace setup are separate steps. After installing and running `doctor`, do not start onboarding or write a guide. Summarize the environment in a few lines and ask whether the user wants to configure the workspace now. Wait for a yes before creating `rooster/` or a channel.
-
-### Progress updates
+## Progress updates
 
 Use a compact step marker in status updates and at every approval gate. Keep one 8-step tracker for the project:
 
@@ -83,6 +69,8 @@ Examples:
 - `Step 8/8 — Preview approved. Can I render the final?`
 
 Skip steps that do not apply and say why. Do not print the full checklist on every message; show the current step, what changed, and the next gate. Do not combine timeline and final render in one approval: preview and QA sit between them. Step 6 starts with the engine/timeline question; do not build before the user answers or explicitly delegates the choice.
+
+`new` starts a live page (`watch <slug>`) unless `--no-watch` is passed: the user sees the current stage, the timing, the plan summary, the generated videos and images, the HTML artifacts, the components (HTML inline, React rendered through the project's own esbuild, with props from a `preview.*` fixture), and the log tail update in the browser. The page is independent of the agent: it reads the project, not the conversation. Keep it open instead of narrating every step, and stop it with `watch <slug> --stop` when the project is delivered.
 
 ## Subagent-first execution
 
@@ -123,9 +111,9 @@ Nothing here is a dependency. The artifacts and gates are the same when a stage 
 
 Approval gates never move to a subagent. The subagent proposes; the user and the main agent decide.
 
-## First run after installation
+## First run
 
-If the workspace does not exist yet, do a short onboarding before creating any project. The workspace is created as part of the channel step; do not ask where it lives.
+If the workspace does not exist yet, do a short onboarding before creating any project. The workspace is created as part of the channel step; do not ask where it lives. Do not write a setup guide: summarize `doctor` in a few lines and ask the question below. Wait for a yes before creating `rooster/` or a channel.
 
 **First ask (one message):** "Do you want to create your first channel now? Think of it as the project folder: it holds the videos, the style, and the brand or client files. If yes, tell me the channel name and what it will produce?"
 
@@ -139,10 +127,10 @@ If the answer is yes:
 4. On confirmation, run `init`, then `channel new <id> ...` with the answers.
 5. Create the channel identity: ask three questions (palette, typography, motion/audio) and run `channel design <id> ...`. This writes `channels/<id>/profiles/<id>/profile.json` + `STYLE.md` and sets `channel.profile`. Show a short summary and stop.
 
-During first-run, run `filmcraft status --json` once. If `prompt.kind` is `connect-mcp` or `install`, ask the question in `prompt` before creating the first project:
+During first-run, run `filmcraft status --json` once. If `prompt.kind` is `connect-mcp` or `install`, ask the question in `prompt` before creating the first project, but do not imply that the MCP is required: the `filmcraft-cli` alone builds and renders an editable timeline, and the MCP only lets the agent edit it interactively.
 
-- CLI found, MCP not registered: "I found FilmCraft <version> on your PC. Do you want to connect its MCP now? After connecting, you must restart the program/agent so it can see the tools." (Connect MCP / Not now)
-- FilmCraft not found: "I did not find FilmCraft on your PC. Do you want to continue with HyperFrames/Remotion, or install FilmCraft and connect its MCP?" (Continue with HyperFrames/Remotion / Install FilmCraft + connect MCP)
+- CLI found, MCP not registered: "I found FilmCraft <version> on your PC. Do you want to connect its MCP now? It is optional — the CLI is enough to build and render the timeline." (Connect MCP / Not now)
+- FilmCraft not found: "I did not find FilmCraft on your PC. Do you want to continue with HyperFrames/Remotion, or install FilmCraft for an editable timeline?" (Continue with HyperFrames/Remotion / Install FilmCraft)
 
 If the user declines, continue with HyperFrames/Remotion and do not ask again for that project. If the MCP is already registered, mention that a restart may still be needed if the tools are not visible. Never install FilmCraft or write MCP config without explicit permission. Read `references/onboarding.md` for the CLI-missing and already-registered cases.
 
@@ -156,11 +144,11 @@ Do not start a video in the same turn unless the user explicitly asks. Read `ref
 
 When the user wants the simplest route from raw footage to a finished video, follow the same six steps as the reference workflow, adapted to the RoosterEdit workspace:
 
-1. **Prepare the machine** — FFmpeg, Node.js LTS, Python 3, HyperFrames, and Whisper (or HyperFrames' Parakeet/whisper.cpp). Ask before installing anything.
+1. **Check the machine** — Node.js 22+, FFmpeg/FFprobe, and a browser. Python, Whisper (or HyperFrames' Parakeet/whisper.cpp), `yt-dlp`, and a GPU are optional. Ask before installing anything; the engine install decision belongs to the build gate (Step 6), not to discovery.
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
 3. **Write the style guide** — `art-director` writes `style.md` and resolves the profile. Run `styleproof <slug>` and approve the three sample frames before planning.
 4. **Transcribe and plan** — `transcript-analyst` writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`; `editor` writes `edit/plan.json` from the analysis and `style.md`. Show `plan.html` with transcript context and wait for approval.
-5. **Create the visual elements** — `engineer` builds letreiros, graphics, lists, zooms, parallax scenes, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
+5. **Create the visual elements** — `engineer` builds titles, graphics, lists, zooms, parallax scenes, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
 6. **Assemble, review, export** — `engineer` runs `build` to generate the HyperFrames or Remotion project from the approved plan; use `--sample 3` before the full build. `qa` inspects `preview/index.html` and the frames, then `engineer` renders to `renders/`; `export` writes an EDL/FCPXML handoff when the user wants DaVinci or Premiere.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.
@@ -176,7 +164,7 @@ Read `references/video-pipeline.md` for the exact commands and the mapping from 
 - **Delegate the heavy stages.** The main agent directs; stage subagents do the noisy work and return a short handoff. Transcripts, build logs, generated code, and QA sweeps should not pass through the main context. Read `references/subagents.md`.
 - **Report short.** End every task with the result, the paths, and one next question. Do not narrate the whole process or dump commands unless the user asks.
 - **Finish the creative layer.** Cuts alone are not a video. Plan overlays, b-roll, music, SFX, or captions unless the user explicitly asked for a clean cut.
-- **Ask when uncertain.** If a choice changes the cut, the look, the audio, or the cost, ask at the current `Etapa X/8`. Do not guess silently.
+- **Ask when uncertain.** If a choice changes the cut, the look, the audio, or the cost, ask at the current `Step X/8`. Do not guess silently.
 - **Protect the context.** Video work is token-heavy. Redirect engine logs to files, read only the tail, use `digest` instead of the full transcript, and inspect a few key frames instead of every frame. Read `references/token-discipline.md`.
 
 ## Step 0 - Find the workspace
@@ -189,7 +177,7 @@ If neither exists and the user has already asked to make a video, creating the w
 node "<skill>/scripts/rooster.mjs" init
 ```
 
-If the user just installed the skill or is only exploring, do not create it silently: follow "First run after installation" and ask first.
+If the user is only asking a question or exploring an idea, do not create it silently: follow "First run" and ask first.
 
 The workspace is where **channels**, projects, profiles, and the asset library live. Keep it out of the skill directory; the skill is reusable, the workspace belongs to the user's video project.
 
@@ -267,18 +255,24 @@ Produce, in order:
 2. `storyboard/storyboard.json` and `edit/timeline.json` — the scene plan and the edit decision list.
 3. `edit/plan.json` — the fast-path plan the user approves before the build.
 
-Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug>` to write `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. Delegate the draft to `editor`; review the HTML with the user instead of building the JSON by hand in the main thread. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam), read `references/professional-elements.md` and load only the feature you need.
+Read `references/workflow.md` for the full pipeline and the approval gates. For the fast path, the plan lives at `edit/plan.json` and must be approved before any engine project is created; read `references/edit-plan.md` for the schema and heuristics. Run `plan <slug>` to write `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`, display the HTML artifact in the harness's preview pane or browser when available, then ask for approval. Delegate the draft to `editor`; review the HTML with the user instead of building the JSON by hand in the main thread. For advanced layers (captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, multicam, OCR, 3D blocks, machine QA), read `references/professional-elements.md` and load only the feature you need.
 
 If the user asked for `auto`, log the decisions and keep moving; if they asked for `guided`, stop at the gates that matter (brief, script, style/storyboard, rough cut, final).
 
-A useful plan answers these questions before any engine code is written:
+### Editing decisions that decide the result
 
-- What is the hook in the first three seconds?
-- How many scenes, and how long is each one?
-- What is on screen while the voice speaks?
-- Where are the captions, and what is the safe area?
-- What does the viewer see when there is no voice?
-- What is the exact output format?
+A plan is not a file format; it is the edit. Before showing it:
+
+- the hook lands in the first three seconds — if it does not, cut into the line;
+- cuts land on the word, not on the breath: `tighten` keeps 0.4 s of room tone and 100 ms before the next line, and never touches a span in `plan.protect`;
+- default to `editMode: "cleanup"`; a condensed highlight needs explicit approval;
+- a visual beat every 20–40 seconds, and no stretch longer than 45 seconds without one; that beat is also the answer to "what does the viewer see when there is no voice?";
+- every b-roll covers the line it illustrates (`covers`, `intent`, `sourceTime`) and comes from that moment, not from a later scene;
+- one idea per caption, 32–42 characters per line, inside the title-safe area;
+- do not cover the footage with a full-screen card unless the user asked;
+- a cut-only plan is not a finished video unless the user asked for a clean cut.
+
+These are the rules `plan --check` and `qa` verify; `references/edit-plan.md` has the heuristics and the exact schema.
 
 ## Step 5 — Ingest assets
 
@@ -299,18 +293,23 @@ For footage-driven projects, run transcription and analysis through `transcript-
 
 ## Step 6 — Choose and drive the engine
 
-### Engine and timeline gate (ask before building)
+### Engine and assembly gate (ask before building)
 
 Before creating any engine project, ask once per project:
 
-> "How do you want to build this video? HyperFrames is the default and already works. Remotion is better for React/3D, but it is not installed. FilmCraft opens the timeline for manual editing, but the MCP is not configured yet. Which do you prefer?"
+> "How do you want to build this video? HyperFrames is the default and already works. Remotion is better for React/3D, but it is not installed."
+
+When `filmcraft status --json` reports the CLI, add one sentence: "I can also assemble an editable FilmCraft timeline instead of a plain MP4, if you want to finish the cut by hand." Do not offer FilmCraft when the CLI is missing, unless the user asks for it.
+
+Say once that the choice is not permanent: individual elements can use a different engine, and the plan can mix them.
 
 Adapt the sentence to what `doctor --json` and `filmcraft status --json` reported. Only mention a limitation that is actually true.
 
+- Two independent choices: `engine` is who draws the elements (HyperFrames or Remotion); `timeline` is where the result is assembled (`none` = MP4 from the engine, `filmcraft` = editable `.fcproj`). FilmCraft never replaces the engine.
 - If the channel or project already has an explicit engine chosen by the user, skip the question and confirm the choice in one line.
 - If the user says "auto", "use the default", or "you decide", do not ask; choose from the matrix below and state the choice.
 - **Remotion:** if selected and missing, ask permission before `npm install` inside `engine/remotion`. Never install silently. If the user declines, fall back to HyperFrames and say so.
-- **FilmCraft:** if selected, run `filmcraft status --json` and ask the matching question before writing MCP config (`connect-mcp`, `install`, or `install-cli`). The user must restart the agent before the MCP tools appear. FilmCraft is a timeline target, not an engine: still pick HyperFrames or Remotion for the element clips.
+- **FilmCraft:** a timeline target, not an engine. It needs the `filmcraft-cli`; it does not need the MCP, which only lets the agent edit the timeline interactively. Ask before installing the CLI or writing MCP config, and warn that a restart is needed before the MCP tools appear.
 - Record the choice in `project.json` (`engine`, `timeline`) and in `review.md`.
 
 Read `references/engines.md` for the full decision matrix. The default is `auto`. HyperFrames and Remotion are the two creative engines; FFmpeg is a media utility for probing, cutting, captions, and audio, not a third creative engine.
@@ -320,44 +319,56 @@ Read `references/engines.md` for the full decision matrix. The default is `auto`
 | Real footage, interview, talking head, simple cuts | `ffmpeg` for cuts/audio, plus HyperFrames or Remotion for overlays |
 | HTML/CSS/GSAP, kinetic type, charts, maps, motion graphics | `hyperframes` |
 | React components, data-driven scenes, `@remotion/three`, complex state | `remotion` |
-| 3D characters or product scenes with React | `remotion` + `@remotion/three` |
-| 3D in an HTML composition | `hyperframes` + Three.js |
+| 3D, WebGL, or a complex HTML scene | `hyperframes` + registry block (install once with `--allow-download`) |
+| A hand-written 3D scene in React | `remotion` + `@remotion/three` |
 | No Node or FFmpeg | Produce the plan and explain that rendering needs Node/FFmpeg |
 
 Respect an explicit engine request. If the requested engine cannot do something the user needs, explain the tradeoff and propose an alternative instead of silently switching.
+
+The engine is per element, not a lock: an element may carry `engine` (`hyperframes`, `remotion`, or `auto`), and a mixed plan builds with `--target filmcraft`, which renders one clip per element. Do not force one engine when the plan wants two; say what mixing costs (one extra render and a ProRes clip per element) and let the user decide.
 
 Scaffold only the engine you are going to use. Keep the engine project inside `channels/<channel>/projects/<slug>/engine/<engine>/`. Keep the source of truth for editorial decisions in `edit/timeline.json` (or `edit/plan.json` in the fast path); let the engine adapter translate it.
 
 Once the plan is approved, build the engine project:
 
 ```bash
-node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
-node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --engine hyperframes
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --sample 3
 ```
 
-`build` reads `edit/plan.json`, applies the plan's cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, copies the base media and element assets, and writes a working engine project. After a HyperFrames build it runs `npx hyperframes check --json` and prints a summary; `--strict` fails on an error and `--no-check` skips it. Use `--force` to rebuild and `--no-cuts` to ignore the cuts. A cut-only plan or a plan with no music decision is refused unless `notes` records the exception; pass `--allow-cut-only` or `--allow-no-music` only when the user explicitly asked for that. For HyperFrames it also runs the engine's deterministic contract; for Remotion it generates the composition and data files.
+`build` reads `edit/plan.json`, applies the cuts with FFmpeg, mixes `plan.music` under the voice, remaps the element timings to the cut timeline, and writes a working engine project. Run `plan <slug> --check` first: it reports the warnings that would make the build refuse the plan.
 
-Run `plan <slug> --check` before the build and read `qa/plan-review.md`. It reports visual gaps over 45 seconds, long silence jumps without b-roll or a transition, orphan reactions, b-roll without `covers`/`intent`/`sourceTime`, b-roll extracted from a later scene, on-screen text that does not match the transcript, and element types the target engine cannot render. Fix the top warnings or pass `--strict-plan` to make the build refuse them. The build applies a 35 ms audio micro-fade and an alternating punch-in on uncovered silence cuts; use `--cut-punch` / `--cut-fade` to tune or disable them. FilmCraft cannot animate `zoom` or overlay `transition`; use HyperFrames/Remotion for those, or replace them with PIP/split b-roll and punch-ins. `build` fails on unsupported elements unless you pass `--allow-skipped-elements`.
+Run the build through `engineer`. It owns the generated code, the logs in `work/logs/`, and the fixes, and returns status, artifact paths, and any blocker; if a fix changes the story, it returns `needs-decision` instead of editing the plan. Build `--sample 3` first so the user approves motion, type, and density before the whole video, then rebuild with `--force`.
 
-Use `template: "custom"` when the built-in motion graphics are not enough: the plan carries `html`, `css`, and a GSAP `animation` (or a reusable `component` from `style/components/<name>/`). Components are the channel's growing visual library; see `references/edit-plan.md` and `references/profiles.md`. HyperFrames renders custom elements; Remotion does not execute custom HTML/JS.
-
-Run the build through `engineer`. It owns the generated code, the logs in `work/logs/`, and the fixes, and returns status, artifact paths, and any blocker. The main agent does not run the command above directly; it passes the approved plan and the engine. If a fix changes the story, the engineer returns `needs-decision` instead of editing the plan.
-
-Before the full build, use `build <slug> --sample 3`. It builds three representative elements over the real cuts so the user can approve motion, type, and density without paying for the whole video. Rebuild with `--force` after approval.
+`references/engines.md` lists every build flag (`--strict`, `--no-check`, `--no-cuts`, `--strict-plan`, `--allow-cut-only`, `--allow-no-music`, `--allow-skipped-elements`, `--allow-download`, `--cut-punch`, `--cut-fade`) and how to use `template: "custom"` with HTML/CSS/GSAP or a component from `style/components/<name>/`. Use `--allow-download` once to fetch a 3D/registry block into `style/blocks/`; later builds do not need network for the block file.
 
 ### Optional FilmCraft timeline
 
-FilmCraft is an optional, opt-in timeline target (`--target filmcraft` on `build` or `new`), not a third creative engine and not the default. FFmpeg builds the base cut and audio mix, HyperFrames or Remotion renders each element as a transparent ProRes 4444 clip, and FilmCraft assembles an editable `.fcproj` with the source on V1, the mix on A1, and elements on V2+. `--engine hyperframes|remotion` picks the element renderer; `auto` uses Remotion for 3D and HyperFrames otherwise.
+FilmCraft is an opt-in assembly target, not a creative engine: `--target filmcraft` on `new` or `build`. FFmpeg bakes the base cut and audio mix, HyperFrames or Remotion renders each element as a transparent ProRes 4444 clip, and FilmCraft assembles the `.fcproj` with V1 source clips, A1 mix, elements on V2+, markers, and captions. It needs the `filmcraft-cli`; it does not need the MCP.
 
 ```bash
-node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --engine hyperframes
-node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --if-needed
-node "<skill>/scripts/rooster.mjs" timeline meu-video --open
+node "<skill>/scripts/rooster.mjs" build en-tech/video-x --target filmcraft --engine hyperframes
+node "<skill>/scripts/rooster.mjs" timeline en-tech/video-x --open
 ```
 
-Read `references/timeline.md` for the adapter and `references/nle-handoff.md` for incremental builds, caveats, and the difference from the `export` EDL/FCPXML path. The existing HyperFrames, Remotion, and `export` workflows are unchanged.
+The cut is still decided in the plan. V1 is one source clip per keep and can be trimmed by hand, but A1 is a single baked mix and does not follow a manual V1 edit; to re-cut by hand, export EDL/FCPXML instead. `render` exports the H.264 through FilmCraft when the project has a `.fcproj`, so manual timeline edits reach the final file. Read `references/nle-handoff.md` for incremental builds, caveats, and the difference from the `export` path.
 
-For the fast path, Option 1 is automatic assembly in HyperFrames for HTML/CSS/GSAP motion. Option 2 is Remotion for React, data-driven scenes, and 3D. FFmpeg remains a utility for cuts, proxies, captions, and audio. Both engines start from the same approved plan.
+### Live co-editing with the MCP
+
+When the user wants to edit the timeline by hand while the agent works, connect the MCP to the **open app**, not a headless copy:
+
+```bash
+filmcraft --control 8790                     # the user opens the app (or the agent with permission)
+node "<skill>/scripts/rooster.mjs" filmcraft setup --bridge 8790 --write
+```
+
+Then restart the agent so the tools appear. Without `--bridge`, the MCP opens its own copy of the project and nothing the agent does shows up in the user's window.
+
+During a live session the agent reads `sequence_inspect` or `doc_inspect` before every edit, sees the window with `ui_screenshot` and `ui_elements`, and changes clips with `command_run`/`command_batch` (or the `ui_*` tools when no command exists). Announce each change with its track and timecode; never tidy, realign, rename, or reorder the user's work. The user keeps the app: trim, move, color, audio, captions.
+
+Do not run `build` or `render` from the CLI while the app is open: they open the project headlessly and can overwrite the live document. Export through the MCP (`command_run` with `file.exportMedia`), or ask the user to save and close the app first. Once live editing starts, `edit/plan.json` stops being the source of truth for that project — record the decision in `review.md`. Read `references/nle-handoff.md` for the tool map and the recovery path.
+
+For the fast path, Option 1 is automatic assembly in HyperFrames for HTML/CSS/GSAP motion and registry 3D blocks. Option 2 is Remotion for React, data-driven scenes, and a hand-written Three.js scene. FFmpeg remains a utility for cuts, proxies, captions, and audio. Both engines start from the same approved plan.
 
 ## Step 7 — Preview and review
 
@@ -369,7 +380,7 @@ Offer a preview before rendering:
 - Unified review: `node "<skill>/scripts/rooster.mjs" preview <slug>` writes `preview/index.html` with the player, plan, timeline, captions, audio, validation, and QA checklist. Open it with `--open` when the harness has a browser.
 - FilmCraft: `timeline <slug> --open` opens the `.fcproj`. `preview <slug>` also points to the FilmCraft timeline when it exists.
 
-Read `references/timeline.md` for the timeline contract and the review page. When a browser is available, use it: open the preview, take screenshots, check console errors, and inspect the timeline. When it is not, render stills at key beats and read them as images. `qa` can open the preview, capture the screenshots and console errors, and write the report; look at 3–5 of its frames yourself before deciding.
+Read `references/timeline.md` for the timeline contract and the review page. When a browser is available, use it: open the preview, take screenshots, check console errors, and inspect the timeline. When it is not, render stills at key beats and read them as images. The `qa` subagent can open the preview, capture the screenshots and console errors, and write the report; look at 3-5 of its frames yourself before deciding.
 
 The review page should make these obvious:
 
@@ -382,7 +393,16 @@ The review page should make these obvious:
 
 ## Step 8 — QA
 
-Read `references/qa.md` for the full checklist. Run `captions <slug>` first when the project needs caption sidecars, and `textcheck <slug>` to list every on-screen text with its timecode. Spawn `qa` with the checklist, the render path, and the plan; it returns the verdict, blocking issues with evidence, and frame paths. At minimum, verify:
+Read `references/qa.md` for the full checklist. Run the deterministic pass first:
+
+```bash
+node "<skill>/scripts/rooster.mjs" qa <slug> --draft
+node "<skill>/scripts/rooster.mjs" qa <slug> --draft --vision
+```
+
+`qa` validates the plan, runs the HyperFrames check, measures loudness/peak/clipping/silence, counts cuts and faces, and writes `qa/qa.json` plus `qa/qa-report.md`. It costs no model tokens. `--vision` extracts at most five frames at the flagged times; the `qa` subagent looks at those and returns a handoff, not a contact sheet. `--fix-audio` writes a corrected copy when the loudness is off.
+
+Then run `captions <slug>` first when the project needs caption sidecars, and `textcheck <slug>` to list every on-screen text with its timecode. Spawn `qa` with the checklist, the render path, and the plan; it returns the verdict, blocking issues with evidence, and frame paths. At minimum, verify:
 
 - resolution, aspect ratio, fps, and duration match the plan;
 - no unintended black frames, freeze frames, or gaps;
@@ -414,7 +434,7 @@ Deliver `renders/final.mp4`, `renders/draft.mp4`, `captions.srt`/`.vtt`, `thumbn
 
 If the user liked a look or a component, offer to save it:
 
-- `rooster profile fork` to create a reusable profile;
+- `profile fork <id> --as <new-id>` to create a reusable profile;
 - move a component into `profiles/<id>/components`;
 - update the channel defaults if the change should apply to future videos;
 - record decisions and feedback in `review.md`.
@@ -456,7 +476,7 @@ rooster/
 │   │   ├── brief.md
 │   │   ├── script.md
 │   │   ├── style.md
-│   │   ├── style/proof/
+│   │   ├── style/{proof/,components/,blocks/}
 │   │   ├── storyboard/
 │   │   ├── assets/{source,generated,licensed}/
 │   │   ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,timeline.json,edl.json,captions/,audio/,export/}
@@ -464,7 +484,7 @@ rooster/
 │   │   ├── work/{handoffs,logs,scratch,notes}/
 │   │   ├── preview/
 │   │   ├── renders/
-│   │   ├── qa/{report.md,text-review.md,frames/}
+│   │   ├── qa/{qa.json,qa-report.md,report.md,text-review.md,frames/,vision/,ocr/}
 │   │   └── review.md
 │   ├── profiles/<id>/
 │   ├── assets/
@@ -506,12 +526,14 @@ If the user already has a different structure, adapt to it and record the mappin
 | `references/engines.md` | Engine decision matrix and adapter contracts |
 | `references/profiles.md` | Profile schemas and resolution |
 | `references/timeline.md` | Timeline JSON, FilmCraft adapter, review page, and browser QA |
-| `references/qa.md` | Technical and editorial checklists |
+| `references/qa.md` | Technical and editorial checklists, plus the `qa` command |
 | `references/professional-elements.md` | Index of advanced layers and feature references |
+| `references/features/ocr.md` | OCR providers, install, boxes, and privacy |
 | `references/nle-handoff.md` | FilmCraft timeline, EDL/FCPXML export, and DaVinci/Premiere import |
 | `references/harness.md` | Capability detection and degradation |
 | `references/link-ingest.md` | Downloading video links with yt-dlp, metadata, subtitles, and licensing |
 | `references/schemas.md` | JSON schemas for project, channel, profile, transcript, analysis, timeline, manifest |
+| `docs/INSTALL.md` | The user asks how to install, update, or uninstall RoosterEdit in another project |
 
 ## Quick commands
 
@@ -547,10 +569,18 @@ node "<skill>/scripts/rooster.mjs" check en-tech/video-x
 node "<skill>/scripts/rooster.mjs" build en-tech/video-x --sample 3
 node "<skill>/scripts/rooster.mjs" build en-tech/video-x --if-needed
 node "<skill>/scripts/rooster.mjs" filmcraft status --json
+node "<skill>/scripts/rooster.mjs" filmcraft setup --bridge 8790 --write
 node "<skill>/scripts/rooster.mjs" build en-tech/video-x --target filmcraft --engine hyperframes
 node "<skill>/scripts/rooster.mjs" timeline en-tech/video-x --open
 node "<skill>/scripts/rooster.mjs" preview en-tech/video-x --open
+node "<skill>/scripts/rooster.mjs" watch en-tech/video-x --open
+node "<skill>/scripts/rooster.mjs" watch en-tech/video-x --stop
 node "<skill>/scripts/rooster.mjs" frames en-tech/video-x --count 12
+node "<skill>/scripts/rooster.mjs" qa en-tech/video-x --draft
+node "<skill>/scripts/rooster.mjs" qa en-tech/video-x --draft --vision
+node "<skill>/scripts/rooster.mjs" ocr en-tech/video-x --at 12.5 --lang en
+node "<skill>/scripts/rooster.mjs" tools list --json
+node "<skill>/scripts/rooster.mjs" tools install ocr-wasm --approve
 node "<skill>/scripts/rooster.mjs" export en-tech/video-x --format both
 node "<skill>/scripts/rooster.mjs" render en-tech/video-x --draft
 node "<skill>/scripts/rooster.mjs" render en-tech/video-x --final

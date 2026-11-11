@@ -85,6 +85,39 @@ function defaultCli(cli) {
   return cli ? String(cli) : CLI_NAME;
 }
 
+const MCP_BRIDGE_HOST = "127.0.0.1";
+
+/**
+ * Normalize `--bridge`: a bare port becomes `127.0.0.1:<port>`; `host:port` passes through.
+ *
+ * The bridge is what makes the MCP talk to the running app
+ * (`filmcraft --control <port>`) instead of a headless copy of the project, which
+ * is what live co-editing needs.
+ *
+ * @param {string|number|null|undefined} value
+ * @returns {string|null}
+ */
+export function normalizeFilmCraftBridge(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const text = String(value).trim();
+  if (/^\d+$/.test(text)) {
+    const port = Number(text);
+    if (port < 1 || port > 65535) {
+      throw new Error(`Invalid bridge port "${text}": use a port between 1 and 65535.`);
+    }
+    return `${MCP_BRIDGE_HOST}:${port}`;
+  }
+  if (!/^[A-Za-z0-9.-]+:\d{1,5}$/.test(text)) {
+    throw new Error(`Invalid bridge "${text}": use a port (8790) or host:port (127.0.0.1:8790).`);
+  }
+  return text;
+}
+
+function mcpArgs(bridge) {
+  const target = normalizeFilmCraftBridge(bridge);
+  return target ? ["mcp", "--bridge", target] : ["mcp"];
+}
+
 // ---------------------------------------------------------------------------
 // Time
 // ---------------------------------------------------------------------------
@@ -802,19 +835,20 @@ export function renderFrame(cli, projectFile, seconds, out, options = {}) {
 /**
  * The object to merge into an MCP client's config file.
  *
- * @param {{ client?: "opencode"|"claude", cli?: string }} [options]
+ * @param {{ client?: "opencode"|"claude", cli?: string, bridge?: string|number|null }} [options]
  * @returns {object}
  */
 export function filmCraftMcpConfig(options = {}) {
   options = options || {};
-  const { client = "opencode", cli } = options;
+  const { client = "opencode", cli, bridge } = options;
   const command = defaultCli(cli);
+  const args = mcpArgs(bridge);
   if (normalizeClient(client) === "claude") {
     return {
       mcpServers: {
         [FILMCRAFT_MCP_NAME]: {
           command,
-          args: ["mcp"],
+          args,
         },
       },
     };
@@ -823,7 +857,7 @@ export function filmCraftMcpConfig(options = {}) {
     mcp: {
       [FILMCRAFT_MCP_NAME]: {
         type: "local",
-        command: [command, "mcp"],
+        command: [command, ...args],
         enabled: true,
       },
     },
@@ -833,14 +867,17 @@ export function filmCraftMcpConfig(options = {}) {
 /**
  * Pretty JSON plus the restart warning shown to the user.
  *
- * @param {{ client?: "opencode"|"claude", cli?: string }} [options]
+ * @param {{ client?: "opencode"|"claude", cli?: string, bridge?: string|number|null }} [options]
  * @returns {string}
  */
 export function filmCraftMcpSnippet(options = {}) {
   options = options || {};
-  const { client = "opencode", cli } = options;
-  const config = filmCraftMcpConfig({ client, cli });
-  return `${JSON.stringify(config, null, 2)}\n\nRestart the agent after saving this config so it can connect to the FilmCraft MCP server.`;
+  const { client = "opencode", cli, bridge } = options;
+  const config = filmCraftMcpConfig({ client, cli, bridge });
+  const mode = normalizeFilmCraftBridge(bridge)
+    ? "Bridge mode: the MCP talks to the running FilmCraft app. Start it with `filmcraft --control <port>` before the agent."
+    : "Headless mode: the MCP opens a copy of the project, not the app you have open.";
+  return `${JSON.stringify(config, null, 2)}\n\n${mode}\n\nRestart the agent after saving this config so it can connect to the FilmCraft MCP server.`;
 }
 
 /**
@@ -1014,24 +1051,20 @@ export function filmCraftMcpRegistration(options = {}) {
   return { registered: false, client: null, path: null, error: firstError };
 }
 
-function sameClaudeEntry(current, command) {
+function sameArgs(current, expected) {
   return (
-    isObject(current) &&
-    current.command === command &&
-    Array.isArray(current.args) &&
-    current.args.length === 1 &&
-    current.args[0] === "mcp"
+    Array.isArray(current) &&
+    current.length === expected.length &&
+    current.every((value, index) => value === expected[index])
   );
 }
 
-function sameOpenCodeEntry(current, command) {
-  return (
-    isObject(current) &&
-    Array.isArray(current.command) &&
-    current.command.length === 2 &&
-    current.command[0] === command &&
-    current.command[1] === "mcp"
-  );
+function sameClaudeEntry(current, command, args) {
+  return isObject(current) && current.command === command && sameArgs(current.args, args);
+}
+
+function sameOpenCodeEntry(current, command, args) {
+  return isObject(current) && sameArgs(current.command, [command, ...args]);
 }
 
 /**
@@ -1041,7 +1074,7 @@ function sameOpenCodeEntry(current, command) {
  * left untouched (`changed: false`); a different command is replaced.
  *
  * @param {object} existing
- * @param {{ client?: "opencode"|"claude", cli?: string }} [options]
+ * @param {{ client?: "opencode"|"claude", cli?: string, bridge?: string|number|null }} [options]
  * @returns {{ config: object|null, changed: boolean, error: string|null }}
  */
 export function mergeFilmCraftMcpConfig(existing, options = {}) {
@@ -1050,17 +1083,18 @@ export function mergeFilmCraftMcpConfig(existing, options = {}) {
   }
 
   options = options || {};
-  const { client = "opencode", cli } = options;
+  const { client = "opencode", cli, bridge } = options;
   const command = defaultCli(cli);
+  const args = mcpArgs(bridge);
   const normalized = normalizeClient(client);
 
   if (normalized === "claude") {
     const config = { ...existing };
     const servers = isObject(config.mcpServers) ? { ...config.mcpServers } : {};
     const current = servers[FILMCRAFT_MCP_NAME];
-    const same = sameClaudeEntry(current, command);
+    const same = sameClaudeEntry(current, command, args);
     if (!same) {
-      servers[FILMCRAFT_MCP_NAME] = { command, args: ["mcp"] };
+      servers[FILMCRAFT_MCP_NAME] = { command, args };
     }
     config.mcpServers = servers;
     return { config, changed: !same, error: null };
@@ -1069,11 +1103,11 @@ export function mergeFilmCraftMcpConfig(existing, options = {}) {
   const config = { ...existing };
   const mcp = isObject(config.mcp) ? { ...config.mcp } : {};
   const current = mcp[FILMCRAFT_MCP_NAME];
-  const same = sameOpenCodeEntry(current, command);
+  const same = sameOpenCodeEntry(current, command, args);
   if (!same) {
     mcp[FILMCRAFT_MCP_NAME] = {
       type: "local",
-      command: [command, "mcp"],
+      command: [command, ...args],
       enabled: true,
     };
   }
@@ -1101,6 +1135,7 @@ function projectConfigPath(client, cwd, home) {
  * @param {{
  *   client?: "opencode"|"claude",
  *   cli?: string,
+ *   bridge?: string|number|null,
  *   write?: boolean,
  *   cwd?: string,
  *   home?: string,
@@ -1144,7 +1179,7 @@ export function setupFilmCraftMcp(options = {}) {
     }
   }
 
-  const merged = mergeFilmCraftMcpConfig(existing, { client, cli: options.cli });
+  const merged = mergeFilmCraftMcpConfig(existing, { client, cli: options.cli, bridge: options.bridge });
   if (merged.error) {
     return {
       ok: false,

@@ -75,6 +75,27 @@ test("visualGaps measures output time, not source time", () => {
   );
 });
 
+test("elementSupport accepts a scene block in HyperFrames and rejects it in Remotion", () => {
+  const plan = {
+    elements: [
+      {
+        id: "el-scene",
+        type: "scene",
+        template: "block",
+        block: "extruded-logo",
+        start: 0,
+        end: 5,
+      },
+    ],
+  };
+  const hyper = elementSupport(plan, "hyperframes");
+  assert.deepEqual(hyper.unsupported, []);
+  assert.ok(hyper.supported.includes("scene"));
+  const remotion = elementSupport(plan, "remotion");
+  assert.equal(remotion.unsupported.length, 1);
+  assert.match(remotion.unsupported[0].reason, /HyperFrames/);
+});
+
 test("elementSupport accepts parallax and marks the Remotion fallback", () => {
   const plan = {
     elements: [
@@ -122,6 +143,45 @@ test("elementSupport flags zoom for FilmCraft but not for HyperFrames", () => {
   const customRemotion = elementSupport({ elements: [{ id: "el-5", type: "custom", template: "custom" }] }, "remotion");
   assert.equal(customRemotion.unsupported.length, 1);
   assert.match(customRemotion.unsupported[0].reason, /cannot execute custom/);
+});
+
+test("elementSupport honors a per-element engine", () => {
+  const plan = {
+    elements: [
+      { id: "el-1", type: "custom", template: "custom", engine: "hyperframes" },
+      { id: "el-2", type: "grafico", template: "diagram", engine: "remotion" },
+    ],
+  };
+
+  const filmcraft = elementSupport(plan, "filmcraft");
+  assert.deepEqual(filmcraft.unsupported, []);
+  assert.equal(filmcraft.mixed.length, 2);
+  assert.ok(filmcraft.supported.includes("custom"));
+
+  const single = elementSupport(plan, "hyperframes");
+  assert.equal(single.unsupported.length, 1);
+  assert.equal(single.unsupported[0].id, "el-2");
+  assert.match(single.unsupported[0].reason, /--target filmcraft/);
+
+  const auto = elementSupport(
+    { elements: [{ id: "el-3", type: "custom", template: "custom", engine: "auto" }] },
+    "hyperframes"
+  );
+  assert.deepEqual(auto.unsupported, []);
+
+  const unknown = elementSupport(
+    { elements: [{ id: "el-4", type: "grafico", engine: "aftereffects" }] },
+    "filmcraft"
+  );
+  assert.equal(unknown.unsupported.length, 1);
+  assert.match(unknown.unsupported[0].reason, /unknown engine/);
+
+  const remotionCustom = elementSupport(
+    { elements: [{ id: "el-5", type: "custom", template: "custom", engine: "remotion" }] },
+    "filmcraft"
+  );
+  assert.equal(remotionCustom.unsupported.length, 1);
+  assert.match(remotionCustom.unsupported[0].reason, /set "engine": "hyperframes"/);
 });
 
 test("elementText reads structured data when text is absent", () => {

@@ -52,25 +52,17 @@ The steps map to the roles in `agents/`: `art-director` for Step 3, `transcript-
 
 Pass paths, not contents. The subagent writes the detail to the project and returns a handoff in `work/handoffs/`; logs go to `work/logs/`. Read `references/subagents.md` for the full protocol.
 
-## Step 1 — Prepare the machine
+## Step 1 — Check the machine
 
-Check and, if missing, install:
-
-- FFmpeg
-- Node.js LTS
-- Python 3
-- Whisper (local, free transcription)
-- HyperFrames (via its skill or CLI)
-
-Ask for permission before each installation. Test Whisper with a short audio file before relying on it.
+Run `doctor` first; it reports Node, npm, Python, FFmpeg, FFprobe, the engines, Whisper, `yt-dlp`, and the HyperFrames CLI.
 
 ```bash
-ffmpeg -version
-node --version
-python --version
-whisper --help
-npx skills add heygen-com/hyperframes
+node "<skill>/scripts/rooster.mjs" doctor --json
 ```
+
+Required: Node.js 22+, FFmpeg/FFprobe, and a browser. Optional: Python 3 and Whisper for local transcription, the HyperFrames CLI, `yt-dlp` for links, and a GPU.
+
+Ask for permission before each installation. Test Whisper with a short audio file before relying on it. Do not install the engine or its packages during discovery: the engine choice belongs to the build gate (Step 6).
 
 If the user only wants planning, do not install anything. Explain what is missing and continue with the plan.
 

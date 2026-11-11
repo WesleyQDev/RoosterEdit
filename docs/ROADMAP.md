@@ -36,11 +36,13 @@
 - [ ] Cuts without re-encode in the engine (`data-media-start`/`trimBefore`).
 - [ ] Hybrid FFmpeg + short overlay render.
 - [ ] Fused audio pass and automatic hardware encode.
-- [ ] Automatic `cut-plan`: silences, filler words, rough cut.
-- [ ] TTS adapter (provider-agnostic).
-- [ ] Mix, loudness, and ducking.
-- [ ] Captions: SRT/VTT, sync, and burn-in.
+- [x] Automatic `cut-plan`: silences, filler words, rough cut.
+- [x] TTS adapter (provider-agnostic).
+- [x] Mix, loudness, and ducking.
+- [x] Captions: SRT/VTT, sync, and burn-in.
 - [ ] Manifest with hashes, licenses, and full provenance.
+- [x] Machine QA: plan, engine check, loudness/peak/silence, cuts, faces (`qa`).
+- [x] Optional OCR without Python: Windows/macOS/Tesseract, or `tools install ocr-wasm`.
 
 ## Phase 3 — Engines and timeline
 
@@ -49,7 +51,8 @@
 - [x] Automatic build of `edit/plan.json` for HyperFrames/Remotion (v1: cuts, elements, and base media).
 - [x] Rich build: b-roll in PIP/split, structured graphics, lists, emphasis, callout, terminal, and end card.
 - [x] Cut smoothing: audio micro-fade and alternating punch-in on uncovered jumps.
-- [ ] 3D graphics in the build.
+- [x] 3D graphics in the build via HyperFrames registry blocks (`scene` + `template: "block"`).
+- [x] Face-aware vertical crop (`reframe --focus auto`).
 - [ ] FFmpeg adapter (EDL → filtergraph).
 - [x] Unified preview with timeline and QA.
 - [x] NLE handoff with EDL/FCPXML.
@@ -59,8 +62,7 @@
 
 ## Phase 4 — 3D and quality
 
-- [ ] Three.js 3D starter for Remotion.
-- [ ] Three.js 3D starter for HyperFrames.
+- [ ] Three.js starter for a hand-written custom scene (blocks cover the registry path).
 - [ ] More ready-made profiles: warm-documentary, brutalist, corporate-clean.
 - [ ] Project examples.
 - [ ] Evals with baseline and iteration.
@@ -75,6 +77,7 @@
 - Full NLE in the browser.
 - Video generation by models (Veo/Kling/Runway) as core.
 - Generated avatar/UGC.
+- Object tracking frame by frame (face-aware crop and face boxes are supported).
 - Cloud render.
 - Automatic upload to YouTube/TikTok.
 - Advanced color grading.

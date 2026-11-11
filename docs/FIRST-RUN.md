@@ -155,7 +155,7 @@ The plan must include the creative layer: visual elements, b-roll, and music, or
 
 Before the full build, ask for `build <slug> --sample 3`: the agent builds only three representative elements so you can approve the motion and the typography. After the OK, run the full build with `--force`.
 
-In the final review, open `preview/index.html` (run `preview <slug>`) and run `textcheck <slug>` to list every on-screen text. Watch the whole draft once and check the audio cuts before the final render.
+In the final review, open `preview/index.html` (run `preview <slug>`), run `qa <slug> --draft --vision` for the machine pass, and run `textcheck <slug>` to list every on-screen text. Watch the whole draft once and check the audio cuts before the final render.
 
 The advanced layers — captions, motion, audio, reframe, delivery, color, b-roll, charts, TTS, and multicam — are indexed in [`references/professional-elements.md`](../references/professional-elements.md). `SKILL.md` only points to that index.
 

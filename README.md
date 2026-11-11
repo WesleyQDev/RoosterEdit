@@ -61,7 +61,7 @@ It edits the footage and assets you already have. Give it a brief and your mater
 - **Existing material first.** Talking heads, interviews, tutorials, demos, screen recordings, photo essays, and b-roll you already have. It cleans silence, filler, and abandoned takes before it adds anything.
 - **Plan first.** Every cut starts as a reviewable `edit/plan.json`. You approve the plan, three style frames, and the browser preview before the expensive render.
 - **One channel, one standard.** Language, format, style, voice, and asset policy live in a channel. New videos inherit the standard instead of restarting from a prompt.
-- **Small on purpose.** Node.js and FFmpeg only: no Python, no provider accounts, no cloud. The npm package is under 1 MB.
+- **Small on purpose.** Node.js and FFmpeg are the only required tools: no Python, no provider account, no cloud. The npm package is under 1 MB; optional tools such as OCR download to a user cache only when you approve it.
 - **Cheap on context.** Heavy stages run in subagents and return a short handoff, so the main agent never reads the full transcript or build log.
 - **Leaves the door open.** Export EDL/FCPXML for DaVinci Resolve or Premiere, or build an editable FilmCraft timeline. Your edit does not die inside the tool.
 
@@ -99,7 +99,7 @@ Requirements: **Node.js 22+**, **FFmpeg/FFprobe**, and a browser. Whisper, `yt-d
 - Interviews, tutorials, demos, and screen recordings cut into a tight story.
 - Product promos, reels, Shorts, and vertical cuts from existing footage.
 - Narrated explainers with TTS, captions, b-roll, and charts.
-- Motion graphics and 3D scenes built with HyperFrames or Remotion.
+- Motion graphics, and 3D scenes from HyperFrames registry blocks (installed on demand) or a hand-written Three.js/Remotion scene.
 
 ## How it works
 
@@ -107,7 +107,7 @@ Requirements: **Node.js 22+**, **FFmpeg/FFprobe**, and a browser. Whisper, `yt-d
 2. **Intake** — give the agent a brief and put the footage in the project.
 3. **Plan** — the agent transcribes and proposes cuts, chapters, graphics, b-roll, and music in `edit/plan.json`.
 4. **Approval** — review the plan, three style frames, and the browser preview.
-5. **Build and render** — the chosen engine builds the project; QA runs before the final render.
+5. **Build and render** — the chosen engine builds the project; `qa` checks the plan, audio, cuts, and faces, and extracts only the frames that need review before the final render.
 
 The plan is the control point. If it is wrong, the video is wrong.
 

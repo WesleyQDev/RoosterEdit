@@ -12,6 +12,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { writeCaptions, burnArgs } from "./features/captions.mjs";
 import { buildMetadata, createThumbnail } from "./features/delivery.mjs";
@@ -26,7 +27,7 @@ import { buildMulticamPlan, speedFilter, jlCutOffsets } from "./features/multica
 import { cacheClear, cacheGc, cacheInfo, cacheRoot, readCache, withCache } from "./lib/cache.mjs";
 import { runAsync, runPool } from "./lib/exec.mjs";
 import { detectCapabilities } from "./lib/capabilities.mjs";
-import { engineVersion } from "./lib/engines.mjs";
+import { engineVersion, findHyperFrames } from "./lib/engines.mjs";
 import { buildProbeArgs, parseProbeJson, probeKey, sourceFingerprint } from "./lib/media.mjs";
 import {
   hyperFramesRenderArgs,
@@ -40,6 +41,24 @@ import {
 } from "./lib/render.mjs";
 import { cutKey, elementKey, hashKey, htmlKey, musicKey, readBuildState, roundKeeps, voiceKey, writeBuildState } from "./lib/build-cache.mjs";
 import { buildBaseMediaArgs, preserveEngineCaches, restoreEngineCaches } from "./lib/build-media.mjs";
+import { buildQaReport, formatQaMarkdown, qaExitCode, qaKey } from "./lib/qa.mjs";
+import { focusFromBoxes, parseMeasureFace, planExpectsFace } from "./lib/faces.mjs";
+import {
+  blockAddArgs,
+  blockHostHtml,
+  blockInstallHint,
+  blockName,
+  blockVars,
+  isBlockElement,
+} from "./features/blocks.mjs";
+import {
+  chooseOcrProvider,
+  languageCodes,
+  normalizeOcrResult,
+  ocrSummary,
+  parseTesseractTsv,
+  parseWinRtPayload,
+} from "./lib/ocr.mjs";
 import {
   exportMedia as filmCraftExport,
   filmCraftMcpSnippet,
@@ -48,11 +67,28 @@ import {
   filmCraftStatus,
   filmCraftVersion,
   findFilmCraft,
+  normalizeFilmCraftBridge,
   secondsToTicks,
   setupFilmCraftMcp,
   ticksToSeconds,
 } from "./lib/filmcraft.mjs";
-import { elementSpecs, summarizeTimeline, timelineFromPlan, timelineMarkers } from "./features/timeline.mjs";
+import {
+  clearWatch,
+  isWatchAlive,
+  openInBrowser,
+  readWatch,
+  spawnWatch,
+  startWatchServer,
+  writeWatch,
+} from "./lib/watch.mjs";
+import {
+  elementEngine,
+  elementSpecs,
+  groupSpecsByEngine,
+  summarizeTimeline,
+  timelineFromPlan,
+  timelineMarkers,
+} from "./features/timeline.mjs";
 import {
   cutSmoothing,
   elementSupport,
@@ -127,6 +163,7 @@ const MOTION_TEMPLATES = [
   { id: "callout", label: "Callout", description: "Short corner label." },
   { id: "broll", label: "B-roll", description: "Support clip or image in PIP, split, or full frame." },
   { id: "parallax", label: "Parallax 2.5D", description: "Layered scene with slow camera; a shot with depth." },
+  { id: "block", label: "Registry block", description: "3D or WebGL composition installed from the HyperFrames registry." },
   { id: "zoom", label: "Zoom", description: "Punch-in on a face, product, or detail." },
   { id: "transition", label: "Transition", description: "Wipe or flash between blocks." },
   { id: "custom", label: "Custom", description: "Custom HTML/CSS/GSAP or reusable component." },
@@ -1003,7 +1040,7 @@ function resolveFormat(aspect, width, height) {
   };
 }
 
-function newProject(args) {
+async function newProject(args) {
   if (args.category !== undefined) {
     fail('Category was removed. Use --channel and the project overrides; describe the content in brief.md and script.md.');
   }
@@ -1290,6 +1327,21 @@ Profile: \`${profile}\`
   console.log(`  3. Build storyboard and timeline`);
   console.log(`  4. Choose an engine and implement`);
   console.log(`  5. Preview, QA, render`);
+
+  if (!args["no-watch"] && !args.json && !process.env.ROOSTER_NO_WATCH) {
+    try {
+      const status = await spawnWatch({
+        roosterScript: path.join(SKILL_ROOT, "scripts", "rooster.mjs"),
+        projectDir,
+        slug,
+        cwd: CWD,
+      });
+      console.log(`\n  live: ${status.url}`);
+      openInBrowser(status.url);
+    } catch {
+      console.log(`\n  live: run "watch ${slug}" to follow this project in the browser`);
+    }
+  }
 }
 
 function openProject(args) {
@@ -1966,6 +2018,21 @@ function validatePlan(plan, dir, options = {}) {
   }
 
   for (const element of plan.elements || []) {
+    if (isBlockElement(element)) {
+      try {
+        blockName(element);
+      } catch (error) {
+        errors.push(`plan: element "${element.id || "?"}": ${error.message}`);
+      }
+      if (element.vars !== undefined && (typeof element.vars !== "object" || element.vars === null || Array.isArray(element.vars))) {
+        errors.push(`plan: element "${element.id || "?"}" vars must be an object`);
+      }
+      const start = Number(element.start);
+      const end = Number(element.end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        errors.push(`plan: scene "${element.id || "?"}" needs numeric start/end with end > start`);
+      }
+    }
     if (element.speed !== undefined && (!Number.isFinite(Number(element.speed)) || Number(element.speed) <= 0)) {
       errors.push(`plan: element "${element.id || "?"}" has invalid speed`);
     }
@@ -3886,15 +3953,48 @@ function reframeCommand(args) {
     : path.join(project.dir, "assets", "generated", `reframed-${String(format).replace(":", "x")}.mp4`);
   ensureDir(path.dirname(output));
 
+  let mode = args.mode || "center";
+  let focusX = args["focus-x"] !== undefined ? Number(args["focus-x"]) : 0.5;
+  let focusY = args["focus-y"] !== undefined ? Number(args["focus-y"]) : 0.5;
+
+  if (String(args.focus || "").toLowerCase() === "auto") {
+    const bin = hyperFramesBin();
+    if (!bin) {
+      fail(
+        "`reframe --focus auto` needs HyperFrames for face measurement.\n" +
+          "Install HyperFrames or pass --focus-x/--focus-y."
+      );
+    }
+    const samples = Math.max(4, Math.min(120, Number(args["focus-samples"]) || 16));
+    const measured = hyperFramesJson(
+      ["measure", "face", input, "--samples", String(samples), "--json"],
+      { timeout: 20 * 60 * 1000, cwd: project.dir }
+    );
+    if (!measured.ok) fail(`Face measurement failed:\n${measured.error || "unknown error"}`);
+    const parsed = parseMeasureFace(measured.data, { width: probe.width, height: probe.height });
+    const focus = focusFromBoxes(parsed.boxes);
+    if (focus.source === "face") {
+      mode = "focus";
+      focusX = focus.x;
+      focusY = focus.y;
+      console.log(
+        `  focus:   auto (${focus.samples}/${parsed.framesSampled} frames, x=${focusX.toFixed(3)}, y=${focusY.toFixed(3)})`
+      );
+    } else {
+      console.warn(`  ! no face found in ${parsed.framesSampled} sampled frame(s); using center`);
+      mode = "center";
+    }
+  }
+
   const ffArgs = reframeArgs({
     input,
     output,
     sourceWidth: probe.width,
     sourceHeight: probe.height,
     format,
-    mode: args.mode || "center",
-    focusX: args["focus-x"] !== undefined ? Number(args["focus-x"]) : 0.5,
-    focusY: args["focus-y"] !== undefined ? Number(args["focus-y"]) : 0.5,
+    mode,
+    focusX,
+    focusY,
   });
   const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
   if (!result.ok) fail(`FFmpeg reframe failed:\n${result.stderr || result.stdout || "unknown error"}`);
@@ -4070,6 +4170,101 @@ function cacheCommand(args) {
   fail("Usage: cache info | path | clear [kind] | gc [--max-size 20GB] [--max-age 30d]");
 }
 
+/**
+ * The live watcher: one local page with stages, timing, media, and renders.
+ *
+ * `--serve` is the foreground mode used by the detached child; the plain
+ * command reuses a running server or starts one and opens the browser.
+ *
+ * @param {Record<string, any>} args
+ */
+async function watchCommand(args) {
+  const project = resolveProject(args._[0]);
+  if (!exists(path.join(project.dir, "project.json"))) {
+    fail(`Project not found: ${project.slug}`);
+  }
+  const slug = project.slug;
+
+  if (args.stop) {
+    const status = readWatch(project.dir);
+    if (status && isWatchAlive(status)) {
+      try {
+        process.kill(Number(status.pid));
+      } catch {
+        // Already gone.
+      }
+    }
+    clearWatch(project.dir);
+    heading("Live server stopped");
+    console.log(`  ${project.dir}`);
+    return;
+  }
+
+  if (args.serve) {
+    const server = await startWatchServer({
+      projectDir: project.dir,
+      port: Number(args.port) || 0,
+      intervalMs: Number(args.interval) || 1000,
+    });
+    writeWatch(project.dir, {
+      url: server.url,
+      port: server.port,
+      pid: process.pid,
+      slug,
+      startedAt: now(),
+    });
+    heading("Live");
+    console.log(`  ${server.url}`);
+    console.log("  Ctrl+C stops this server.");
+    const shutdown = async () => {
+      clearWatch(project.dir);
+      await server.close();
+      process.exit(0);
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    return;
+  }
+
+  let status = readWatch(project.dir);
+  if (!status || !isWatchAlive(status)) {
+    const port = Number(args.port) || 0;
+    try {
+      status = await spawnWatch({
+        roosterScript: path.join(SKILL_ROOT, "scripts", "rooster.mjs"),
+        projectDir: project.dir,
+        slug,
+        cwd: CWD,
+        port,
+      });
+    } catch (error) {
+      fail(error.message);
+    }
+  }
+
+  if (args.json) {
+    console.log(
+      JSON.stringify(
+        {
+          project: slug,
+          url: status.url,
+          port: status.port,
+          pid: status.pid,
+          running: isWatchAlive(status),
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  heading(`Live — ${slug}`);
+  console.log(`  ${status.url}`);
+  console.log("  The page updates as files change. Stop it with: watch " + slug + " --stop");
+  if (!args["no-open"]) openInBrowser(status.url);
+}
+
 function framesCommand(args) {
   const project = resolveProject(projectSlugFromArg(args));
   if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${project.slug}`);
@@ -4131,6 +4326,630 @@ function framesCommand(args) {
   console.log(`  ${sheet.out}`);
   if (!args["sheet-only"]) console.log(`  ${path.join(outDir, "stills")}`);
   console.log(`  ${count} frame(s) · ${cols} columns · ${scale}px`);
+}
+
+function qaFrame(video, time, out) {
+  ensureDir(path.dirname(out));
+  const result = run(
+    "ffmpeg",
+    ["-y", "-ss", String(Number(time).toFixed(3)), "-i", video, "-frames:v", "1", "-vf", "scale=960:-2", "-q:v", "3", out],
+    { timeout: 2 * 60 * 1000 }
+  );
+  return result.ok && exists(out) ? out : null;
+}
+
+function qaCommand(args) {
+  const slug = projectSlugFromArg(args);
+  const project = resolveProject(slug);
+  if (!exists(path.join(project.dir, "project.json"))) fail(`Project not found: ${slug}`);
+
+  const planPath = path.join(project.dir, "edit", "plan.json");
+  const plan = exists(planPath) ? readJson(planPath, {}) : {};
+  const candidates = [
+    args.video ? path.resolve(CWD, String(args.video)) : null,
+    path.join(project.dir, "renders", "final.mp4"),
+    path.join(project.dir, "renders", "draft.mp4"),
+    plan.source ? path.resolve(project.dir, plan.source) : null,
+  ].filter((candidate) => candidate && exists(candidate));
+  const video = candidates[0];
+  if (!video) fail("No video found. Render a draft/final, pass --video <path>, or set plan.source.");
+
+  const probe = probeMedia(video) || {};
+  if (probe.error) fail(`Could not probe ${video}: ${probe.error}`);
+
+  const engine =
+    project.config.timeline === "filmcraft"
+      ? "filmcraft"
+      : project.config.engine && project.config.engine !== "auto"
+        ? project.config.engine
+        : "hyperframes";
+  const validation = validatePlan(plan, project.dir, { engine });
+  const warnings = [...validation.warnings, ...cutBoundaryWarnings(plan, project.dir)];
+  const support = elementSupport(plan, engine);
+  for (const item of support.unsupported) {
+    validation.errors.push(
+      `plan: element "${item.id || item.type || "?"}" is not supported by ${engine}: ${item.reason}`
+    );
+  }
+  for (const item of support.fallback) {
+    warnings.push(`plan: element "${item.id || item.type || "?"}" renders as a fallback in ${engine}: ${item.reason}`);
+  }
+
+  const wantFaces = !args["no-faces"] && (Boolean(args.faces) || planExpectsFace(plan));
+  const wantEvents = !args["no-events"];
+  const samples = Math.max(4, Math.min(80, Number(args.samples) || 16));
+  const lufsTarget = Number.isFinite(Number(args.lufs)) ? Number(args.lufs) : -14;
+  const key = qaKey({
+    video: sourceFingerprint(video),
+    plan,
+    options: {
+      wantFaces,
+      wantEvents,
+      samples,
+      check: !args["no-check"],
+      quality: args.draft ? "draft" : args.final ? "final" : null,
+      lufs: lufsTarget,
+    },
+    engine: engineVersion("hyperframes")?.version || null,
+  });
+
+  const outDir = path.join(project.dir, "qa");
+  const jsonPath = path.join(outDir, "qa.json");
+  const markdownPath = path.join(outDir, "qa-report.md");
+  ensureDir(outDir);
+
+  let report = null;
+  if (!args.refresh && exists(jsonPath)) {
+    const cached = readJson(jsonPath, null);
+    if (cached?.schema === "rooster.qa/v1" && cached.key === key) report = cached;
+  }
+
+  if (!report) {
+    const engineDir = path.join(project.dir, "engine", "hyperframes");
+    const check =
+      !args["no-check"] && exists(path.join(engineDir, "index.html"))
+        ? runHyperFramesCheck(engineDir, { quiet: Boolean(args.json) })
+        : null;
+
+    const bin = hyperFramesBin();
+    if (!bin) warnings.push("qa: HyperFrames not found; audio, cuts, and face measurements were skipped.");
+
+    const audioResult = bin
+      ? hyperFramesJson(["audio", video, "--only", "loudness,silence", "--json"], {
+          timeout: 10 * 60 * 1000,
+          cwd: project.dir,
+        })
+      : null;
+    if (bin && !audioResult?.ok) warnings.push(`qa: audio measurement failed: ${audioResult?.error || "unknown error"}`);
+
+    const eventsResult =
+      bin && wantEvents
+        ? hyperFramesJson(["measure", "events", video, "--json"], {
+            timeout: 20 * 60 * 1000,
+            cwd: project.dir,
+          })
+        : null;
+    if (bin && wantEvents && !eventsResult?.ok) {
+      warnings.push(`qa: cut measurement failed: ${eventsResult?.error || "unknown error"}`);
+    }
+
+    const facesResult =
+      bin && wantFaces
+        ? hyperFramesJson(["measure", "face", video, "--samples", String(samples), "--json"], {
+            timeout: 20 * 60 * 1000,
+            cwd: project.dir,
+          })
+        : null;
+    if (bin && wantFaces && !facesResult?.ok) {
+      warnings.push(`qa: face measurement failed: ${facesResult?.error || "unknown error"}`);
+    }
+
+    report = buildQaReport({
+      project: { slug: project.slug },
+      plan,
+      video,
+      probe,
+      check,
+      audio: audioResult?.ok ? audioResult.data : null,
+      events: eventsResult?.ok ? eventsResult.data : null,
+      faces: facesResult?.ok ? facesResult.data : null,
+      errors: validation.errors,
+      warnings,
+      key,
+      quality: args.draft ? "draft" : args.final ? "final" : null,
+      options: { target: { lufs: lufsTarget } },
+    });
+    report.vision = [];
+  }
+
+  if (args.vision) {
+    const times = [];
+    for (const finding of report.findings) {
+      if (finding.time != null) times.push(Number(finding.time));
+    }
+    if (!times.length) {
+      const duration = report.metrics.duration || 0;
+      times.push(duration > 0 ? Math.min(1, duration / 2) : 0.5);
+      if (duration > 0) times.push(duration / 2);
+      if (duration > 1) times.push(Math.max(0, duration - 0.5));
+    }
+    const unique = [...new Set(times.map((time) => Math.max(0, Number(time) || 0).toFixed(1)))].slice(0, 5);
+    const vision = [];
+    for (const time of unique) {
+      const file = qaFrame(video, Number(time), path.join(outDir, "vision", `frame-${time}s.jpg`));
+      if (file) vision.push(file);
+    }
+    report.vision = vision;
+  }
+
+  writeJson(jsonPath, report);
+  writeText(markdownPath, formatQaMarkdown(report));
+
+  let normalized = null;
+  if (args["fix-audio"] && report.metrics.lufs != null) {
+    const delta = lufsTarget - report.metrics.lufs;
+    if (Math.abs(delta) > 0.5) {
+      normalized = path.join(project.dir, "renders", `${path.basename(video, path.extname(video))}-normalized.mp4`);
+      const result = run(
+        "ffmpeg",
+        [
+          "-y",
+          "-i",
+          video,
+          "-map",
+          "0:v:0",
+          "-map",
+          "0:a:0",
+          "-c:v",
+          "copy",
+          "-af",
+          `volume=${delta.toFixed(2)}dB,alimiter=limit=0.891`,
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          normalized,
+        ],
+        { timeout: 60 * 60 * 1000 }
+      );
+      if (!result.ok) {
+        normalized = null;
+        warnings.push(`qa: audio correction failed: ${result.stderr || result.stdout || "unknown error"}`);
+      }
+    }
+  }
+
+  if (args.json) {
+    console.log(JSON.stringify({ ...report, normalized }, null, 2));
+  } else {
+    heading("QA");
+    console.log(formatQaMarkdown(report));
+    if (normalized) console.log(`  normalized: ${normalized}`);
+    console.log(`  report:     ${markdownPath}`);
+    console.log(`  json:       ${jsonPath}`);
+    if (report.status !== "pass" && !args.vision) {
+      console.log("  Next: run with --vision to extract up to 5 frames at the flagged times.");
+    }
+  }
+
+  const code = qaExitCode(report, Boolean(args.strict));
+  if (code !== 0) process.exit(code);
+}
+
+function toolsRoot() {
+  const env = process.env.ROOSTER_TOOLS_DIR;
+  return env && env.trim()
+    ? path.resolve(env.trim())
+    : path.join(os.homedir(), ".rooster", "tools");
+}
+
+function ocrWasmInstall() {
+  const dir = path.join(toolsRoot(), "ocr-wasm");
+  const pkgPath = path.join(dir, "node_modules", "tesseract.js", "package.json");
+  if (!exists(pkgPath)) return null;
+  const pkg = readJson(pkgPath, {});
+  return { dir, version: pkg.version || "unknown", packagePath: pkgPath };
+}
+
+function toolsStatus() {
+  const hf = engineVersion("hyperframes");
+  const tesseract = versionOf("tesseract");
+  const swiftc = process.platform === "darwin" ? versionOf("swiftc", ["-version"], { timeout: 30000 }) : null;
+  const python = versionOf("python", ["--version"]);
+  const wasm = ocrWasmInstall();
+  return [
+    {
+      id: "hyperframes",
+      kind: "engine",
+      available: Boolean(hf),
+      version: hf?.version || null,
+      path: hf?.bin || null,
+      note: hf ? "HTML/CSS/GSAP and 3D blocks" : "install with `npx hyperframes@latest install`",
+    },
+    {
+      id: "ocr.winrt",
+      kind: "ocr",
+      available: process.platform === "win32",
+      version: process.platform === "win32" ? "native" : null,
+      path: null,
+      note: "Windows.Media.Ocr; no download",
+    },
+    {
+      id: "ocr.vision",
+      kind: "ocr",
+      available: process.platform === "darwin" && Boolean(swiftc),
+      version: swiftc ? "native" : null,
+      path: null,
+      note: "macOS Vision; needs Xcode command line tools",
+    },
+    {
+      id: "ocr.tesseract",
+      kind: "ocr",
+      available: Boolean(tesseract),
+      version: tesseract,
+      path: null,
+      note: "system Tesseract binary",
+    },
+    {
+      id: "ocr.wasm",
+      kind: "ocr",
+      available: Boolean(wasm),
+      version: wasm?.version || null,
+      path: wasm?.dir || null,
+      note: wasm ? "tesseract.js in the tools cache" : "install with `tools install ocr-wasm --approve` (~15 MB)",
+    },
+    {
+      id: "asr.python",
+      kind: "asr",
+      available: Boolean(python),
+      version: python,
+      path: null,
+      note: "optional faster-whisper/Parakeet",
+    },
+  ];
+}
+
+function toolsCommand(args) {
+  const sub = args._.shift() || "list";
+  if (sub === "list" || sub === "status") {
+    const tools = toolsStatus();
+    if (args.json) {
+      console.log(JSON.stringify({ root: toolsRoot(), tools }, null, 2));
+      return;
+    }
+    heading("Tools");
+    console.log(`  root: ${toolsRoot()}\n`);
+    for (const tool of tools) {
+      console.log(
+        `  ${tool.id.padEnd(18)} ${(tool.available ? "ok" : "missing").padEnd(8)} ${String(tool.version || "").padEnd(24)} ${tool.note}`
+      );
+    }
+    return;
+  }
+
+  if (sub === "install") {
+    const id = String(args._.shift() || "").toLowerCase();
+    if (id !== "ocr-wasm") {
+      fail("Unknown tool. Available: ocr-wasm. Run `tools list` to see what is already installed.");
+    }
+    if (!args.approve) {
+      fail(
+        "Refusing to download without permission.\n" +
+          "Run: rooster tools install ocr-wasm --approve\n" +
+          "This installs tesseract.js (~15 MB) in " +
+          path.join(toolsRoot(), "ocr-wasm") +
+          " and keeps it out of the skill package."
+      );
+    }
+    const dir = path.join(toolsRoot(), "ocr-wasm");
+    ensureDir(dir);
+    console.log(`  Installing tesseract.js@6.0.1 in ${dir} ...`);
+    const result = run(
+      "npm",
+      ["install", "--prefix", dir, "tesseract.js@6.0.1", "--no-audit", "--no-fund", "--silent"],
+      { timeout: 10 * 60 * 1000 }
+    );
+    if (!result.ok) fail(`npm install failed:\n${result.stderr || result.stdout || "unknown error"}`);
+    const installed = ocrWasmInstall();
+    if (!installed) fail("tesseract.js was not installed correctly. Remove the folder and try again.");
+    writeJson(path.join(dir, "manifest.json"), {
+      schema: "rooster.tool/v1",
+      id: "ocr-wasm",
+      version: installed.version,
+      source: "npm:tesseract.js@6.0.1",
+      license: "Apache-2.0",
+      installedAt: new Date().toISOString(),
+      note: "Language data is downloaded on first use into ./lang.",
+    });
+    heading("OCR installed");
+    console.log(`  ${installed.dir}`);
+    console.log(`  tesseract.js ${installed.version}`);
+    console.log("  First OCR downloads the language data into the same folder.");
+    return;
+  }
+
+  if (sub === "remove") {
+    const id = String(args._.shift() || "").toLowerCase();
+    if (id !== "ocr-wasm") fail("Unknown tool. Available: ocr-wasm.");
+    const dir = path.join(toolsRoot(), "ocr-wasm");
+    if (!exists(dir)) fail("ocr-wasm is not installed.");
+    if (!path.resolve(dir).startsWith(path.resolve(toolsRoot()) + path.sep)) {
+      fail(`Refusing to remove a path outside the tools root: ${dir}`);
+    }
+    removeDirRobust(dir);
+    console.log(`  removed ${dir}`);
+    return;
+  }
+
+  fail(`Unknown tools subcommand "${sub}". Use list, install, or remove.`);
+}
+
+function extractOcrImage({ input, time, out }) {
+  ensureDir(path.dirname(out));
+  const result = run(
+    "ffmpeg",
+    ["-y", "-ss", String(Number(time).toFixed(3)), "-i", input, "-frames:v", "1", "-update", "1", out],
+    { timeout: 5 * 60 * 1000 }
+  );
+  if (!result.ok) fail(`Could not extract the OCR frame:\n${result.stderr || result.stdout || "unknown error"}`);
+  return out;
+}
+
+function powershellLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function winRtOcrScript({ image, out, language }) {
+  return [
+    '$ErrorActionPreference = "Stop"',
+    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+    `$path = ${powershellLiteral(image)}`,
+    `$out = ${powershellLiteral(out)}`,
+    `$language = ${powershellLiteral(language)}`,
+    "Add-Type -AssemblyName System.Runtime.WindowsRuntime",
+    "$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]",
+    "$null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType = WindowsRuntime]",
+    "$null = [Windows.Storage.StorageFile, Windows.Foundation, ContentType = WindowsRuntime]",
+    "$null = [Windows.Globalization.Language, Windows.Foundation, ContentType = WindowsRuntime]",
+    "$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {",
+    '  $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 -and',
+    '  $_.GetParameters()[0].ParameterType.Name -eq "IAsyncOperation``1"',
+    "})[0]",
+    "function Await($op, $type) {",
+    "  $task = $asTask.MakeGenericMethod($type).Invoke($null, @($op))",
+    "  $task.Wait()",
+    "  $task.Result",
+    "}",
+    "$file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($path)) ([Windows.Storage.StorageFile])",
+    "$stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])",
+    "$decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])",
+    "$bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])",
+    "$engine = $null",
+    "try { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage([Windows.Globalization.Language]::new($language)) } catch { }",
+    "if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }",
+    'if (-not $engine) { throw "No OCR engine available for this language." }',
+    "$result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])",
+    "$words = @()",
+    "foreach ($line in $result.Lines) {",
+    "  foreach ($word in $line.Words) {",
+    "    $r = $word.BoundingRect",
+    "    $words += @{ text = $word.Text; x = $r.X; y = $r.Y; width = $r.Width; height = $r.Height }",
+    "  }",
+    "}",
+    "$payload = @{ text = $result.Text; width = $bitmap.PixelWidth; height = $bitmap.PixelHeight; words = $words } | ConvertTo-Json -Depth 6 -Compress",
+    "[System.IO.File]::WriteAllText($out, $payload, (New-Object System.Text.UTF8Encoding($false)))",
+  ].join("\n");
+}
+
+function runWinRtOcr({ image, language, workDir }) {
+  ensureDir(workDir);
+  const stamp = `${process.pid}-${Date.now()}`;
+  const script = path.join(workDir, `winrt-ocr-${stamp}.ps1`);
+  const out = path.join(workDir, `winrt-ocr-${stamp}.json`);
+  writeText(script, winRtOcrScript({ image, out, language }));
+  const result = run("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], {
+    timeout: 2 * 60 * 1000,
+  });
+  if (!result.ok || !exists(out)) {
+    fail(`Windows OCR failed:\n${result.stderr || result.stdout || "unknown error"}`);
+  }
+  return parseWinRtPayload(readJson(out, {}));
+}
+
+function macVisionSource() {
+  return [
+    "import Foundation",
+    "import Vision",
+    "import AppKit",
+    "",
+    "let args = CommandLine.arguments",
+    "guard args.count > 1, let image = NSImage(contentsOfFile: args[1]),",
+    "      let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {",
+    '  FileHandle.standardError.write("cannot read image\\n".data(using: .utf8)!)',
+    "  exit(2)",
+    "}",
+    "let language = args.count > 2 ? args[2] : \"en-US\"",
+    "let request = VNRecognizeTextRequest()",
+    "request.recognitionLevel = .accurate",
+    "request.usesLanguageCorrection = true",
+    "if let supported = try? request.supportedRecognitionLanguages() {",
+    "  request.recognitionLanguages = supported.contains(language) ? [language] : [\"en-US\"]",
+    "}",
+    "let handler = VNImageRequestHandler(cgImage: cg, options: [:])",
+    "try handler.perform([request])",
+    "let width = Double(cg.width)",
+    "let height = Double(cg.height)",
+    "var words: [[String: Any]] = []",
+    "for observation in request.results ?? [] {",
+    "  guard let candidate = observation.topCandidates(1).first else { continue }",
+    "  let text = candidate.string",
+    "  let box = observation.boundingBox",
+    "  let x = box.origin.x * width",
+    "  let y = (1 - box.origin.y - box.height) * height",
+    "  words.append([\"text\": text, \"x\": x, \"y\": y, \"width\": box.width * width, \"height\": box.height * height, \"confidence\": candidate.confidence])",
+    "}",
+    "let payload: [String: Any] = [",
+    '  "text": words.compactMap { $0["text"] as? String }.joined(separator: " "),',
+    '  "width": width,',
+    '  "height": height,',
+    '  "words": words',
+    "]",
+    "let data = try JSONSerialization.data(withJSONObject: payload, options: [])",
+    "FileHandle.standardOutput.write(data)",
+  ].join("\n");
+}
+
+function runMacVisionOcr({ image, language, workDir }) {
+  ensureDir(workDir);
+  const source = path.join(workDir, "vision-ocr.swift");
+  const binary = path.join(workDir, "vision-ocr");
+  if (!exists(source)) writeText(source, macVisionSource());
+  if (!exists(binary)) {
+    const compile = run("swiftc", ["-O", source, "-o", binary], { timeout: 5 * 60 * 1000 });
+    if (!compile.ok) fail(`Could not compile the macOS OCR helper:\n${compile.stderr || compile.stdout}`);
+  }
+  const result = run(binary, [image, language], { timeout: 3 * 60 * 1000 });
+  if (!result.ok) fail(`macOS Vision OCR failed:\n${result.stderr || result.stdout || "unknown error"}`);
+  return JSON.parse(result.stdout);
+}
+
+async function runWasmOcr({ image, install, language }) {
+  const require = createRequire(path.join(install.dir, "package.json"));
+  const { createWorker } = require("tesseract.js");
+  const cachePath = path.join(install.dir, "lang");
+  ensureDir(cachePath);
+  const worker = await createWorker(languageCodes(language).tesseract, 1, {
+    cachePath,
+    logger: () => {},
+  });
+  try {
+    const { data } = await worker.recognize(image, {}, { blocks: true });
+    const words = (data.blocks || []).flatMap((block) =>
+      (block.paragraphs || []).flatMap((paragraph) =>
+        (paragraph.lines || []).flatMap((line) => line.words || [])
+      )
+    );
+    return {
+      text: data.text || "",
+      words: words.map((word) => ({
+        text: word.text,
+        x: word.bbox?.x0,
+        y: word.bbox?.y0,
+        width: (word.bbox?.x1 || 0) - (word.bbox?.x0 || 0),
+        height: (word.bbox?.y1 || 0) - (word.bbox?.y0 || 0),
+        confidence: Number.isFinite(Number(word.confidence)) ? Number(word.confidence) / 100 : null,
+      })),
+    };
+  } finally {
+    await worker.terminate();
+  }
+}
+
+async function ocrCommand(args) {
+  const slug = args.slug || (args.image ? null : args._[0]);
+  const project = slug ? resolveProject(String(slug)) : null;
+  const plan = project && exists(path.join(project.dir, "edit", "plan.json"))
+    ? readJson(path.join(project.dir, "edit", "plan.json"), {})
+    : {};
+
+  const imageArg = args.image ? path.resolve(CWD, String(args.image)) : null;
+  const video = imageArg
+    ? null
+    : args.input
+      ? path.resolve(CWD, String(args.input))
+      : plan.source
+        ? path.resolve(project?.dir || CWD, plan.source)
+        : null;
+  const input = imageArg || video;
+  if (!input || !exists(input)) fail("Input not found. Pass --image <path> or --input <video> (or set plan.source).");
+
+  const time = Number(args.at) || 0;
+  const probe = probeMedia(input) || {};
+  const language = args.lang || plan.language || project?.config?.language || "en";
+  const wasm = ocrWasmInstall();
+  const hasTesseract = Boolean(versionOf("tesseract"));
+  const choice = chooseOcrProvider({
+    requested: args.provider,
+    platform: process.platform,
+    hasWinRt: process.platform === "win32",
+    hasVision: process.platform === "darwin" && Boolean(versionOf("swiftc", ["-version"], { timeout: 30000 })),
+    hasTesseract,
+    hasWasm: Boolean(wasm),
+  });
+  if (!choice.provider) {
+    fail(
+      `OCR unavailable: ${choice.reason}\n` +
+        "On Windows and macOS no download is needed. On Linux install Tesseract, " +
+        "or run `rooster tools install ocr-wasm --approve`."
+    );
+  }
+
+  const outDir = path.join(project?.dir || CWD, "qa", "ocr");
+  ensureDir(outDir);
+  const stem = path.basename(video || input, path.extname(input));
+  const suffix = `${stem}-${time.toFixed(1)}s-${choice.provider}-${languageCodes(language).base}.json`;
+  let out = args.out ? path.resolve(CWD, String(args.out)) : path.join(outDir, suffix);
+  if (args.out && !/\.json$/i.test(out)) {
+    ensureDir(out);
+    out = path.join(out, suffix);
+  }
+
+  if (exists(out) && !args.refresh) {
+    const cached = readJson(out, null);
+    if (cached?.schema === "rooster.ocr/v1") {
+      if (args.json) console.log(JSON.stringify(cached, null, 2));
+      else {
+        heading("OCR (cached)");
+        console.log(`  ${ocrSummary(cached)}`);
+        console.log(`  ${out}`);
+      }
+      return;
+    }
+  }
+
+  const workDir = path.join(project?.dir || CWD, "work", "tmp");
+  ensureDir(workDir);
+  const frame = imageArg || extractOcrImage({ input, time, out: path.join(workDir, `ocr-${time.toFixed(3)}.png`) });
+
+  let payload;
+  if (choice.provider === "winrt") {
+    payload = runWinRtOcr({ image: frame, language: languageCodes(language).winrt, workDir });
+  } else if (choice.provider === "vision") {
+    payload = runMacVisionOcr({ image: frame, language: languageCodes(language).vision, workDir });
+  } else if (choice.provider === "tesseract") {
+    const result = run(
+      "tesseract",
+      [frame, "stdout", "-l", languageCodes(language).tesseract, "--psm", "11", "tsv"],
+      { timeout: 2 * 60 * 1000 }
+    );
+    if (!result.ok) fail(`Tesseract failed:\n${result.stderr || result.stdout || "unknown error"}`);
+    payload = parseTesseractTsv(result.stdout);
+  } else {
+    payload = await runWasmOcr({ image: frame, install: wasm, language });
+  }
+
+  const result = normalizeOcrResult({
+    provider: choice.provider,
+    source: path.relative(project?.dir || CWD, input).replace(/\\/g, "/"),
+    time: video ? time : null,
+    language,
+    width: payload.width || probe.width,
+    height: payload.height || probe.height,
+    text: payload.text,
+    words: payload.words,
+  });
+  writeJson(out, result);
+
+  if (args.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    heading("OCR");
+    console.log(`  ${ocrSummary(result)}`);
+    for (const word of result.words.slice(0, 5)) {
+      console.log(`  ${word.text.padEnd(20)} ${word.x},${word.y} ${word.width}x${word.height}`);
+    }
+    console.log(`  ${out}`);
+  }
 }
 
 function audioCommand(args) {
@@ -6287,6 +7106,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
 
   const variables = [];
   for (const { element, index } of elements) {
+    if (isBlockElement(element)) continue;
     const text = elementText(element);
     if (text) {
       variables.push({
@@ -6322,6 +7142,7 @@ function renderHyperFramesHtml(project, plan, theme, base) {
     : "";
 
   const scenes = elements
+    .filter(({ element }) => !isBlockElement(element))
     .map(({ element, index }) => ({
       file: `compositions/el-${index}.html`,
       content: renderHyperFramesScene(element, index, theme, width, height),
@@ -6330,6 +7151,9 @@ function renderHyperFramesHtml(project, plan, theme, base) {
 
   const elementHtml = elements
     .map(({ element, index }) => {
+      if (isBlockElement(element)) {
+        return blockHostHtml({ element, index, width, height });
+      }
       const start = Number(element.start) || 0;
       const end = Math.max(start + 0.1, Number(element.end) || start + 1);
       const allowOverlap =
@@ -6466,16 +7290,66 @@ function renderHyperFramesElementDocument(project, plan, element, spec, theme) {
 `;
 }
 
+function hyperFramesBin() {
+  const found = findHyperFrames();
+  return found?.bin || null;
+}
+
+/**
+ * Run a HyperFrames subcommand and parse its JSON envelope.
+ *
+ * Always uses the binary resolved on disk (`engines.mjs`) so a build never
+ * downloads a different version through `npx --yes`.
+ *
+ * @param {string[]} args
+ * @param {object} [options]
+ * @returns {{ok:boolean, data:object|null, stdout:string, stderr:string, error:string|null}}
+ */
+function hyperFramesJson(args, options = {}) {
+  const bin = options.bin || hyperFramesBin();
+  if (!bin) {
+    return { ok: false, data: null, stdout: "", stderr: "", error: "HyperFrames not found" };
+  }
+  const result = run("node", [bin, ...args], {
+    cwd: options.cwd || CWD,
+    timeout: options.timeout || 10 * 60 * 1000,
+  });
+  let data = null;
+  const text = String(result.stdout || "");
+  try {
+    data = JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        data = JSON.parse(text.slice(start, end + 1));
+      } catch {
+        data = null;
+      }
+    }
+  }
+  return {
+    ok: Boolean(result.ok && data),
+    data,
+    stdout: text,
+    stderr: String(result.stderr || ""),
+    error: result.ok ? (data ? null : "HyperFrames did not return JSON") : result.stderr || result.stdout || "HyperFrames failed",
+  };
+}
+
 function runHyperFramesCheck(engineDir, args = {}) {
   if (args["no-check"]) return null;
-  if (!versionOf("npx", ["--version"])) {
-    console.warn("  ! npx not found; skipped the HyperFrames check.");
+  const bin = hyperFramesBin();
+  if (!bin) {
+    if (!args.quiet) console.warn("  ! HyperFrames not found; skipped the HyperFrames check.");
     return null;
   }
-  const result = run("npx", ["--yes", "hyperframes", "check", "--json"], {
+  const result = run("node", [bin, "check", "--json"], {
     cwd: engineDir,
     timeout: 15 * 60 * 1000,
   });
+
   let report = null;
   try {
     report = JSON.parse(result.stdout);
@@ -6492,9 +7366,11 @@ function runHyperFramesCheck(engineDir, args = {}) {
     }
   }
   if (!report) {
-    console.warn(
-      `  ! HyperFrames check did not return JSON${result.ok ? "" : `: ${(result.stderr || result.stdout || "unknown error").slice(0, 300)}`}`
-    );
+    if (!args.quiet) {
+      console.warn(
+        `  ! HyperFrames check did not return JSON${result.ok ? "" : `: ${(result.stderr || result.stdout || "unknown error").slice(0, 300)}`}`
+      );
+    }
     return null;
   }
   const sections = ["lint", "layout", "contrast", "craft", "audio", "runtime", "motion"];
@@ -6506,11 +7382,13 @@ function runHyperFramesCheck(engineDir, args = {}) {
       findings.push({ section: key, ...finding });
     }
   }
-  console.log(`  check:   ${errors} error(s), ${warnings} warning(s)`);
-  for (const finding of findings.slice(0, 5)) {
-    console.log(
-      `    ${finding.severity || "info"} ${finding.code || ""} - ${String(finding.message || "").slice(0, 140)}`
-    );
+  if (!args.quiet) {
+    console.log(`  check:   ${errors} error(s), ${warnings} warning(s)`);
+    for (const finding of findings.slice(0, 5)) {
+      console.log(
+        `    ${finding.severity || "info"} ${finding.code || ""} - ${String(finding.message || "").slice(0, 140)}`
+      );
+    }
   }
   if (errors && args.strict) {
     fail(`HyperFrames check failed with ${errors} error(s). Fix them or build without --strict.`);
@@ -6518,11 +7396,79 @@ function runHyperFramesCheck(engineDir, args = {}) {
   return report;
 }
 
+function installBlockIfNeeded(project, element, args = {}) {
+  const name = blockName(element);
+  const localDir = path.join(project.dir, "style", "blocks", name);
+  const localCompositions = path.join(localDir, "compositions");
+  const localHtml = path.join(localCompositions, `${name}.html`);
+  if (exists(localHtml)) return { name, localCompositions };
+
+  if (!args["allow-download"]) {
+    fail(
+      `Block "${name}" is not installed.\n` +
+        `  ${blockInstallHint({ name })}\n` +
+        `  Or re-run build with --allow-download to fetch it into style/blocks/${name}.`
+    );
+  }
+  const bin = hyperFramesBin();
+  if (!bin) fail("HyperFrames is required to install registry blocks.");
+  const tmp = path.join(project.dir, "work", "tmp", `block-${name}-${Date.now()}`);
+  ensureDir(tmp);
+  const varsFile = path.join(tmp, "vars.json");
+  writeJson(varsFile, blockVars(element));
+  console.log(`  block:   installing ${name} from the HyperFrames registry ...`);
+  const added = run("node", [bin, ...blockAddArgs({ name, dir: tmp, varsFile })], {
+    timeout: 10 * 60 * 1000,
+  });
+  if (!added.ok) {
+    fail(`Could not install block "${name}":\n${added.stderr || added.stdout || "unknown error"}`);
+  }
+  ensureDir(localCompositions);
+  copyDir(path.join(tmp, "compositions"), localCompositions);
+  removeDirRobust(tmp);
+  writeJson(path.join(localDir, "installed.json"), {
+    schema: "rooster.block/v1",
+    name,
+    installedAt: now(),
+    source: "hyperframes-registry",
+    vars: blockVars(element),
+  });
+  return { name, localCompositions };
+}
+
+function copyBlockAssets(project, plan, engineDir) {
+  const planWidth = Number(plan.format?.width) || 1920;
+  const planHeight = Number(plan.format?.height) || 1080;
+  for (const element of (plan.elements || []).filter(isBlockElement)) {
+    const { name, localCompositions } = installBlockIfNeeded(project, element, { "allow-download": false });
+    const file = path.join(localCompositions, `${name}.html`);
+    if (exists(file)) {
+      const html = fs.readFileSync(file, "utf8");
+      const width = Number(html.match(/data-width="(\d+)"/)?.[1]) || null;
+      const height = Number(html.match(/data-height="(\d+)"/)?.[1]) || null;
+      if (width && height && (Math.abs(width - planWidth) > 1 || Math.abs(height - planHeight) > 1)) {
+        console.warn(
+          `  ! block ${name} is ${width}x${height}; the plan is ${planWidth}x${planHeight}. ` +
+            `The scene may crop or scale; use a block with the same format or edit the block.`
+        );
+      }
+    }
+    copyDir(localCompositions, path.join(engineDir, "compositions"));
+  }
+}
+
 function buildHyperFrames(project, plan, args) {
   const engineDir = path.join(project.dir, "engine", "hyperframes");
   if (exists(engineDir) && !args.force) {
     fail(`HyperFrames project already exists at ${engineDir}. Use --force to rebuild it.`);
   }
+
+  // Resolve/install blocks before deleting the previous engine, so a missing
+  // block never costs the user the last build.
+  for (const element of (plan.elements || []).filter(isBlockElement)) {
+    installBlockIfNeeded(project, element, args);
+  }
+
   const engineCacheDir = path.join(cacheRoot(WORKSPACE), "engine-cache", project.slug);
   if (exists(engineDir)) {
     try {
@@ -6547,6 +7493,7 @@ function buildHyperFrames(project, plan, args) {
     format: { ...resolvePlanFormat(project, plan), duration: base.duration },
   };
   resolveCustomElements(project, finalPlan);
+  copyBlockAssets(project, finalPlan, engineDir);
   copyElementAssets(project.dir, finalPlan, path.join(engineDir, "assets"), "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
 
@@ -6992,8 +7939,9 @@ function filmCraftCliOrFail() {
 function filmCraftElementEngine(args, plan, project) {
   let engine = args.engine && args.engine !== "filmcraft" ? args.engine : project.config.engine || "auto";
   if (engine === "auto") {
-    const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
-    engine = has3d ? "remotion" : "hyperframes";
+    // Registry blocks and the generated plan only run in HyperFrames. A
+    // hand-written Three.js scene in Remotion is opt-in with --engine remotion.
+    engine = "hyperframes";
   }
   if (!["hyperframes", "remotion"].includes(engine)) {
     fail(`FilmCraft elements need HyperFrames or Remotion; got "${engine}".`);
@@ -7963,14 +8911,24 @@ function buildFilmCraft(project, plan, args) {
   const plannedDuration = Number(remapped.duration) || Number(format.duration) || 0;
   const baseKey = planMediaKey(project, plan, remapped.keeps, args).mediaKey;
   const filmcraftVersion = filmCraftVersion(cli);
-  const elementEngineDir = engine === "hyperframes" ? paths.hyperframesDir : paths.remotionDir;
-  const elementEngineInfo = engineVersion(engine, {
-    workspace: WORKSPACE,
-    cwd: elementEngineDir,
-    home: ROOSTER_HOME,
-    projectDir: elementEngineDir,
-  });
-  const elementEngineVersion = elementEngineInfo?.version || "missing";
+  const elementEngines = new Set([engine]);
+  for (const element of remapped.plan.elements || []) {
+    const resolved = elementEngine(element, engine);
+    if (resolved) elementEngines.add(resolved);
+  }
+  const elementEngineVersion = Array.from(elementEngines)
+    .sort()
+    .map((name) => {
+      const dir = name === "hyperframes" ? paths.hyperframesDir : paths.remotionDir;
+      const info = engineVersion(name, {
+        workspace: WORKSPACE,
+        cwd: dir,
+        home: ROOSTER_HOME,
+        projectDir: dir,
+      });
+      return `${name}-${info?.version || "missing"}`;
+    })
+    .join(";");
 
   let state = exists(paths.statePath) ? readJson(paths.statePath, null) : null;
   if (state && state.schema !== "rooster.filmcraft/v1") state = null;
@@ -8033,10 +8991,16 @@ function buildFilmCraft(project, plan, args) {
   const duration = Number(base.duration) || plannedDuration;
   const finalPlan = { ...remapped.plan, duration, format: { ...format, duration } };
   const customElements = (finalPlan.elements || []).filter(isCustomElement);
-  if (customElements.length && engine !== "hyperframes") {
+  const offEngineCustom = customElements.filter(
+    (element) => elementEngine(element, engine) !== "hyperframes"
+  );
+  if (offEngineCustom.length) {
+    const list = offEngineCustom
+      .map((element) => element.id || element.type || "custom")
+      .join(", ");
     fail(
-      `Custom HTML/JS elements need --engine hyperframes; ${engine} cannot execute them. ` +
-        `Remove the custom element(s) or change the element engine.`
+      `Custom HTML/JS elements need HyperFrames: ${list}. ` +
+        `Remove "engine": "remotion" from them, set "engine": "hyperframes", or delete them.`
     );
   }
   if (customElements.length) resolveCustomElements(project, finalPlan);
@@ -8051,7 +9015,9 @@ function buildFilmCraft(project, plan, args) {
     duration,
   }).filter((marker) => Number(marker.time) >= 0 && Number(marker.time) <= duration + 0.001);
 
-  const rendered = renderFilmCraftElements(project, finalPlan, specs, theme, engine, args, paths);
+  const rendered = groupSpecsByEngine(specs, engine).flatMap((group) =>
+    renderFilmCraftElements(project, finalPlan, group.specs, theme, group.engine, args, paths)
+  );
   const captionsFile = filmCraftCaptionsFile(project);
   const nextState = syncFilmCraftProject({
     project,
@@ -8176,7 +9142,7 @@ function buildCommand(args) {
     } else {
       fail(
         `${unsupported.length} element(s) cannot render in ${validationEngine}:\n${message}\n` +
-          "Use --engine hyperframes/remotion, remove those elements, or pass --allow-skipped-elements to build without them."
+          "Use --target filmcraft for a mixed plan, --engine hyperframes/remotion for a single one, or remove those elements."
       );
     }
   }
@@ -9321,13 +10287,17 @@ Commands:
   multicam <slug> [options]       Normalize cameras, J/L cuts, and speed ramps
   build <slug> [options]          Build a HyperFrames, Remotion, or FilmCraft timeline from the plan
   timeline <slug> [--open]        Show or open the FilmCraft project
-  filmcraft status|setup|open     Detect FilmCraft, connect MCP, open a timeline
+  filmcraft status|setup|mcp-config|open  Detect FilmCraft, connect the MCP, open a timeline
   feedback [slug] [options]       Draft or create a redacted GitHub issue
   export <slug> [options]         Export cuts to EDL/FCPXML for DaVinci or Premiere
   ingest <slug> --url <url>       Download a link with yt-dlp
   ingest <slug> --file <path>     Copy a local media file
   preview <slug> [--open]         Write preview/index.html with player and timeline
+  watch <slug> [--open]           Live page: stages, timing, media, renders (hot reload)
   frames <slug> [options]         Extract QA frames and a contact sheet
+  qa <slug> [--draft|--final]     Run QA: audio, cuts, faces, plan, and optional frames
+  ocr <slug> --at <s> [options]   OCR a frame with a native or installed provider
+  tools list|install|remove       Optional local tools (OCR), outside the skill package
   cache info|path|clear|gc        Inspect or clean the workspace cache
   render <slug> [--draft|--final] Render with the engine (cache-aware)
 
@@ -9409,6 +10379,8 @@ Reframe options:
   --mode <id>                     center | left | right | focus
   --focus-x <0..1>                Horizontal focus for mode=focus
   --focus-y <0..1>                Vertical focus for mode=focus
+  --focus auto                    Use the median face box as the focus (HyperFrames measure face)
+  --focus-samples <n>             Frames sampled for --focus auto (default: 16)
   --update-plan                   Point plan.source at the reframed file
 
 B-roll options:
@@ -9427,6 +10399,36 @@ Frames options:
   --scale <px>                    Frame width (default: 480)
   --sheet-only                    Write only the contact sheet
   --json                          Machine-readable output
+
+QA options:
+  --video <path>                  Deliverable to inspect (default: final/draft/plan.source)
+  --draft | --final               Record the quality in the report
+  --faces                         Measure the face even without presenter cues
+  --no-faces                      Skip the face measurement
+  --samples <n>                   Frames sampled for the face (default: 16)
+  --no-events                     Skip the cut/event measurement
+  --no-check                      Skip \`hyperframes check\`
+  --lufs <n>                      Loudness target (default: -14; podcast -16, broadcast -23)
+  --vision                        Extract up to 5 frames at the flagged times
+  --fix-audio                     Write a loudness-corrected copy next to the render
+  --refresh                       Ignore the cached qa/qa.json
+  --strict                        Exit 1 on warnings too
+  --json                          Machine-readable output
+
+OCR options:
+  --image <path>                  OCR a still instead of a video frame
+  --input <path>                  Video (default: plan.source)
+  --at <seconds>                  Frame time (default: 0)
+  --lang <code>                   Language (default: project language)
+  --provider <id>                 winrt | vision | tesseract | wasm (default: auto)
+  --out <path>                    Output JSON or directory (default: qa/ocr)
+  --refresh                       Ignore the cached result
+  --json                          Machine-readable output
+
+Tools options:
+  --json                          Machine-readable output
+  --approve                       Allow the download (tools install only)
+  --language <code>               Language to prepare later (optional)
 
 Cache options:
   --max-size <size>               GC limit, e.g. 20GB (default: 20GB)
@@ -9473,6 +10475,7 @@ Build options:
   --cut-fade <seconds>            Audio micro-fade at each cut (default: 0.035; 0 disables)
   --no-check                      Skip the HyperFrames check after the build
   --strict                        Fail the build when HyperFrames reports an error
+  --allow-download                Allow fetching a missing 3D/registry block into style/blocks
 
 HyperFrames CLI options:
   --query <text>                  Catalog search
@@ -9549,6 +10552,7 @@ New project options:
   --style <id>                    user | profile | ai | reference
   --autonomy <id>                 auto | guided | manual
   --assets <id>                   user | link | library | generated | none | mixed
+  --no-watch                      Create the project without starting the live page
   --force                         Overwrite an existing project
 
 Open options:
@@ -9583,6 +10587,22 @@ Channel design options:
   --style <text>                  Visual prompt for generated assets
   --negative <text>               What to avoid
   --force                         Update or overwrite an existing channel profile
+
+FilmCraft options:
+  --client <id>                   opencode (default) | claude
+  --bridge <port|host:port>       Attach the MCP to the open app; start it with filmcraft --control <port>
+  --write                         Merge the MCP entry into the project config (keeps a .bak)
+  --json                          Machine-readable output
+
+Watch options:
+  --port <n>                      Fixed port (default: a free one)
+  --open                          Open the page in the browser (default on new)
+  --no-open                       Print the URL without opening a browser
+  --stop                          Stop the server running for this project
+  --serve                         Foreground mode (used by the detached child)
+  --interval <ms>                 Refresh interval (default 1000)
+  --json                          Machine-readable output
+  --no-watch                      new: create the project without starting the live page
 
 Environment:
   ROOSTER_WORKSPACE               Workspace path (default: ./rooster)
@@ -9718,13 +10738,21 @@ function filmcraftCommand(args) {
           "or set ROOSTER_FILMCRAFT_CLI to the filmcraft-cli path."
       );
     }
-    const snippet = filmCraftMcpSnippet({ client, cli: found.cli });
+    let bridge = null;
+    try {
+      bridge = normalizeFilmCraftBridge(args.bridge);
+    } catch (error) {
+      fail(`${error.message} Start the app with \`filmcraft --control <port>\` and pass the same port to --bridge.`);
+    }
+    const snippet = filmCraftMcpSnippet({ client, cli: found.cli, bridge });
     if (args.json) {
       console.log(
         JSON.stringify(
           {
             client,
             cli: found.cli,
+            bridge,
+            mode: bridge ? "bridge" : "headless",
             snippet,
             restartRequired: true,
           },
@@ -9736,6 +10764,11 @@ function filmcraftCommand(args) {
     }
     heading(`FilmCraft MCP — ${client}`);
     console.log(`  Project config: ${client === "claude" ? path.join(CWD, ".mcp.json") : path.join(CWD, "opencode.json")}`);
+    console.log(
+      bridge
+        ? `  Mode: bridge (${bridge}) — the MCP talks to the open app; start it with \`filmcraft --control ${bridge.split(":").pop()}\``
+        : "  Mode: headless — the MCP opens its own copy, not the app you have open. Use --bridge <port> for live co-editing."
+    );
     if (path.resolve(CWD) === path.resolve(SKILL_ROOT)) {
       console.log("  ! You are in the skill repository. Run this from your project/workspace to write its config.");
     }
@@ -9744,6 +10777,7 @@ function filmcraftCommand(args) {
       const result = setupFilmCraftMcp({
         client,
         cli: found.cli,
+        bridge,
         write: true,
         cwd: CWD,
         home: os.homedir(),
@@ -10047,10 +11081,13 @@ async function main() {
       channelCommand(args);
       return;
     case "new":
-      newProject(args);
+      await newProject(args);
       return;
     case "open":
       openProject(args);
+      return;
+    case "watch":
+      await watchCommand(args);
       return;
     case "paths":
       pathsCommand(args);
@@ -10145,6 +11182,15 @@ async function main() {
       return;
     case "frames":
       framesCommand(args);
+      return;
+    case "qa":
+      qaCommand(args);
+      return;
+    case "ocr":
+      await ocrCommand(args);
+      return;
+    case "tools":
+      toolsCommand(args);
       return;
     case "render":
       await render(args);

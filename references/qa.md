@@ -4,6 +4,32 @@ QA has two jobs: catch technical defects before the user sees them, and catch ed
 
 Watch the draft end to end at least once before the final render. Sampling frames catches composition and safe-area issues; it does not catch a cut in the middle of a word, a caption that flashes, or a music cue that lands late. Run `textcheck <slug>` and review `qa/text-review.md` before approving.
 
+## Machine QA first
+
+Run `qa` before spending vision tokens:
+
+```bash
+node "<skill>/scripts/rooster.mjs" qa <slug> --draft
+node "<skill>/scripts/rooster.mjs" qa <slug> --draft --vision
+node "<skill>/scripts/rooster.mjs" qa <slug> --draft --fix-audio
+```
+
+`qa` is deterministic and cheap:
+
+- validates the plan (including cuts inside a word) and reports engine-support issues;
+- runs `hyperframes check` when the engine project exists (layout, contrast, craft, audio, runtime);
+- measures integrated loudness, true peak, clipping, and silence with `hyperframes audio`;
+- measures hard cuts and events with `hyperframes measure events`;
+- measures the face box when the plan has presenter cues (or `--faces`);
+- writes `qa/qa.json` (machine) and `qa/qa-report.md` (the 10-line review the main agent reads).
+
+Thresholds: -14 LUFS ±1 LU (override with `--lufs` for -16 podcast or -23 broadcast), true peak ≤ -1 dBTP, zero clipped samples, no middle silence longer than 2 s, render duration within 0.5 s of the plan. Errors fail the command; warnings are editorial decisions. `--strict` fails on warnings too.
+
+`--vision` extracts at most five JPEGs at the flagged times (or 3 evenly spaced frames when the report passes). A subagent looks at those frames; the main agent reads the handoff, not a contact sheet. `--fix-audio` writes a gain/limiter-corrected copy next to the render without touching the original.
+
+The checklists below remain the editorial and human-readability layer. `qa` does not replace watching the draft.
+
+
 ## Technical checklist
 
 ### Format
@@ -136,6 +162,12 @@ ffmpeg -i final.mp4 -af loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json -f null 
 
 # Extract stills
 ffmpeg -i final.mp4 -vf "select='eq(n,0)+eq(n,90)+eq(n,180)'" -vsync 0 frame-%02d.png
+
+# Machine QA (plan, audio, cuts, faces, optional frames)
+node "<skill>/scripts/rooster.mjs" qa <slug> --final --vision
+
+# OCR one frame (screen recordings, slides, UI text)
+node "<skill>/scripts/rooster.mjs" ocr <slug> --at 12.5 --lang pt-BR
 ```
 
 ## Report template
@@ -161,6 +193,7 @@ Write `qa/report.md`:
 
 ## Evidence
 - Frames: `qa/frames/`
+- Machine QA: `qa/qa.json`, `qa/qa-report.md`
 - Probe: `qa/probe.json`
 - Loudness: `qa/loudness.json`
 - Text review: `qa/text-review.md`

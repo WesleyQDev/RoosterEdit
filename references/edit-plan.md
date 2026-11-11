@@ -137,8 +137,11 @@ A cut is a removal from the source. Cleanup uses `cuts`. A condensed edit uses `
 | `transition` | Wipe, slide, fade between ideas |
 | `end-card` | CTA, subscribe, next video |
 | `custom` | Agent-authored HTML/CSS/GSAP or a reusable component |
+| `scene` | Registry block: 3D, WebGL, or a complex HTML composition |
 
 Each element needs `start`, `end`, and `description`. `text` is optional but encouraged for anything with words.
+
+`engine` is optional and per element: `hyperframes`, `remotion`, or `auto` (inherit the project element engine). Use it when one element needs a different renderer — a React/3D data scene in Remotion next to kinetic type in HyperFrames. A mixed plan is built with `--target filmcraft`, which renders one clip per element; a single-composition target (`--engine hyperframes|remotion`) still draws everything with one engine and the build reports the mismatch instead of silently switching.
 
 ## Time base
 
@@ -162,6 +165,7 @@ Do not rely on the generic card fallback. Pick a template and give it the data i
 | `end-card` | CTA | `{ title, sub }` |
 | `parallax` | A still or graphic built in layers, moved by a slow 2.5D camera | `{ kicker, sub, layers: [...], camera: { x, y, zoom } }` |
 | `custom` | Agent-authored HTML/CSS/GSAP | inline `html`, `css`, `animation`, or a `component` |
+| `block` | A HyperFrames registry block | `block: "<name>"` and optional `vars` |
 
 Use `role: "chapter"` on a `letreiro` when it is a section card. Chapter cards are exempt from transcript grounding.
 
@@ -226,9 +230,37 @@ The animation runs inside the composition timeline with these variables:
 
 Use `tl.fromTo(root.querySelector(...), ...)` and `start + 0.1`. Do not create a separate timeline; HyperFrames will not seek it. Put scripts in `element.js`/`animation`, not inline in `element.html`.
 
-Custom elements are trusted local HTML/CSS/JS. They are supported by HyperFrames (including the FilmCraft element path), not by Remotion. FilmCraft + Remotion fails with a clear message. Custom components should use inline SVG/CSS; for media, use a `broll` element so the asset pipeline and license tracking still apply.
+Custom elements are trusted local HTML/CSS/JS. HyperFrames renders them, including through the FilmCraft element path; Remotion cannot execute them. In a project whose default element engine is Remotion, set `"engine": "hyperframes"` on the element instead of switching the whole project. Custom components should use inline SVG/CSS; for media, use a `broll` element so the asset pipeline and license tracking still apply.
 
 The first time the agent invents a look that works, save it as a component. The next video can reuse it, and the channel's visual language accumulates instead of starting from zero.
+
+## 3D and registry blocks
+
+3D is a HyperFrames registry block, not a built-in template. Browse with `hyperframes catalog --tag three-js` or `--tag webgl`, then plan the block:
+
+```json
+{
+  "id": "el-030",
+  "type": "scene",
+  "template": "block",
+  "block": "extruded-logo",
+  "vars": { "text": "ROOSTER", "finish": "chrome" },
+  "start": 42.0,
+  "end": 47.0,
+  "description": "3D logo reveal between the demo and the CTA"
+}
+```
+
+The build resolves the block in `<project>/style/blocks/<name>/compositions/`. If it is not installed, the build stops with the exact `hyperframes add` command; pass `--allow-download` to fetch it once and keep a copy under `style/blocks/`, so `build --force` does not lose it. `vars` must be scalar values; the block schema is in its HTML (`data-composition-variables`).
+
+Rules:
+
+- Use `--engine hyperframes`; Remotion cannot run registry blocks.
+- Keep the planned duration close to the block's native duration. A large mismatch means the scene holds or cuts abruptly.
+- Keep the plan format equal to the block's native `data-width`/`data-height`. The build warns on a mismatch; a 1920 block in a 1280 project can crop the scene.
+- Blocks import Three.js from a CDN. The first build and render need network, or the browser cache from that first run. Do not claim an offline render without testing it.
+- After installing, snapshot a midpoint (`hyperframes snapshot --at <mid>`) before the full render. A blank 3D frame is usually a mount or asset-path defect.
+- A fully custom 3D scene written from scratch is still a `block`: save it in `style/blocks/<name>/compositions/<name>.html` and reuse it across videos.
 
 ## Parallax scenes
 

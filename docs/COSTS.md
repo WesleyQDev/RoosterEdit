@@ -19,6 +19,7 @@ AI video is not free, but you can separate what is required from what is optiona
 | DaVinci Resolve Studio | Paid, one-time license | NLE handoff with more control; the free version imports EDL/FCPXML manually. |
 | Paid TTS (ElevenLabs, OpenAI, etc.) | Per character/second | High-quality voice; Edge TTS and Piper are local/free alternatives. |
 | Stock, music, and fonts | Variable | Only with a recorded license; never use without knowing the source. |
+| OCR | Free | Native on Windows/macOS, Tesseract on Linux, or `tools install ocr-wasm` (~15 MB) into a user cache. |
 | Cloud render | Per minute/machine | Long or 4K videos; local render is usually enough. |
 | GPU | Hardware | Speeds up 3D and encodes; not required to start. |
 

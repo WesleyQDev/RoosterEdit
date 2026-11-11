@@ -68,7 +68,8 @@ RoosterEdit/
 │   ├── qa.md
 │   ├── nle-handoff.md
 │   ├── harness.md
-│   └── schemas.md
+│   ├── schemas.md
+│   └── features/{audio,broll,captions,charts,color,delivery,motion,multicam,ocr,reframe,tts}.md
 ├── scripts/
 │   ├── rooster.mjs
 │   ├── lib/
