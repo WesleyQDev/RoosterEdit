@@ -50,6 +50,7 @@ The plan is a file, the project stays editable, and the renderer is a choice, no
 </p>
 
 <p align="center">
+  <sub>Previews autoplay; click either one for the full video.</sub><br />
   <sub>Photos: Unsplash (CC0), via Wikimedia Commons. Music synthesized for this demo.</sub>
 </p>
 

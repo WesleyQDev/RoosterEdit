@@ -50,6 +50,7 @@ O plano é um arquivo, o projeto continua editável e o renderizador é uma esco
 </p>
 
 <p align="center">
+  <sub>As prévias rodam automaticamente; clique em uma para abrir o vídeo completo.</sub><br />
   <sub>Fotos: Unsplash (CC0), via Wikimedia Commons. Trilha sintetizada para esta demo.</sub>
 </p>
 
