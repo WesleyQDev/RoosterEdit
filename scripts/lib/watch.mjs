@@ -606,6 +606,91 @@ const MIME = {
 };
 
 /**
+ * Prepare an HTML artifact for the iframe.
+ *
+ * HyperFrames compositions keep their markup and styles inside `<template>`,
+ * which is inert until the runtime clones it; opened raw, they render blank.
+ * The harness clones every template and installs a no-op GSAP stub so the
+ * static first frame is visible. A bare fragment is wrapped in a dark document;
+ * a complete document is returned untouched.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function previewDocument(text) {
+  const source = String(text || "");
+  const hasHtml = /<html[\s>]/i.test(source);
+  const hasTemplate = /<template[\s>]/i.test(source);
+  const harness = `<style>html,body{background:#0b0d12;}</style><script>
+(function () {
+  if (!window.__timelines) window.__timelines = {};
+  var timeline = function () {
+    var api = { duration: function () { return 0; } };
+    ["seek","fromTo","to","from","set","add","pause","play","time","eventCallback","progress","stagger"].forEach(function (name) {
+      api[name] = function () { return api; };
+    });
+    return api;
+  };
+  if (!window.gsap) window.gsap = { timeline: timeline, fromTo: timeline, to: timeline, from: timeline, set: timeline };
+  document.querySelectorAll("template").forEach(function (node) {
+    var host = document.createElement("div");
+    host.style.cssText = "position:absolute;inset:0";
+    host.appendChild(node.content.cloneNode(true));
+    document.body.appendChild(host);
+    node.remove();
+  });
+})();
+</script>`;
+  if (hasHtml) {
+    if (!hasTemplate) return source;
+    return source.replace(/<\/body>/i, `${harness}</body>`);
+  }
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8" />${harness}</head><body>${source}</body></html>`;
+}
+
+/**
+ * Serve one video poster, generating it with FFmpeg on first request.
+ *
+ * @param {string} projectDir
+ * @param {string} relative
+ * @param {string} file
+ * @returns {{ok:true, file:string}|{ok:false}}
+ */
+export function ensurePoster(projectDir, relative, file) {
+  const info = stat(file);
+  if (!info) return { ok: false };
+  const dir = path.join(projectDir, "work", "watch", "posters");
+  const key = crypto
+    .createHash("sha1")
+    .update(`${relative}|${info.mtime}|${info.size}`)
+    .digest("hex")
+    .slice(0, 16);
+  const out = path.join(dir, `${key}.jpg`);
+  if (exists(out)) return { ok: true, file: out };
+  fs.mkdirSync(dir, { recursive: true });
+  const bin = process.env.ROOSTER_FFMPEG || "ffmpeg";
+  const result = runProcess(
+    bin,
+    ["-y", "-ss", "0.5", "-i", file, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "5", out],
+    { timeout: 15000 }
+  );
+  return result.status === 0 && exists(out) ? { ok: true, file: out } : { ok: false };
+}
+
+function runProcess(command, args, options = {}) {
+  try {
+    const child = spawnSync(command, args, {
+      timeout: options.timeout || 15000,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return { status: child.status, stdout: child.stdout || "", stderr: child.stderr || "" };
+  } catch (error) {
+    return { status: 1, stdout: "", stderr: String(error.message || error) };
+  }
+}
+
+/**
  * Minimal page shell. Inline CSS/JS so the page needs no build and no CDN.
  *
  * @returns {string}
@@ -653,7 +738,7 @@ export function watchHtml() {
   details { border:1px solid var(--line); border-radius:8px; padding:6px 9px; margin-bottom:6px; background:#0e1117; }
   details summary { cursor:pointer; font-size:12px; color:var(--fg); }
   details summary .muted { font-size:11px; }
-  details iframe { width:100%; height:360px; border:1px solid var(--line); border-radius:6px; background:#fff; margin-top:8px; }
+  details iframe { width:100%; height:360px; border:1px solid var(--line); border-radius:6px; background:#0b0d12; margin-top:8px; }
   pre.code { max-height:280px; margin-top:8px; }
   .links { display:flex; flex-direction:column; gap:4px; }
   pre { margin:0; font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--muted); white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto; }
@@ -737,57 +822,138 @@ export function watchHtml() {
         '<span class="chip">duration <b>' + (p.duration ? Math.round(p.duration) + "s" : "—") + '</b></span>'
       : '<span class="muted">No plan yet</span>';
 
-    $("media").innerHTML = state.images.length
-      ? state.images.map((img) => '<a href="' + fileUrl(img.relative) + '" target="_blank">' +
-          '<img loading="lazy" src="' + fileUrl(img.relative) + '" alt="' + esc(img.name) + '" />' +
-          '<span title="' + esc(img.relative) + '">' + esc(img.name) + '</span></a>').join("")
-      : '<span class="muted">Nothing generated yet</span>';
+    const files = state.files || { videos: [], images: [], html: [], code: [] };
 
-    const files = state.files || { videos: [], html: [], code: [] };
-
-    setSection("videos", files.videos, files.videos.map((v) =>
-      '<figure><video controls preload="none" src="' + fileUrl(v.relative) + '"></video>' +
-      '<figcaption title="' + esc(v.relative) + '">' + esc(v.name) + ' · ' + bytes(v.size) + '</figcaption></figure>'
-    ).join("") || '<span class="muted">No video yet</span>');
-
-    setSection("html", files.html, files.html.map((h) =>
-      '<details><summary>' + esc(h.relative) + ' <span class="muted">· ' + bytes(h.size) + '</span></summary>' +
-      '<iframe loading="lazy" src="' + fileUrl(h.relative) + '" title="' + esc(h.name) + '"></iframe>' +
-      '<div class="chips" style="margin-top:6px"><a class="chip" href="' + fileUrl(h.relative) +
-      '" target="_blank">open in a new tab</a></div></details>'
-    ).join("") || '<span class="muted">No HTML yet</span>');
-
-    setSection("code", files.code, files.code.map((c) => {
-      const src = fileUrl(c.relative);
-      const preview = c.renderable
-        ? '<iframe loading="lazy" src="/component/' + encodeURIComponent(c.relative) + '" title="' + esc(c.name) + '"></iframe>'
-        : "";
-      return '<details data-src="' + src + '"><summary>' + esc(c.relative) +
-        ' <span class="muted">· ' + bytes(c.size) + (c.renderable ? " · react" : "") +
-        (c.fixtureSource === "file" || c.fixtureSource === "manifest"
-          ? " · with props"
-          : c.fixtureSource === "inferred"
-            ? " · auto props"
-            : "") + '</span></summary>' +
-        preview + '<pre class="code muted">Open to load the file.</pre></details>';
-    }).join("") || '<span class="muted">No component yet</span>');
+    updateList("media", files.images || state.images, imageNode, (img) => img.name,
+      "Nothing generated yet");
+    updateList("videos", files.videos, videoNode, (v) => v.name + " · " + bytes(v.size),
+      "No video yet");
+    updateList("html", files.html, htmlNode, (h) => "· " + bytes(h.size), "No HTML yet");
+    updateList("code", files.code, codeNode, (c) =>
+      "· " + bytes(c.size) + (c.renderable ? " · react" : "") +
+      (c.fixtureSource === "file" || c.fixtureSource === "manifest"
+        ? " · with props"
+        : c.fixtureSource === "inferred"
+          ? " · auto props"
+          : ""), "No component yet");
 
     $("log").textContent = state.log && state.log.lines.length
       ? state.log.lines.join("\\n")
       : "No log yet";
   }
 
-  const esc = (value) => String(value == null ? "" : value)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
   const fileUrl = (relative) => "/file/" + String(relative).split("/").map(encodeURIComponent).join("/");
+  const posterUrl = (relative) => "/poster/" + String(relative).split("/").map(encodeURIComponent).join("/");
 
-  const sectionKeys = {};
-  function setSection(id, value, html) {
-    const key = JSON.stringify(value);
-    if (sectionKeys[id] === key) return;
-    sectionKeys[id] = key;
-    $(id).innerHTML = html;
+  const listNodes = {};
+  function updateList(id, items, create, meta, emptyText) {
+    const container = $(id);
+    const map = listNodes[id] || (listNodes[id] = new Map());
+    const keep = new Set(items.map((item) => item.relative));
+    for (const [key, node] of map) {
+      if (!keep.has(key)) { node.remove(); map.delete(key); }
+    }
+    items.forEach((item, index) => {
+      let node = map.get(item.relative);
+      if (!node) {
+        node = create(item);
+        node.dataset.key = item.relative;
+        map.set(item.relative, node);
+        container.insertBefore(node, container.children[index] || null);
+      }
+      const slot = node.querySelector("[data-meta]");
+      if (slot) slot.textContent = meta(item);
+    });
+    const placeholder = container.querySelector("[data-empty]");
+    if (items.length) {
+      if (placeholder) placeholder.remove();
+    } else if (!placeholder) {
+      const span = document.createElement("span");
+      span.className = "muted";
+      span.dataset.empty = "";
+      span.textContent = emptyText;
+      container.appendChild(span);
+    }
+  }
+
+  function imageNode(img) {
+    const link = document.createElement("a");
+    link.href = fileUrl(img.relative);
+    link.target = "_blank";
+    const image = document.createElement("img");
+    image.loading = "lazy";
+    image.src = fileUrl(img.relative);
+    image.alt = img.name;
+    const label = document.createElement("span");
+    label.dataset.meta = "";
+    link.appendChild(image);
+    link.appendChild(label);
+    return link;
+  }
+
+  function videoNode(video) {
+    const figure = document.createElement("figure");
+    const player = document.createElement("video");
+    player.controls = true;
+    player.preload = "metadata";
+    player.poster = posterUrl(video.relative);
+    player.src = fileUrl(video.relative) + "#t=0.1";
+    const label = document.createElement("figcaption");
+    label.dataset.meta = "";
+    figure.appendChild(player);
+    figure.appendChild(label);
+    return figure;
+  }
+
+  function htmlNode(file) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.appendChild(document.createTextNode(file.relative + " "));
+    const label = document.createElement("span");
+    label.className = "muted";
+    label.dataset.meta = "";
+    summary.appendChild(label);
+    const frame = document.createElement("iframe");
+    frame.loading = "lazy";
+    frame.src = fileUrl(file.relative);
+    frame.title = file.name;
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    chips.style.marginTop = "6px";
+    const link = document.createElement("a");
+    link.className = "chip";
+    link.href = fileUrl(file.relative);
+    link.target = "_blank";
+    link.textContent = "open in a new tab";
+    chips.appendChild(link);
+    details.appendChild(summary);
+    details.appendChild(frame);
+    details.appendChild(chips);
+    return details;
+  }
+
+  function codeNode(file) {
+    const details = document.createElement("details");
+    details.dataset.src = fileUrl(file.relative);
+    const summary = document.createElement("summary");
+    summary.appendChild(document.createTextNode(file.relative + " "));
+    const label = document.createElement("span");
+    label.className = "muted";
+    label.dataset.meta = "";
+    summary.appendChild(label);
+    details.appendChild(summary);
+    if (file.renderable) {
+      const frame = document.createElement("iframe");
+      frame.loading = "lazy";
+      frame.src = "/component/" + encodeURIComponent(file.relative);
+      frame.title = file.name;
+      details.appendChild(frame);
+    }
+    const pre = document.createElement("pre");
+    pre.className = "code muted";
+    pre.textContent = "Open to load the file.";
+    details.appendChild(pre);
+    return details;
   }
 
   $("code").addEventListener("toggle", (event) => {
@@ -919,6 +1085,19 @@ export async function startWatchServer(options) {
       res.end(body);
       return;
     }
+    if (url.pathname.startsWith("/poster/")) {
+      const relative = decodeURIComponent(url.pathname.slice("/poster/".length));
+      const file = safeFile(projectDir, relative);
+      const poster = file ? ensurePoster(projectDir, relative, file) : { ok: false };
+      if (!poster.ok) {
+        res.writeHead(404, { "content-type": "text/plain" });
+        res.end("No poster");
+        return;
+      }
+      res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "max-age=60" });
+      fs.createReadStream(poster.file).pipe(res);
+      return;
+    }
     if (url.pathname.startsWith("/file/")) {
       const relative = decodeURIComponent(url.pathname.slice("/file/".length));
       const file = safeFile(projectDir, relative);
@@ -927,8 +1106,38 @@ export async function startWatchServer(options) {
         res.end("Not found");
         return;
       }
+      const type = MIME[path.extname(file).toLowerCase()] || "application/octet-stream";
+      if (type.startsWith("text/html")) {
+        const info = stat(file);
+        const text = info && info.size < 4 * 1024 * 1024 ? fs.readFileSync(file, "utf8") : null;
+        res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
+        res.end(text === null ? fs.readFileSync(file) : previewDocument(text));
+        return;
+      }
+      const info = stat(file);
+      const range = req.headers.range;
+      if (info && typeof range === "string" && /^bytes=/.test(range)) {
+        const [startRaw, endRaw] = range.replace(/^bytes=/, "").split("-");
+        const start = Math.max(0, Number(startRaw) || 0);
+        const end = endRaw ? Math.min(Number(endRaw) || 0, info.size - 1) : info.size - 1;
+        if (start >= info.size || end < start) {
+          res.writeHead(416, { "content-range": `bytes */${info.size}` });
+          res.end();
+          return;
+        }
+        res.writeHead(206, {
+          "content-type": type,
+          "content-length": end - start + 1,
+          "content-range": `bytes ${start}-${end}/${info.size}`,
+          "accept-ranges": "bytes",
+          "cache-control": "no-store",
+        });
+        fs.createReadStream(file, { start, end }).pipe(res);
+        return;
+      }
       res.writeHead(200, {
-        "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
+        "content-type": type,
+        "accept-ranges": "bytes",
         "cache-control": "no-store",
       });
       fs.createReadStream(file).pipe(res);

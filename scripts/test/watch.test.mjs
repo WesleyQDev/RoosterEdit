@@ -12,6 +12,7 @@ import {
   findPreviewFixture,
   inferDefaultProps,
   inferPropNames,
+  previewDocument,
   readWatch,
   readWatchState,
   resolveComponentFixture,
@@ -179,6 +180,67 @@ test("componentShell renders a root node for a bundle and escapes the error", ()
   const error = componentShell({ title: "Scene", error: 'unexpected <token> & "quote"' });
   assert.match(error, /unexpected &lt;token&gt; &amp; &quot;quote&quot;/);
   assert.doesNotMatch(error, /<script src=/);
+});
+
+test("previewDocument clones HyperFrames templates and wraps fragments", () => {
+  const composition = `<!doctype html><html><head></head><body><template><style>.a{color:red}</style><div id="root">hi</div></template></body></html>`;
+  const prepared = previewDocument(composition);
+  assert.match(prepared, /querySelectorAll\("template"\)/);
+  assert.match(prepared, /<div id="root">hi<\/div>/);
+  assert.match(prepared, /<\/script><\/body>/);
+  assert.match(prepared, /html,body\{background:#0b0d12;\}/);
+
+  const page = "<!doctype html><html><body><h1>Preview</h1></body></html>";
+  assert.equal(previewDocument(page), page);
+
+  const fragment = '<div class="card">Fragment</div>';
+  const wrapped = previewDocument(fragment);
+  assert.match(wrapped, /^<!doctype html>/);
+  assert.match(wrapped, /<body><div class="card">Fragment<\/div><\/body>/);
+});
+
+test("HTML artifacts are served with the template harness and posters degrade", async (t) => {
+  const root = tempProject(t);
+  fs.mkdirSync(path.join(root, "engine", "hyperframes", "compositions"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "engine", "hyperframes", "compositions", "el-1.html"),
+    '<!doctype html><html><body><template><div id="root">composition</div></template></body></html>'
+  );
+  fs.writeFileSync(path.join(root, "renders", "draft.mp4"), Buffer.alloc(1024));
+
+  const server = await startWatchServer({ projectDir: root, port: 0, intervalMs: 500 });
+  t.after(() => server.close());
+
+  const html = await (await fetch(`${server.url}file/engine/hyperframes/compositions/el-1.html`)).text();
+  assert.match(html, /querySelectorAll\("template"\)/);
+
+  const full = await fetch(`${server.url}file/renders/draft.mp4`, {
+    headers: { range: "bytes=0-99" },
+  });
+  assert.equal(full.status, 206);
+  assert.equal(full.headers.get("content-range"), "bytes 0-99/1024");
+  assert.equal(full.headers.get("accept-ranges"), "bytes");
+  assert.equal((await full.arrayBuffer()).byteLength, 100);
+
+  const previous = process.env.ROOSTER_FFMPEG;
+  process.env.ROOSTER_FFMPEG = "rooster-ffmpeg-that-does-not-exist";
+  try {
+    const poster = await fetch(`${server.url}poster/renders/draft.mp4`);
+    assert.equal(poster.status, 404);
+  } finally {
+    if (previous === undefined) delete process.env.ROOSTER_FFMPEG;
+    else process.env.ROOSTER_FFMPEG = previous;
+  }
+
+  const missingPoster = await fetch(`${server.url}poster/renders/nope.mp4`);
+  assert.equal(missingPoster.status, 404);
+});
+
+test("watchHtml requests posters and metadata for videos", () => {
+  const html = watchHtml();
+  assert.match(html, /posterUrl\(/);
+  assert.match(html, /preload = "metadata"/);
+  assert.match(html, /#t=0\.1/);
 });
 
 test("findPreviewFixture prefers the sibling fixture and ignores the component itself", (t) => {
