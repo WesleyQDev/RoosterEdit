@@ -103,8 +103,10 @@ import {
 import {
   DEFAULT_PAD,
   TIGHTEN_STANDARD,
+  clampCutsToWords,
   fillerCuts,
   normalizeProtect,
+  overcutWarning,
   parseProtect,
   parseSilencedetect,
   retakeReport,
@@ -3630,7 +3632,7 @@ function tightenCommand(args) {
   const fillers = args.fillers ? fillerCuts(transcript, { protect }) : [];
   const retakes = retakeReport(transcript);
   const retakeCuts = args.retakes ? retakes.cueCuts : [];
-  const cuts = mergeSilenceCuts(pauses, [...fillers, ...retakeCuts]);
+  const cuts = clampCutsToWords(mergeSilenceCuts(pauses, [...fillers, ...retakeCuts]), transcript);
   const removed = cuts.reduce((sum, cut) => sum + (cut.end - cut.start), 0);
   const finalDuration = Math.max(0, duration - removed);
   const ratio = duration > 0 ? removed / duration : 0;
@@ -3639,6 +3641,10 @@ function tightenCommand(args) {
     return map;
   }, {});
   let written = false;
+  const overcut = overcutWarning(ratio, { usedAudio });
+  if (args.write && overcut && !args.force) {
+    fail(`${overcut}\nReview the list above, then run with --force if it is what you want.`);
+  }
 
   if (args.write) {
     if (!plan) fail(`No plan at ${planPath}. Create the plan first.`);
@@ -3671,6 +3677,7 @@ function tightenCommand(args) {
           removedRatio: Number(ratio.toFixed(3)),
           byReason,
           possibleRetakes: retakes.possibleRetakes,
+          overcut,
           written,
         },
         null,
@@ -3700,11 +3707,23 @@ function tightenCommand(args) {
   }
   if (cuts.length > shown.length) console.log(`  . ${cuts.length - shown.length} more`);
   if (retakes.possibleRetakes.length) {
-    console.log(`  ? ${retakes.possibleRetakes.length} possible retake(s); review the plan before cutting them`);
+    console.log(`\n  ? ${retakes.possibleRetakes.length} possible retake(s) — review before cutting:`);
+    for (const item of retakes.possibleRetakes.slice(0, 10)) {
+      const range = item.cut
+        ? `${precise(item.cut.start)}-${precise(item.cut.end)}`
+        : `${precise(item.start)}-${precise(item.end)}`;
+      const score = item.score ? ` ${item.score}` : "";
+      console.log(`    ${range}  ${item.kind}${score}  ${String(item.text || "").slice(0, 70)}`);
+    }
+    if (retakes.possibleRetakes.length > 10) {
+      console.log(`    . ${retakes.possibleRetakes.length - 10} more (see --json)`);
+    }
+    console.log("    A repeat is a review hint, not a cut: fix it in edit/plan.json.");
   }
   if (ratio > 0.25) {
     console.log(`  ! ${Math.round(ratio * 100)}% removed; confirm this is cleanup, not a highlight edit`);
   }
+  if (overcut) console.log(`  ! ${overcut}`);
   if (written) {
     console.log(`\n  Wrote ${planPath} (editMode: cleanup).`);
   } else {

@@ -437,6 +437,17 @@ timestamps when they exist, subtracts `plan.protect`, and proposes `cuts` with
 `reason: "long-pause"`. Leading and trailing dead air are removed entirely.
 When the audio cannot be analyzed, it falls back to transcript gaps and says so.
 
+Every proposed cut is then clamped to word boundaries: a cut that would start
+or end inside a word expands to the word edges instead of splitting the audio.
+That is the last line of defense against "cut in the middle of the word" when
+Whisper timestamps are slightly off.
+
+`--write` refuses to save a pass that removes more than 35% of the source when
+the transcript-gap fallback was used (approximate), or more than 75% with audio
+analysis. The message asks for `--force` after reviewing the list. Real dead air
+can exceed those numbers on a raw recording; the guard exists so an accidental
+over-cut is never silent.
+
 Flags exist for edge cases, not as styles: `--min`, `--beat`, `--lead`,
 `--min-cut`, `--noise`, `--audio-min`, `--no-audio`, and `--protect 12-18,1:02-1:05`.
 
@@ -445,7 +456,15 @@ Flags exist for edge cases, not as styles: `--min`, `--beat`, `--lead`,
   never clipped. "mm hmm" as agreement stays.
 - `--retakes` also cuts a short segment that is itself a retake cue ("deixa eu
   repetir"). Repeated takes are only **listed** in the JSON as
-  `possibleRetakes`; the agent or the user decides which take stays.
+  `possibleRetakes`; the agent or the user decides which take stays. The repeat
+  test compares the first eight words with a fuzzy score (default 0.75), so a
+  mis-transcribed word does not hide the retake; the list prints the time range,
+  the score, and the text of the earlier take. A repeat is a review hint, not a
+  cut.
+- Whisper confidence is not stored in `edit/transcript.json`, so low-confidence
+  words cannot be flagged: the fuzzy retake list and the word-boundary clamp are
+  the safety net. When a line looks garbled, listen to it instead of trusting
+  the transcript.
 - `--write` merges the new cuts into `edit/plan.json`, sets
   `editMode: "cleanup"`, and leaves non-silence cuts alone. `--replace`
   discards the existing cuts first; `--force` is required if the plan uses

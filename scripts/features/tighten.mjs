@@ -372,12 +372,101 @@ export function fillerCuts(transcript, options = {}) {
 }
 
 /**
+ * Dice similarity between two token lists, 0..1.
+ *
+ * @param {string[]} a
+ * @param {string[]} b
+ * @returns {number}
+ */
+export function tokenSimilarity(a, b) {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  if (!left.length || !right.length) return 0;
+  const counts = new Map();
+  for (const token of left) counts.set(token, (counts.get(token) || 0) + 1);
+  let shared = 0;
+  for (const token of right) {
+    const remaining = counts.get(token) || 0;
+    if (remaining > 0) {
+      shared += 1;
+      counts.set(token, remaining - 1);
+    }
+  }
+  return (2 * shared) / (left.length + right.length);
+}
+
+/**
+ * Warn when a cleanup pass removes too much to be a cleanup.
+ *
+ * Audio-driven cuts are trusted up to 75% of the source (a raw recording can
+ * carry a lot of dead air). The transcript-gap fallback is approximate, so its
+ * limit is 35%. Above the limit the caller should refuse to write without
+ * `--force`.
+ *
+ * @param {number} ratio Removed seconds / source seconds.
+ * @param {{usedAudio?: boolean}} [options]
+ * @returns {string|null}
+ */
+export function overcutWarning(ratio, options = {}) {
+  const value = Number(ratio);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const limit = options.usedAudio === false ? 0.35 : 0.75;
+  if (value <= limit) return null;
+  const percent = Math.round(value * 100);
+  return (
+    `${percent}% of the source would be removed, which is a highlight edit, not cleanup. ` +
+    (options.usedAudio === false
+      ? "The transcript-gap fallback is approximate because the audio was not analyzed. "
+      : "") +
+    "Review the cut list; pass --force to write it anyway."
+  );
+}
+
+/**
+ * Keep every cut out of the middle of a word.
+ *
+ * Whisper word timestamps are the best boundary signal available. When a cut
+ * starts or ends inside a word, expand it to the word edges; a cut that would
+ * swallow a word is expanded, never split. Cuts outside any word are untouched.
+ *
+ * @param {Array<{start:number,end:number}>} cuts
+ * @param {object} transcript
+ * @returns {Array<object>} New cuts, sorted by start.
+ */
+export function clampCutsToWords(cuts, transcript) {
+  const words = (Array.isArray(transcript?.words) ? transcript.words : [])
+    .filter(validSpan)
+    .map((word) => ({ start: Number(word.start), end: Number(word.end) }))
+    .sort((a, b) => a.start - b.start);
+  const list = (Array.isArray(cuts) ? cuts : []).filter(validSpan);
+  if (!words.length) return list.map((cut) => ({ ...cut }));
+
+  const clamped = [];
+  for (const cut of list) {
+    let start = Number(cut.start);
+    let end = Number(cut.end);
+    for (const word of words) {
+      if (word.end <= start || word.start >= end) continue;
+      if (word.start < start && word.end > start) start = word.start;
+      if (word.start < end && word.end > end) end = word.end;
+    }
+    if (end - start <= 0.001) continue;
+    clamped.push({ ...cut, start: round3(start), end: round3(end) });
+  }
+  return clamped.sort((a, b) => a.start - b.start);
+}
+
+/**
  * Retake report. Only a short segment that is itself a retake cue is cut
  * automatically; repeated takes are listed for the agent or the user to
  * decide. The last take is the one that stays.
  *
+ * Two takes are compared by their first eight words with a fuzzy score, so a
+ * mis-transcribed word in the second take does not hide the retake. The report
+ * is a review list: nothing here is cut unless the caller asks for `--retakes`.
+ *
  * @param {object} transcript
- * @param {{within?:number}} [options]
+ * @param {{within?:number, threshold?:number}} [options]
  * @returns {{cueCuts:Array<object>,possibleRetakes:Array<object>}}
  */
 export function retakeReport(transcript, options = {}) {
@@ -415,23 +504,28 @@ export function retakeReport(transcript, options = {}) {
     }
   }
   const seen = new Set();
+  const threshold = Math.min(1, Math.max(0.4, toNumber(options.threshold, 0.75)));
   for (let index = 0; index < segments.length; index += 1) {
-    const first = normalizeText(segments[index].text).split(" ").filter(Boolean).slice(0, 4).join(" ");
-    if (first.split(" ").length < 4) continue;
+    const first = normalizeText(segments[index].text).split(" ").filter(Boolean).slice(0, 8);
+    if (first.length < 4) continue;
     for (let other = index + 1; other < segments.length; other += 1) {
       const candidate = segments[other];
       if (candidate.start - segments[index].end > within) break;
-      const second = normalizeText(candidate.text).split(" ").filter(Boolean).slice(0, 4).join(" ");
-      if (first !== second) continue;
-      const key = `${segments[index].start}-${candidate.start}`;
+      const second = normalizeText(candidate.text).split(" ").filter(Boolean).slice(0, 8);
+      const score = tokenSimilarity(first, second);
+      if (score < threshold) continue;
+      const key = `${round3(segments[index].start)}-${round3(candidate.start)}`;
       if (seen.has(key)) continue;
       seen.add(key);
       possibleRetakes.push({
         kind: "repeat",
+        score: Number(score.toFixed(2)),
         cut: { start: round3(segments[index].start), end: round3(segments[index].end) },
         keep: { start: round3(candidate.start), end: round3(candidate.end) },
         text: segments[index].text.slice(0, 120),
-        reason: "Two takes open the same way. Keep the stronger one; nothing is cut automatically.",
+        keepText: candidate.text.slice(0, 120),
+        reason:
+          "Two takes open almost the same way; a mis-transcribed word no longer hides the retake. Keep the stronger one; nothing is cut automatically.",
       });
     }
   }

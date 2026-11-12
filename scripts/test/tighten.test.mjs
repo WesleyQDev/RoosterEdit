@@ -2,13 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  clampCutsToWords,
   fillerCuts,
   normalizeProtect,
+  overcutWarning,
   parseProtect,
   parseSilencedetect,
   retakeReport,
   snapCut,
   tightenCuts,
+  tokenSimilarity,
   transcriptGaps,
 } from "../features/tighten.mjs";
 
@@ -143,4 +146,70 @@ test("normalizeProtect merges overlaps and keeps the first reason", () => {
       { start: 10, end: 13, reason: "laugh" },
     ]
   );
+});
+
+test("retakeReport tolerates a mis-transcribed word in the repeat", () => {
+  const transcript = {
+    segments: [
+      { start: 0, end: 4, text: "Hoje eu vou falar sobre o primeiro passo do projeto" },
+      { start: 9, end: 13, text: "Hoje eu vou fala sobre o primeiro passo do projeto" },
+    ],
+  };
+  const report = retakeReport(transcript);
+  assert.equal(report.possibleRetakes.length, 1);
+  const item = report.possibleRetakes[0];
+  assert.equal(item.kind, "repeat");
+  assert.ok(item.score >= 0.6);
+  assert.deepEqual([item.cut.start, item.cut.end], [0, 4]);
+  assert.deepEqual([item.keep.start, item.keep.end], [9, 13]);
+});
+
+test("retakeReport ignores unrelated takes", () => {
+  const transcript = {
+    segments: [
+      { start: 0, end: 4, text: "Hoje eu vou falar sobre o primeiro passo do projeto" },
+      { start: 9, end: 13, text: "A outra ideia era mostrar o resultado final na tela" },
+    ],
+  };
+  assert.equal(retakeReport(transcript).possibleRetakes.length, 0);
+});
+
+test("tokenSimilarity scores shared words", () => {
+  assert.equal(tokenSimilarity(["a", "b"], ["a", "b"]), 1);
+  assert.equal(tokenSimilarity(["a", "b"], ["c", "d"]), 0);
+  assert.ok(tokenSimilarity(["a", "b", "c", "d"], ["a", "b", "c", "x"]) > 0.7);
+});
+
+test("clampCutsToWords expands a cut that starts or ends inside a word", () => {
+  const transcript = {
+    words: [
+      { start: 1, end: 1.4, word: "um" },
+      { start: 1.5, end: 2.0, word: "dois" },
+      { start: 2.1, end: 2.6, word: "três" },
+    ],
+  };
+  const clamped = clampCutsToWords(
+    [
+      { start: 1.2, end: 1.8, reason: "filler" },
+      { start: 2.3, end: 3.0, reason: "silence" },
+      { start: 4.0, end: 4.5, reason: "silence" },
+    ],
+    transcript
+  );
+  assert.deepEqual([clamped[0].start, clamped[0].end], [1, 2]);
+  assert.deepEqual([clamped[1].start, clamped[1].end], [2.1, 3.0]);
+  assert.deepEqual([clamped[2].start, clamped[2].end], [4.0, 4.5]);
+
+  const untouched = clampCutsToWords([{ start: 0.2, end: 0.4 }], { words: [] });
+  assert.deepEqual([untouched[0].start, untouched[0].end], [0.2, 0.4]);
+});
+
+test("overcutWarning separates cleanup from a highlight edit", () => {
+  assert.equal(overcutWarning(0.2, { usedAudio: true }), null);
+  assert.equal(overcutWarning(0.4, { usedAudio: true }), null);
+  assert.equal(overcutWarning(0.6, { usedAudio: true }), null);
+  assert.match(overcutWarning(0.8, { usedAudio: true }), /highlight edit/);
+  assert.match(overcutWarning(0.4, { usedAudio: false }), /transcript-gap fallback/);
+  assert.match(overcutWarning(0.8, { usedAudio: true }), /--force/);
+  assert.equal(overcutWarning(0, { usedAudio: true }), null);
 });
