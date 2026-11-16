@@ -1,7 +1,5 @@
 <h1 align="center">
-  <img src="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/logo.png" width="120" alt="RoosterEdit" />
-  <br />
-  RoosterEdit
+  <img src="https://raw.githubusercontent.com/WesleyQDev/RoosterEdit/main/docs/assets/banner.svg" width="1200" alt="RoosterEdit" />
 </h1>
 
 <p align="center">
