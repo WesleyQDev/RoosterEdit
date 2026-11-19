@@ -1,0 +1,51 @@
+{
+  "schema": "rooster.canvas/v1",
+  "id": "archival-dark",
+  "name": "Archival dark",
+  "description": "Documentary board: ghosted map, paper prints, red annotations, slow camera and long holds. Reference: archival explainer with a continuous camera over a shared backdrop.",
+  "backdrop": {
+    "kind": "map",
+    "color": "#0a0d10",
+    "vignette": 0.5,
+    "grain": 0.06,
+    "drift": 0.014,
+    "grid": 96
+  },
+  "piece": {
+    "frame": "print",
+    "radius": 3,
+    "shadow": 0.28,
+    "border": 1,
+    "padding": 14,
+    "rotateJitter": 1.6,
+    "paper": "#efe9da"
+  },
+  "type": {
+    "display": "'Cormorant Garamond', Georgia, serif",
+    "mono": "'IBM Plex Mono', ui-monospace, monospace",
+    "yearSize": 190,
+    "statementSize": 88,
+    "labelSize": 24,
+    "uppercase": false,
+    "tracking": 0.06
+  },
+  "accent": "#c8102e",
+  "animation": {
+    "mode": "settle",
+    "order": "index",
+    "direction": "left-to-right",
+    "stagger": 0.12,
+    "enter": "settle",
+    "ease": "power3.out",
+    "duration": 0.9
+  },
+  "tempo": {
+    "hold": 2.6,
+    "travel": 1.5,
+    "fadeOut": 0.35
+  },
+  "camera": {
+    "ease": "power3.inOut"
+  },
+  "texture": "grain"
+}

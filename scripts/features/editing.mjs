@@ -362,6 +362,7 @@ export function elementSupport(plan, engine) {
     "end-card",
     "broll",
     "parallax",
+    "canvas",
     "chart",
     "custom",
     "block",
@@ -413,6 +414,12 @@ export function elementSupport(plan, engine) {
         id: element.id || null,
         type,
         reason: `registry blocks run in HyperFrames; set "engine": "hyperframes" on this element`,
+      });
+    } else if (target === "remotion" && (type === "canvas" || template === "canvas")) {
+      unsupported.push({
+        id: element.id || null,
+        type,
+        reason: `canvas scenes animate a camera path with GSAP; set "engine": "hyperframes" on this element`,
       });
     } else if (declared && assembly !== "filmcraft" && declared !== assembly) {
       unsupported.push({

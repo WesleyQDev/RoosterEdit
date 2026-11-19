@@ -113,6 +113,16 @@ import {
   tightenCuts,
 } from "./features/tighten.mjs";
 import { customCodeIssues } from "./features/custom.mjs";
+import {
+  CANVAS_TEMPLATE,
+  CANVAS_TYPE,
+  canvasCss,
+  canvasSummary,
+  canvasTween,
+  normalizeCanvas,
+  normalizeCanvasPreset,
+  renderCanvasHtml,
+} from "./features/canvas.mjs";
 import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./features/feedback.mjs";
 import { getBrollIndex } from "./lib/broll-index.mjs";
 import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
@@ -2146,6 +2156,17 @@ function validatePlan(plan, dir, options = {}) {
       const chart = validateChart(element);
       for (const error of chart.errors || []) errors.push(`plan: element "${element.id || "?"}" ${error}`);
       for (const warning of chart.warnings || []) warnings.push(`plan: element "${element.id || "?"}" ${warning}`);
+    }
+    if (isCanvasElement(element)) {
+      const canvasProject = options.project || projectFromDir(dir);
+      const resolved = resolveCanvasPreset(
+        element.preset || element.scenePreset || element.data?.preset,
+        canvasProject
+      );
+      if (resolved.warning) warnings.push(`plan: element "${element.id || "?"}" ${resolved.warning}`);
+      const normalized = normalizeCanvas(element, resolved.preset);
+      for (const error of normalized.errors) errors.push(`plan: element "${element.id || "?"}" ${error}`);
+      for (const warning of normalized.warnings) warnings.push(`plan: element "${element.id || "?"}" ${warning}`);
     }
   }
 
@@ -5468,6 +5489,145 @@ function resolvePlanFormat(project, plan) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Canvas scenes
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a canvas preset may live, in priority order: project, channel, skill.
+ *
+ * @param {{dir?:string, channel?:string|null}} project
+ * @returns {string[]}
+ */
+function canvasPresetDirs(project) {
+  const dirs = [];
+  if (project?.dir) dirs.push(path.join(project.dir, "style", "scenes"));
+  if (project?.channel) dirs.push(path.join(channelsDir(), project.channel, "style", "scenes"));
+  dirs.push(path.join(SKILL_ROOT, "templates", "scenes"));
+  return dirs;
+}
+
+/**
+ * Recover the channel from a project directory so validation can resolve channel
+ * presets without every caller passing a project object.
+ *
+ * @param {string} dir project directory
+ * @returns {{dir:string, channel:string|null}}
+ */
+function projectFromDir(dir) {
+  const parts = path.resolve(dir).split(path.sep);
+  const index = parts.lastIndexOf("channels");
+  if (index >= 0 && parts[index + 2] === "projects") {
+    return { dir, channel: parts[index + 1] };
+  }
+  return { dir, channel: null };
+}
+
+/**
+ * Resolve a canvas preset by name. A missing preset falls back to the neutral
+ * defaults with a warning instead of failing the build: a typo must not cost a
+ * render.
+ *
+ * @param {string|null} name
+ * @param {{dir?:string, channel?:string|null}} project
+ * @returns {{preset:object, source:string|null, warning:string|null}}
+ */
+function resolveCanvasPreset(name, project) {
+  const id = String(name || "neutral").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]{0,60}$/.test(id)) {
+    return {
+      preset: normalizeCanvasPreset({ id: "neutral" }),
+      source: null,
+      warning: `invalid canvas preset name "${name}"; using neutral defaults`,
+    };
+  }
+  for (const dir of canvasPresetDirs(project)) {
+    const file = path.join(dir, `${id}.json`);
+    if (!exists(file)) continue;
+    const raw = readJson(file, null);
+    if (!raw) {
+      return {
+        preset: normalizeCanvasPreset({ id }),
+        source: file,
+        warning: `could not read canvas preset ${file}; using neutral defaults`,
+      };
+    }
+    return { preset: normalizeCanvasPreset({ ...raw, id }), source: file, warning: null };
+  }
+  return {
+    preset: normalizeCanvasPreset({ id }),
+    source: null,
+    warning: `canvas preset "${id}" not found; using neutral defaults`,
+  };
+}
+
+function isCanvasElement(element) {
+  return String(element?.type || "") === CANVAS_TYPE || String(element?.template || "") === CANVAS_TEMPLATE;
+}
+
+/**
+ * Copy the normalized canvas to a shallow clone. The renderer clones elements to
+ * reset their local time, and a non-enumerable field would not survive the
+ * spread.
+ *
+ * @param {object} source
+ * @param {object} target
+ * @returns {object} target
+ */
+function carryCanvas(source, target) {
+  if (source && source.__canvas) {
+    Object.defineProperty(target, "__canvas", {
+      value: source.__canvas,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return target;
+}
+
+/**
+ * Normalize every canvas element once and attach the result to the element.
+ * The renderer, the FilmCraft build and `plan --check` all read this object, so
+ * a scene cannot look different in two places.
+ *
+ * @param {object} plan
+ * @param {{dir?:string, channel?:string|null}} project
+ * @param {{quiet?:boolean}} [options]
+ * @returns {Array<object>} canvas elements
+ */
+function prepareCanvases(plan, project, options = {}) {
+  const prepared = [];
+  for (const element of Array.isArray(plan?.elements) ? plan.elements : []) {
+    if (!isCanvasElement(element)) continue;
+    const preset = element.preset || element.scenePreset || element.data?.preset;
+    const resolved = resolveCanvasPreset(preset, project);
+    const normalized = normalizeCanvas(element, resolved.preset);
+    Object.defineProperty(element, "__canvas", {
+      value: {
+        canvas: normalized.canvas,
+        errors: normalized.errors,
+        warnings: normalized.warnings,
+        preset: resolved.preset.id,
+        source: resolved.source,
+      },
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+    if (!options.quiet) {
+      if (resolved.warning) console.warn(`  ! ${element.id || "canvas"}: ${resolved.warning}`);
+      for (const warning of normalized.warnings) console.warn(`  ! ${element.id || "canvas"}: ${warning}`);
+      if (!normalized.errors.length) {
+        const label = element.id || "canvas";
+        console.log(`  canvas ${label}: ${canvasSummary(normalized.canvas)}`);
+      }
+    }
+    prepared.push(element);
+  }
+  return prepared;
+}
+
 function themeFromProfile(profile) {
   const colors = profile?.tokens?.colors || {};
   const typography = profile?.tokens?.typography || {};
@@ -6407,6 +6567,12 @@ function renderHyperFramesElement(element, index, theme = {}) {
     return `<div ${common("chart")} data-layout-allow-overlap data-layout-ignore>${renderChartSvg(element, theme)}</div>`;
   }
 
+  if (template === CANVAS_TEMPLATE) {
+    const canvas = element.__canvas?.canvas;
+    if (!canvas) return "";
+    return renderCanvasHtml(common, element, canvas, theme);
+  }
+
   if (template === "parallax") {
     return renderParallaxElement(common, element, data, text, theme, index);
   }
@@ -6546,6 +6712,8 @@ function elementTemplate(element, text, data) {
       return "broll";
     case "parallax":
       return "parallax";
+    case "canvas":
+      return "canvas";
     case "grafico":
       if (element.chart) return "chart";
       if (data.rows || /\d/.test(text) && /→|->|a\s|para/i.test(text)) return "counter";
@@ -6569,6 +6737,8 @@ function elementPosition(element, template, data) {
       return "center-left";
     case "parallax":
       return "center-left";
+    case "canvas":
+      return "center";
     case "counter":
       return "top-right";
     case "diagram":
@@ -6707,6 +6877,11 @@ function templateTween(element, index, start, duration) {
         `tl.fromTo("${id} .px-layer", { x: (i, t) => -Number(t.dataset.depth || 0) * ${panX}, y: (i, t) => -Number(t.dataset.depth || 0) * ${panY} }, { x: (i, t) => Number(t.dataset.depth || 0) * ${panX}, y: (i, t) => Number(t.dataset.depth || 0) * ${panY}, duration: ${total.toFixed(3)}, ease: "sine.inOut" }, ${at(0)});`,
         `tl.fromTo("${id} .px-copy > *", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, stagger: 0.12, ease: "power3.out" }, ${at(0.12)});`
       );
+      break;
+    }
+    case "canvas": {
+      const canvas = element.__canvas?.canvas;
+      if (canvas) lines.push(canvasTween(element, index, canvas));
       break;
     }
     case "chapter":
@@ -7121,6 +7296,8 @@ function hyperFramesCss(theme, width, height, { transparent = false, extraCss = 
       .fx-parallax.pos-bottom-right .px-copy { right: 96px; bottom: 120px; text-align: right; }
       .fx-parallax .px-copy .fx-title { font-size: 96px; }
 
+      ${canvasCss()}
+
       ${extraCss}
   `;
   return scaleDesignPx(css, width, height);
@@ -7163,7 +7340,7 @@ function renderHyperFramesScene(element, index, theme, width, height) {
   const variablesAttr = sceneVariables.length
     ? ` data-composition-variables='${htmlEscape(JSON.stringify(sceneVariables)).replace(/'/g, "&#39;")}'`
     : "";
-  const local = { ...element, start: 0, end: duration };
+  const local = carryCanvas(element, { ...element, start: 0, end: duration });
   const html = renderHyperFramesElement(local, index, theme);
   if (!html) return null;
   const tween = templateTween(local, index, 0, duration);
@@ -7364,11 +7541,12 @@ function renderHyperFramesHtml(project, plan, theme, base) {
 }
 
 function renderHyperFramesElementDocument(project, plan, element, spec, theme) {
+  if (isCanvasElement(element)) prepareCanvases({ elements: [element] }, project, { quiet: true });
   const width = plan.format?.width || 1920;
   const height = plan.format?.height || 1080;
   const fps = plan.format?.fps || 30;
   const duration = Math.max(0.1, Number(spec.duration) || Number(element.end) - Number(element.start) || 1);
-  const local = { ...element, start: 0, end: duration };
+  const local = carryCanvas(element, { ...element, start: 0, end: duration });
   let elementHtml = "";
   let extraCss = "";
   let tween = "";
@@ -7622,6 +7800,7 @@ function buildHyperFrames(project, plan, args) {
     format: { ...resolvePlanFormat(project, plan), duration: base.duration },
   };
   resolveCustomElements(project, finalPlan);
+  prepareCanvases(finalPlan, project);
   copyBlockAssets(project, finalPlan, engineDir);
   copyElementAssets(project.dir, finalPlan, path.join(engineDir, "assets"), "assets/");
   const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));

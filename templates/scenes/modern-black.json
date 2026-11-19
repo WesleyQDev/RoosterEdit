@@ -1,0 +1,51 @@
+{
+  "schema": "rooster.canvas/v1",
+  "id": "modern-black",
+  "name": "Modern black",
+  "description": "Modern explainer: pure black stage, no frame, thin type, cyan accent and cards entering in a wave. Fast holds, short travels.",
+  "backdrop": {
+    "kind": "solid",
+    "color": "#07070a",
+    "vignette": 0.22,
+    "grain": 0,
+    "drift": 0.008,
+    "grid": 72
+  },
+  "piece": {
+    "frame": "none",
+    "radius": 2,
+    "shadow": 0,
+    "border": 1,
+    "padding": 0,
+    "rotateJitter": 0,
+    "paper": "#101014"
+  },
+  "type": {
+    "display": "'Inter Tight', Inter, system-ui, sans-serif",
+    "mono": "'JetBrains Mono', ui-monospace, monospace",
+    "yearSize": 132,
+    "statementSize": 104,
+    "labelSize": 22,
+    "uppercase": true,
+    "tracking": 0.02
+  },
+  "accent": "#22d3ee",
+  "animation": {
+    "mode": "wave",
+    "order": "reading",
+    "direction": "left-to-right",
+    "stagger": 0.09,
+    "enter": "rise",
+    "ease": "power4.out",
+    "duration": 0.55
+  },
+  "tempo": {
+    "hold": 1.1,
+    "travel": 0.7,
+    "fadeOut": 0.2
+  },
+  "camera": {
+    "ease": "expo.inOut"
+  },
+  "texture": "none"
+}

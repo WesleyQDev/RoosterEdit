@@ -243,6 +243,17 @@ Results:
 
 Not tested here: a real face video for `--focus auto` (the synthetic source has no face), macOS Vision, a system Tesseract install, and a full 3D render with network disabled.
 
+## 2026-11-16 - canvas scenes (manual smoke test)
+
+Environment: Windows, Node.js 24.14, FFmpeg 8.1, Chrome headless for the visual proof.
+
+- `plan --check` on `templates/plan.example.json` (which now carries a `canvas` element) returns `ok: true`; only the example's missing media is reported.
+- Breaking the scene on purpose (unknown preset, card on an unknown slot, annotation and camera pointing at a ghost card) returns three errors plus the preset warning instead of a silent fallback.
+- `build --engine hyperframes --allow-no-music --no-check` on a 12 s synthetic source writes `compositions/el-0.html` with the `fx-canvas` root, the preset custom properties, the cards, the annotation and the GSAP camera stops.
+- The same scene data rendered with `archival-dark` and `modern-black` gives the two expected looks: grid, paper prints and a red ellipse versus a black stage with a cyan ellipse. Frames at 1.5 s, 4.2 s and 9.2 s; assets in `.scratch/canvas-proof/` while the work was open.
+
+Not tested here: a full HyperFrames render of a canvas scene and the FilmCraft clip for a canvas.
+
 ## What has not been tested yet
 
 - Portuguese transcription with whisper.cpp: this environment used Parakeet (English). For Portuguese, you need to install whisper.cpp or the Whisper CLI.

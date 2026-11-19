@@ -138,6 +138,7 @@ A cut is a removal from the source. Cleanup uses `cuts`. A condensed edit uses `
 | `end-card` | CTA, subscribe, next video |
 | `custom` | Agent-authored HTML/CSS/GSAP or a reusable component |
 | `scene` | Registry block: 3D, WebGL, or a complex HTML composition |
+| `canvas` | One continuous camera over a shared backdrop: cards, annotations, camera stops (HyperFrames only) |
 
 Each element needs `start`, `end`, and `description`. `text` is optional but encouraged for anything with words.
 
@@ -164,6 +165,7 @@ Do not rely on the generic card fallback. Pick a template and give it the data i
 | `terminal` | Command, file, technical detail | `{ command, note }` |
 | `end-card` | CTA | `{ title, sub }` |
 | `parallax` | A still or graphic built in layers, moved by a slow 2.5D camera | `{ kicker, sub, layers: [...], camera: { x, y, zoom } }` |
+| `canvas` | Cards, annotations and a camera path over one backdrop | `{ preset, slots, cards, annotations, camera, animation }` |
 | `custom` | Agent-authored HTML/CSS/GSAP | inline `html`, `css`, `animation`, or a `component` |
 | `block` | A HyperFrames registry block | `block: "<name>"` and optional `vars` |
 
@@ -311,6 +313,118 @@ describes a concept, a product, or a place; not for every beat.
   `text`.
 - Reuse a layer composition across a chapter by saving it as a `custom`
   component once the first pass works.
+
+## Canvas scenes
+
+A `canvas` is **one composition** that holds a persistent backdrop, cards placed
+in board coordinates, annotations drawn on top of a card, and a camera path
+between them. Use it when the film cuts inside a scene instead of between
+scenes: a documentary board of documents and photos, a wall of products, a
+research trail. A plain `parallax` is one still with one slow move; a canvas can
+visit several materials and swap them in place.
+
+The grammar (card frame, type scale, accent, easing, tempo) lives in a **preset**
+selected per channel. The plan only carries content.
+
+```json
+{
+  "id": "cv-010",
+  "type": "canvas",
+  "template": "canvas",
+  "preset": "archival-dark",
+  "start": 16.0,
+  "end": 34.0,
+  "description": "Board: Turing photo, 1950 paper, then the New York Times page",
+  "data": {
+    "slots": [
+      { "id": "portrait", "at": [6, 18], "size": [26, 34] },
+      { "id": "paper", "at": [42, 12], "size": [26, 32] }
+    ],
+    "cards": [
+      { "id": "turing", "slot": "portrait", "src": "assets/source/turing.png", "style": "photo", "from": 0.2, "to": 9.0 },
+      { "id": "paper-1950", "slot": "paper", "src": "assets/source/turing-paper.png", "style": "document", "from": 1.5, "to": 12.0 },
+      { "id": "year", "text": "1956", "style": "year", "at": [38, 68], "size": [24, 16], "from": 11.0, "to": 18.0 }
+    ],
+    "annotations": [
+      { "target": "paper-1950", "kind": "ellipse", "from": 4.0, "to": 12.0, "draw": 0.8 },
+      { "target": "year", "kind": "underline", "from": 11.4, "to": 18.0, "draw": 0.5 }
+    ],
+    "camera": [
+      { "at": 0, "frame": ["portrait", "paper"], "zoom": 1.0 },
+      { "at": 3.0, "focus": "paper-1950", "zoom": 1.32 },
+      { "at": 10.0, "frame": ["portrait", "paper"], "zoom": 1.0 },
+      { "at": 12.5, "focus": "year", "zoom": 1.15, "hold": 1.4 }
+    ]
+  }
+}
+```
+
+Rules:
+
+- **Times are local to the scene.** `card.from`/`card.to` and `camera[].at` are
+  seconds from the scene start, so moving the scene does not rewrite every card.
+  The element itself still uses source times like any other element.
+- **Positions are percentages of the frame.** `at: [x, y]` and `size: [w, h]` are
+  top-left and dimensions; `108` is just outside the frame. Slots are named
+  rectangles reused by cards and referenced by the camera.
+- **The camera points at content.** Use `focus: "<card id>"` for a single card or
+  `frame: ["<slot>", ...]` for a group; the renderer computes the translate and
+  scale. `rotate` (degrees, -12..12) tilts the board a little on that stop, the
+  way a camera operator leans into a subject. Do not hand-write camera
+  coordinates.
+- **One canvas at a time.** It is a full-frame scene; another full-frame element
+  at the same time is an overlap error. Lower-thirds and captions go above it.
+- **Cards need `src` or `text`.** `style` is `photo`, `document`, `object`,
+  `screen`, `icon`, `year`, `statement`, or `label`. `screen` draws a window
+  chrome with traffic lights over a screenshot; `icon` draws a chip with a
+  `glyph`. The style decides the material, not the look.
+- **`tilt: [x, y]` puts a card in perspective** (degrees, ±28/±32). A screen at
+  `[6, -14]` reads as a window hovering over the board, like a product b-roll.
+  The preset sets the default in `piece.tilt`.
+- **`glow: 0–1`** adds an accent halo around the card, the cheapest way to make a
+  dark composition feel lit.
+- **`links` connect two cards**: `{ from, to, curve, at, draw }`. The renderer
+  leaves the bottom edge and enters the top edge when the cards are stacked, or
+  right-to-left when they are side by side, so a line never crosses a title.
+- **`depth` (0–1) is how close the card sits to the camera.** Near cards travel
+  the full camera move and stay sharp; far cards lag behind and blur slightly, so
+  a flat board reads as a space. Default `0.7`; give the hero of a stop `0.95`.
+- **Movement is eased by the preset, not by the plan.** `camera.ease` accepts any
+  GSAP ease (`power3.inOut` for a documentary float, `expo.inOut` for a modern
+  snap); the renderer adds a short motion blur while the board travels and a slow
+  drift while a stop holds, so the frame is never frozen.
+- **Annotations attach to a card**, never to the backdrop: `target` is a card id,
+  and `kind` is `ellipse`, `box`, `label`, or `underline`.
+- **HyperFrames only.** The camera path is GSAP; Remotion has no equivalent. The
+  build reports it instead of drawing a still.
+
+Presets are resolved in this order, first hit wins:
+
+1. `<project>/style/scenes/<preset>.json`
+2. `channels/<channel>/style/scenes/<preset>.json`
+3. `<skill>/templates/scenes/<preset>.json` — ships `archival-dark` and
+   `modern-black`
+4. neutral defaults, with a warning
+
+A preset is tokens, not code:
+
+```json
+{
+  "backdrop": { "kind": "map|grid|paper|solid|image", "color": "#0a0d10", "vignette": 0.5, "grain": 0.06, "drift": 0.014 },
+  "piece": { "frame": "print|glass|line|none", "radius": 3, "shadow": 0.28, "padding": 14, "rotateJitter": 1.6, "paper": "#efe9da" },
+  "type": { "display": "'Cormorant Garamond', Georgia, serif", "mono": "'IBM Plex Mono', ui-monospace, monospace", "yearSize": 190, "statementSize": 88, "labelSize": 24, "uppercase": false, "tracking": 0.06 },
+  "accent": "#c8102e",
+  "animation": { "mode": "settle|wave|follow", "order": "index|reading|reverse", "stagger": 0.12, "enter": "settle|rise|fade|slide", "ease": "power2.out", "duration": 0.8 },
+  "tempo": { "hold": 2.6, "travel": 1.5, "fadeOut": 0.35 },
+  "camera": { "ease": "sine.inOut" },
+  "texture": "grain"
+}
+```
+
+`animation.mode: "wave"` staggers the cards by reading order (top-to-bottom,
+then left-to-right); `"settle"` keeps the declared times. A card can opt out with
+`"stagger": false`. This is how a modern channel gets cards arriving in a wave
+and a documentary channel gets them settling one by one, from the same plan.
 
 ## B-roll layout
 

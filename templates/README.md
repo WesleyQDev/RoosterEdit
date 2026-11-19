@@ -13,6 +13,19 @@ templates/profiles/
 
 Each profile has `profile.json` (machine-readable contract) and `STYLE.md` (human direction).
 
+## Scene presets
+
+```text
+templates/scenes/
+├── archival-dark.json   # ghosted map, paper prints, red annotations
+└── modern-black.json    # pure black, no frame, cards entering in a wave
+```
+
+A `canvas` element references one by name (`"preset": "archival-dark"`). A
+channel or project overrides it by placing a file with the same name in
+`style/scenes/`. A preset is tokens only: backdrop, piece frame, type, accent,
+choreography, tempo. See `references/edit-plan.md`.
+
 ## Other templates
 
 | File | Use |

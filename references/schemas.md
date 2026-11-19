@@ -250,12 +250,13 @@ Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
 
 Element fields:
 
-- `type`: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`, `custom`.
+- `type`: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`, `canvas`, `custom`.
 - `engine`: optional. `hyperframes`, `remotion`, or `auto` (inherit the project element engine). An element may pick its own engine; a mixed plan renders with `--target filmcraft`, which builds one clip per element. A single-composition target still draws every element with one engine and rejects the mismatch.
-- `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `parallax`, `custom`. See `references/edit-plan.md`.
+- `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `parallax`, `canvas`, `custom`. See `references/edit-plan.md`.
 - `component`: on a `custom` element, the name of a reusable component folder (`style/components/<name>/`).
 - `html`, `css`, `animation`: inline custom markup, CSS, and GSAP statements. The animation receives `root`, `start`, `duration`, and `tl`.
-- `data`: template-specific data (`nodes`, `rows`, `items`, `name`, `role`, `strike`, `tag`, `command`, `note`; `layers` and `camera` on `parallax`).
+- `data`: template-specific data (`nodes`, `rows`, `items`, `name`, `role`, `strike`, `tag`, `command`, `note`; `layers` and `camera` on `parallax`; `slots`, `cards`, `annotations`, `camera`, `animation` on `canvas`).
+- `preset`: on a `canvas`, the name of the scene preset (`archival-dark`, `modern-black`, or a file in `style/scenes/`). See `references/edit-plan.md`.
 - `role`: `chapter` marks a section card and exempts its text from transcript grounding.
 - `position`: `top-left`, `top-right`, `bottom-left`, `bottom-right`, `center`, `center-left`.
 - `layout` on `broll`: `pip` (default), `split`, or `full`.

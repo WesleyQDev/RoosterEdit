@@ -148,7 +148,7 @@ When the user wants the simplest route from raw footage to a finished video, fol
 2. **Create or resolve the project** — `rooster new ...`; raw media goes in `assets/source/`.
 3. **Write the style guide** — `art-director` writes `style.md` and resolves the profile. Run `styleproof <slug>` and approve the three sample frames before planning.
 4. **Transcribe and plan** — `transcript-analyst` writes `edit/transcript.json`, `edit/digest.md`, and `edit/analysis.json`; `editor` writes `edit/plan.json` from the analysis and `style.md`. Show `plan.html` with transcript context and wait for approval.
-5. **Create the visual elements** — `engineer` builds titles, graphics, lists, zooms, parallax scenes, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
+5. **Create the visual elements** - `engineer` builds titles, graphics, lists, zooms, parallax and canvas scenes, b-roll, lower thirds, music, and SFX when the channel style calls for them. A cut-only draft is not a finished video unless the user explicitly asked for a clean cut.
 6. **Assemble, review, export** — `engineer` runs `build` to generate the HyperFrames or Remotion project from the approved plan; use `--sample 3` before the full build. `qa` inspects `preview/index.html` and the frames, then `engineer` renders to `renders/`; `export` writes an EDL/FCPXML handoff when the user wants DaVinci or Premiere.
 
 Read `references/video-pipeline.md` for the exact commands and the mapping from the reference video's folders to ours. The rest of this skill is the broader studio mode; the fast path is the default for single-video jobs.

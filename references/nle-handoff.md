@@ -95,6 +95,7 @@ node "<skill>/scripts/rooster.mjs" timeline meu-video --open
 - V1: source video clips only, one clip per keep.
 - A1: the mixed base audio from FFmpeg.
 - V2+: one element clip per renderable element, packed into the first free lane.
+- A `canvas` scene is one element, so it arrives as **one clip**: the camera move and the cards cannot be re-timed by hand in FilmCraft. Change the scene and rebuild the clip.
 - Program markers for chapters, elements, and cut boundaries.
 - Captions imported from `edit/captions/*.srt` or `.vtt` when present.
 

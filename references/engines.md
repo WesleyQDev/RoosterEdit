@@ -55,6 +55,8 @@ The engine is not a project-wide lock. Every element may carry `engine` (`hyperf
 
 Choose per element, not per project: a 3D product scene can go to Remotion while the chapter cards stay in HyperFrames, and a custom HTML element stays in HyperFrames even when the project default is Remotion. FilmCraft does not change the element engines; it only assembles their clips.
 
+`canvas` scenes are **HyperFrames only**: the camera path is a GSAP timeline, and Remotion has no equivalent. On a Remotion target, `plan --check` and `build` report the element instead of drawing a still; mix it with `--target filmcraft` and let HyperFrames render the scene clip.
+
 A mixed build costs time and disk: each group renders separately, and every element is a ProRes 4444 clip with alpha. Keep the single-engine path whenever every element can share one engine.
 
 ## Build from plan
