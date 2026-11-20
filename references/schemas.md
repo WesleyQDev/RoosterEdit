@@ -44,6 +44,10 @@ These are the contracts for the files RoosterEdit reads and writes. They are int
   },
   "status": "intake",
   "pipeline": ["script", "tts", "timeline", "hyperframes", "render"],
+  "techniques": [
+    { "id": "cut", "tool": "ffmpeg", "why": "talking head with silence between answers" },
+    { "id": "motion", "tool": "hyperframes", "why": "chapter cards and one chart" }
+  ],
   "createdAt": "2026-11-03T00:00:00.000Z",
   "updatedAt": "2026-11-03T00:00:00.000Z"
 }
@@ -55,7 +59,8 @@ Required: `schema`, `slug`, `name`, `channel`, `profile`, `format`, `status`.
 
 Enums:
 
-- `engine`: `auto`, `hyperframes`, `remotion`, `ffmpeg`
+- `engine`: `auto`, `hyperframes` (FFmpeg is the cut/audio utility, not a creative engine)
+- `techniques`: optional array of `{ id, tool, why }`, chosen with `techniques --json` and recorded at the technique gate
 - `mode.source`: `live`, `generated`, `hybrid`
 - `mode.voice`: `user`, `tts`, `none`
 - `mode.style`: `user`, `profile`, `ai`, `reference`
@@ -107,7 +112,7 @@ Enums:
   },
   "engines": {
     "preferred": "hyperframes",
-    "supported": ["hyperframes", "remotion"]
+    "supported": ["hyperframes"]
   }
 }
 ```
@@ -251,7 +256,7 @@ Required: `schema`, `source`, `style`, `duration`, `cuts`, `elements`.
 Element fields:
 
 - `type`: `letreiro`, `grafico`, `lista`, `zoom`, `broll`, `lower-third`, `caption-emphasis`, `transition`, `end-card`, `canvas`, `custom`.
-- `engine`: optional. `hyperframes`, `remotion`, or `auto` (inherit the project element engine). An element may pick its own engine; a mixed plan renders with `--target filmcraft`, which builds one clip per element. A single-composition target still draws every element with one engine and rejects the mismatch.
+- `engine`: optional. `hyperframes` or `auto` (inherit the project engine). Any other value is rejected; `remotion` was removed. `--target filmcraft` builds one clip per element but still renders it with HyperFrames.
 - `template`: optional structured renderer. `chapter`, `title`, `diagram`, `counter`, `list`, `lower-third`, `emphasis`, `callout`, `terminal`, `end-card`, `parallax`, `canvas`, `custom`. See `references/edit-plan.md`.
 - `component`: on a `custom` element, the name of a reusable component folder (`style/components/<name>/`).
 - `html`, `css`, `animation`: inline custom markup, CSS, and GSAP statements. The animation receives `root`, `start`, `duration`, and `tl`.

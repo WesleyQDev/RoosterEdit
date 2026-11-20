@@ -71,6 +71,8 @@ The checklists below remain the editorial and human-readability layer. `qa` does
 - [ ] Stereo/mono layout is correct.
 - [ ] No sample-rate mismatch or drift.
 
+When `earshot` is installed (`techniques --need audio`), add the semantic pass: `earshot timeline <mix> --video <draft> --json` for sound-to-cut sync, `earshot critique <draft> --json` for the launch-style scorecard, and `earshot ab <take-a> <take-b> --json` when two takes compete. It catches a hit that lands after the cut and a mix that is technically correct but emotionally wrong. If it is not installed, say that listening was skipped; do not claim the sound design was reviewed by ear.
+
 ### Captions
 
 - [ ] Captions are in sync.

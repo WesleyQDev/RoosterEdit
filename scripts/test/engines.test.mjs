@@ -10,7 +10,6 @@ import {
   hyperFramesBinCandidates,
   hyperFramesVersion,
   npmCacheRoots,
-  resolveRemotion,
 } from "../lib/engines.mjs";
 
 const tempDirs = [];
@@ -210,70 +209,16 @@ test("hyperFramesVersion is null-safe and accepts a package directory", () => {
   assert.equal(hyperFramesVersion(path.join(root, "broken", "package.json")), null);
 });
 
-test("resolveRemotion finds the local bin and package version", () => {
-  const root = makeTemp();
-  const project = path.join(root, "project");
-  const bin = path.join(project, "node_modules", ".bin", "remotion");
-  writeFile(bin, "#!/usr/bin/env node\n");
-  writeFile(
-    path.join(project, "node_modules", "remotion", "package.json"),
-    JSON.stringify({ name: "remotion", version: "4.0.5" })
-  );
-  // Windows prefers .cmd; create both so the test is portable.
-  writeFile(`${bin}.cmd`, "@echo off\n");
-
-  const found = resolveRemotion({ projectDir: project });
-  assert.ok(found);
-  assert.equal(found.version, "4.0.5");
-  assert.equal(found.source, "local-bin");
-  assert.ok(found.bin.endsWith("remotion") || found.bin.endsWith("remotion.cmd"));
-
-  const packageOnly = path.join(root, "package-only");
-  writeFile(
-    path.join(packageOnly, "node_modules", "remotion", "package.json"),
-    JSON.stringify({ name: "remotion", version: "4.0.6" })
-  );
-  const foundPackage = resolveRemotion({ projectDir: packageOnly });
-  assert.equal(foundPackage.bin, null);
-  assert.equal(foundPackage.version, "4.0.6");
-  assert.equal(foundPackage.source, "package");
-
-  const packageBin = path.join(root, "package-bin");
-  const cli = path.join(packageBin, "node_modules", "@remotion", "cli");
-  writeFile(
-    path.join(cli, "package.json"),
-    JSON.stringify({
-      name: "@remotion/cli",
-      version: "4.0.7",
-      bin: { remotion: "./bin.js" },
-    })
-  );
-  writeFile(path.join(cli, "bin.js"), "#!/usr/bin/env node\n");
-  const foundBin = resolveRemotion({ projectDir: packageBin });
-  assert.equal(foundBin.bin, path.join(cli, "bin.js"));
-  assert.equal(foundBin.version, "4.0.7");
-  assert.equal(foundBin.source, "package-bin");
-
-  assert.equal(resolveRemotion({ projectDir: path.join(root, "empty") }), null);
-});
-
-test("engineVersion reports hyperframes and remotion without spawning", () => {
+test("engineVersion reports HyperFrames and rejects removed engines", () => {
   const root = makeTemp();
   const workspace = path.join(root, "workspace");
   const cwd = path.join(root, "cwd");
   const home = path.join(root, "home");
-  const project = path.join(root, "project");
   const env = baseEnv(root);
 
   const install = installHyperFrames(
     path.join(workspace, "cache", "tools", "node_modules", "hyperframes"),
     "0.9.9"
-  );
-  writeFile(path.join(project, "node_modules", ".bin", "remotion"), "#!/usr/bin/env node\n");
-  writeFile(`${path.join(project, "node_modules", ".bin", "remotion")}.cmd`, "@echo off\n");
-  writeFile(
-    path.join(project, "node_modules", "remotion", "package.json"),
-    JSON.stringify({ name: "remotion", version: "4.0.5" })
   );
 
   const hf = engineVersion("hyperframes", { workspace, cwd, home, env });
@@ -281,10 +226,7 @@ test("engineVersion reports hyperframes and remotion without spawning", () => {
   assert.equal(hf.bin, install.bin);
   assert.equal(hf.source, "workspace-cache");
 
-  const remotion = engineVersion("remotion", { projectDir: project });
-  assert.equal(remotion.version, "4.0.5");
-  assert.ok(remotion.bin);
-
+  assert.equal(engineVersion("remotion", {}), null);
   assert.equal(engineVersion("ffmpeg", { workspace, cwd, home, env }), null);
   assert.equal(engineVersion("unknown", {}), null);
 });

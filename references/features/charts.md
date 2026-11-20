@@ -76,10 +76,9 @@ Returns `{ errors, warnings, ok }`, the same shape as `validatePlan`. Key checks
 
 Current `build` integration:
 
-- **HyperFrames:** `renderHyperFramesElement` now receives `theme` and renders `renderChartSvg(element, theme)` inside a `.chart` wrapper with `data-layout-allow-overlap` and `data-layout-ignore`.
-- **Remotion:** `buildRemotion` precomputes `chartSvg` into `src/data/plan.ts`; the generated `Element` uses `dangerouslySetInnerHTML`.
+- **HyperFrames:** `renderHyperFramesElement` receives `theme` and renders `renderChartSvg(element, theme)` inside a `.chart` wrapper with `data-layout-allow-overlap` and `data-layout-ignore`.
 
-The reference below shows the same pattern if you are editing the adapters manually.
+The reference below shows the same pattern if you are editing the adapter manually.
 
 ### HyperFrames
 
@@ -105,18 +104,6 @@ case "grafico":
 ```
 
 Those coordinates center a `1200x600` chart in a `1920x1080` frame. Recompute them for other formats, or use a full-frame `inset` wrapper for a chart-led scene.
-
-### Remotion
-
-Either write the SVG to `public/charts/<id>.svg` during the build and use `<Img src={staticFile(...)} />`, or precompute the string in `renderRemotionTsx`, inline it into `src/data/plan.ts`, and render it with `dangerouslySetInnerHTML` on an absolutely positioned wrapper. The output is escaped by the renderer; still treat it as build-generated content, not something to accept from a live editor.
-
-```jsx
-// chartSvg is generated at build time by renderChartSvg(element, theme).
-<div
-  style={{ position: "absolute", left: 360, top: 240, width: 1200, height: 600 }}
-  dangerouslySetInnerHTML={{ __html: chartSvg }}
-/>
-```
 
 Do not import `charts.mjs` into the browser bundle just to render on every frame. The SVG is static; generate it once per build.
 
@@ -147,7 +134,7 @@ In `printPlanSummary` and `planMarkdown`, replace the generic `grafico` line wit
 
 ## Limitations
 
-- Static SVG only. Bar growth, line draw-on, and pie reveals need a wrapper animation in HyperFrames or Remotion.
+- Static SVG only. Bar growth, line draw-on, and pie reveals need a wrapper animation in HyperFrames.
 - One series per chart. Grouped bars, stacked bars, multi-line comparisons, dual axes, log scales, and smoothed curves are out of scope.
 - Layout is fixed at `1200x600`. It scales cleanly, but very long labels truncate and very dense data needs a different visual.
 - No locale-aware number formatting; the renderer groups thousands with commas and uses a dot decimal separator.

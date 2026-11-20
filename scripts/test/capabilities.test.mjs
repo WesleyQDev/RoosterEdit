@@ -116,6 +116,7 @@ function optionsFor(root, extra = {}) {
     cwd: path.join(root, "cwd"),
     home: path.join(root, "rooster-home"),
     env: baseEnv(root),
+    hardware: false,
     ...extra,
   };
 }
@@ -207,10 +208,10 @@ test("detectCapabilities runs probes in parallel and keeps doctor fields", async
   const hyperframes = installHyperFrames(options.workspace);
   const { runAsync, calls } = createRunner();
 
-  const caps = await detectCapabilities({ ...options, runAsync, timeout: 1234 });
+  const caps = await detectCapabilities({ ...options, runAsync, timeout: 1234, hardware: false });
 
   assert.equal(caps.schema, "rooster.doctor/v1");
-  assert.equal(caps.version, "0.2.0");
+  assert.equal(caps.version, "0.3.0");
   assert.equal(caps.os, process.platform);
   assert.equal(caps.arch, process.arch);
   assert.equal(caps.cwd, path.resolve(options.cwd));
@@ -289,7 +290,13 @@ test("detectCapabilities --deep probes Parakeet through the local binary", async
     },
   });
 
-  const caps = await detectCapabilities({ ...options, runAsync, deep: true, timeout: 1000 });
+  const caps = await detectCapabilities({
+    ...options,
+    runAsync,
+    deep: true,
+    timeout: 1000,
+    hardware: false,
+  });
 
   assert.deepEqual(caps.parakeet, {
     installed: true,
@@ -311,7 +318,12 @@ test("detectCapabilities --deep reports missing HyperFrames and model list error
   const options = optionsFor(root);
   const { runAsync } = createRunner();
 
-  const noEngine = await detectCapabilities({ ...options, runAsync, deep: true });
+  const noEngine = await detectCapabilities({
+    ...options,
+    runAsync,
+    deep: true,
+    hardware: false,
+  });
   assert.deepEqual(noEngine.parakeet, {
     installed: false,
     model: null,
@@ -327,6 +339,7 @@ test("detectCapabilities --deep reports missing HyperFrames and model list error
     ...withEngine,
     runAsync: failing.runAsync,
     deep: true,
+    hardware: false,
   });
   assert.equal(failed.parakeet.installed, false);
   assert.equal(failed.parakeet.reason, "sherpa-onnx exploded");

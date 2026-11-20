@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Tenho 40 minutos de entrevista em `footage/entrevista.mp4` e alguns b-rolls em `footage/broll/`. Quero um vídeo de 90 segundos para o YouTube, com cortes secos, legendas em português e uma trilha discreta. Não quero gravar narração.",
-      "expected_output": "O agente deve criar ou reutilizar um canal com source live e voice user (ou registrar overrides no projeto), criar o workspace/projeto dentro do canal, transcrever a entrevista, propor um corte de 90s com EDL/timeline, selecionar b-roll, gerar legendas, escolher FFmpeg ou Remotion, mostrar preview/timeline e só renderizar após aprovação.",
+      "expected_output": "O agente deve criar ou reutilizar um canal com source live e voice user (ou registrar overrides no projeto), criar o workspace/projeto dentro do canal, transcrever a entrevista, propor um corte de 90s com EDL/timeline, selecionar b-roll, gerar legendas, escolher as técnicas (FFmpeg para corte/áudio e HyperFrames para os elementos), mostrar preview/timeline e só renderizar após aprovação.",
       "files": []
     },
     {
@@ -16,7 +16,7 @@
     {
       "id": 3,
       "prompt": "Quero um short 3D de 20 segundos com um robô fofo explicando o que é computação quântica, estilo cartoon low-poly, usando Three.js. Sem fala, só música e legendas.",
-      "expected_output": "O agente deve criar ou reutilizar um canal para vídeos 3D (source generated, voice none), aplicar o override de formato, escolher Remotion + @remotion/three ou HyperFrames + Three.js, criar storyboard com personagem/câmera, implementar a cena 3D determinística, adicionar música e legendas e validar frames antes do render.",
+      "expected_output": "O agente deve criar ou reutilizar um canal para vídeos 3D (source generated, voice none), aplicar o override de formato, rodar techniques --json e escolher HyperFrames + Three.js para uma cena de navegador (ou Blender para 3D pesado, com permissão), criar storyboard com personagem/câmera, implementar a cena 3D determinística, adicionar música e legendas e validar frames antes do render.",
       "files": []
     },
     {
@@ -28,7 +28,7 @@
     {
       "id": 5,
       "prompt": "Estou num ambiente sem Node e sem FFmpeg. Tenho uma ideia de vídeo e alguns assets. Quero o brief, o roteiro, o storyboard e um plano de edição, mesmo sem conseguir renderizar.",
-      "expected_output": "O agente deve rodar o doctor, reconhecer que Node/FFmpeg não estão disponíveis, não fingir render, gerar brief/script/storyboard/edit/plan.json e explicar que HyperFrames e Remotion precisam de Node para renderizar.",
+      "expected_output": "O agente deve rodar o doctor, reconhecer que Node/FFmpeg não estão disponíveis, não fingir render, gerar brief/script/storyboard/edit/plan.json e explicar que HyperFrames precisa de Node para renderizar.",
       "files": []
     },
     {
@@ -40,7 +40,7 @@
     {
       "id": 7,
       "prompt": "Make a 30-second product launch video from these screenshots and a logo. No voiceover, upbeat music, captions, 16:9. Use my brand colors.",
-      "expected_output": "O agente deve criar ou reutilizar um canal de product launch (source generated/hybrid, voice none), usar os screenshots e o logo como assets, criar um perfil a partir das cores da marca, montar storyboard com callouts, adicionar música e legendas, escolher HyperFrames ou Remotion e entregar preview antes do render.",
+      "expected_output": "O agente deve criar ou reutilizar um canal de product launch (source generated/hybrid, voice none), usar os screenshots e o logo como assets, criar um perfil a partir das cores da marca, montar storyboard com callouts, adicionar música e legendas, escolher as técnicas com techniques --json e entregar preview antes do render.",
       "files": []
     },
     {
@@ -63,8 +63,8 @@
     },
     {
       "id": 11,
-      "prompt": "O plano em edit/plan.json está aprovado. Gere o projeto HyperFrames, rode o check e renderize um draft. Depois gere o equivalente em Remotion.",
-      "expected_output": "O agente deve rodar build --engine hyperframes, validar com npx hyperframes check, renderizar um draft; depois rodar build --engine remotion, npm install e render; reportar caminhos, duração e diferenças entre os dois motores.",
+      "prompt": "O plano em edit/plan.json está aprovado. Escolha as técnicas, gere o projeto HyperFrames, rode o check e renderize um draft.",
+      "expected_output": "O agente deve rodar techniques --json, propor as camadas (FFmpeg para corte/áudio e HyperFrames para os elementos), rodar build --engine hyperframes, validar com npx hyperframes check e renderizar um draft. Não deve instalar Blender, earshot ou qualquer pacote sem permissão, nem tentar um segundo engine.",
       "files": []
     }
   ]

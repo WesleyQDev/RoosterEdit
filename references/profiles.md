@@ -65,7 +65,7 @@ If two profiles share an id, the higher-precedence one wins. Record the resolved
   },
   "engines": {
     "preferred": "hyperframes",
-    "supported": ["hyperframes", "remotion"]
+    "supported": ["hyperframes"]
   }
 }
 ```

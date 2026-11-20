@@ -159,35 +159,26 @@ Turn the approved plan into scenes:
 - **B-roll**: footage or images that illustrate the words.
 - **Lower thirds**: names and roles.
 
-Choose the engine:
+Choose the techniques, not the engine:
 
+- FFmpeg for cuts, captions, audio, color, reframe, and multicam;
 - HyperFrames for HTML/CSS/GSAP motion and automatic assembly;
-- Remotion for React, data-driven scenes, and 3D;
-- FFmpeg for simple cuts, captions, and audio.
+- HyperFrames + Three.js for browser-scale 3D;
+- Blender for heavy 3D, rendered as a clip;
+- earshot for audio critique and sound design, when installed.
 
-Ask the user before building (see the gate in `references/engines.md`): HyperFrames is the default; Remotion needs `npm install` with permission; FilmCraft needs the MCP connected with permission and an agent restart. Do not choose silently when the engine is missing.
+Ask the user before building (see `references/techniques.md`): say which layers the plan needs and what is missing. FilmCraft needs the MCP connected with permission and an agent restart. Do not install anything silently.
 
 ## Step 6 — Assemble, review, export
-
-### Option 1 — Automatic assembly
 
 Build a HyperFrames project from the approved plan:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" build my-video --engine hyperframes
+node "<skill>/scripts/rooster.mjs" build my-video --target filmcraft --engine hyperframes
 ```
 
-The build applies the plan's cuts with FFmpeg, remaps the element timings, copies the media, and writes a working composition. Base media and mixes are cached; `--if-needed` skips unchanged builds, and `--sample 3` builds a short montage for approval. Preview it in the browser. Review the cuts, captions, overlays, and audio. Render to `renders/final.mp4`.
-
-### Option 2 — Remotion
-
-Build a Remotion project from the approved plan when the video needs React components, data-driven scenes, interaction, or 3D via `@remotion/three`:
-
-```bash
-node "<skill>/scripts/rooster.mjs" build my-video --engine remotion
-```
-
-After the scaffold, ask before running `npm install` in `engine/remotion`; if the user declines, fall back to HyperFrames. Preview in Remotion Studio, then render to `renders/final.mp4`.
+The build applies the plan's cuts with FFmpeg, remaps the element timings, copies the media, and writes a working composition. Base media and mixes are cached; `--if-needed` skips unchanged builds, and `--sample 3` builds a short montage for approval. `--encoder auto` uses the hardware encoder for the base when the machine has one. Preview it in the browser. Review the cuts, captions, overlays, and audio. Render to `renders/final.mp4`.
 
 ### Review and export
 
@@ -206,7 +197,7 @@ Run the QA sweep through `qa` and the fixes through `engineer`:
 - Local Whisper transcription with timestamps.
 - An edit plan with cuts and visual elements.
 - A hard approval gate before building.
-- Two assembly paths: HyperFrames for HTML/GSAP motion, Remotion for React/3D/data.
+- One assembly path (HyperFrames) with specialized techniques around it.
 - A final review and export step.
 
 ## What we adapt
@@ -226,4 +217,4 @@ Run the QA sweep through `qa` and the fixes through `engineer`:
 - Treating automatic captions as final.
 - Creating overlays for every sentence instead of for the moments that need them.
 - Rendering before watching the preview.
-- Trying to force HyperFrames into a React/3D project instead of using Remotion.
+- Trying to fake heavy 3D inside HyperFrames instead of rendering it in Blender and placing the clip.

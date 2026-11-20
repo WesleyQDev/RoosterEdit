@@ -75,7 +75,7 @@ test("visualGaps measures output time, not source time", () => {
   );
 });
 
-test("elementSupport accepts a scene block in HyperFrames and rejects it in Remotion", () => {
+test("elementSupport accepts a scene block in HyperFrames", () => {
   const plan = {
     elements: [
       {
@@ -91,12 +91,9 @@ test("elementSupport accepts a scene block in HyperFrames and rejects it in Remo
   const hyper = elementSupport(plan, "hyperframes");
   assert.deepEqual(hyper.unsupported, []);
   assert.ok(hyper.supported.includes("scene"));
-  const remotion = elementSupport(plan, "remotion");
-  assert.equal(remotion.unsupported.length, 1);
-  assert.match(remotion.unsupported[0].reason, /HyperFrames/);
 });
 
-test("elementSupport accepts parallax and marks the Remotion fallback", () => {
+test("elementSupport accepts parallax", () => {
   const plan = {
     elements: [
       {
@@ -113,9 +110,7 @@ test("elementSupport accepts parallax and marks the Remotion fallback", () => {
   const hyper = elementSupport(plan, "hyperframes");
   assert.deepEqual(hyper.unsupported, []);
   assert.ok(hyper.supported.includes("parallax"));
-  const remotion = elementSupport(plan, "remotion");
-  assert.equal(remotion.unsupported.length, 0);
-  assert.ok(remotion.fallback.some((item) => item.template === "parallax"));
+  assert.deepEqual(hyper.fallback, []);
 });
 
 test("elementSupport flags zoom for FilmCraft but not for HyperFrames", () => {
@@ -134,34 +129,24 @@ test("elementSupport flags zoom for FilmCraft but not for HyperFrames", () => {
   assert.equal(typo.unsupported.length, 1);
   assert.match(typo.unsupported[0].reason, /unknown template/);
 
-  const remotion = elementSupport({ elements: [{ id: "el-4", type: "grafico", template: "diagram" }] }, "remotion");
-  assert.equal(remotion.fallback.length, 1);
-  assert.match(remotion.fallback[0].reason, /card\/text fallback/);
-
   const custom = elementSupport({ elements: [{ id: "el-5", type: "custom", template: "custom" }] }, "hyperframes");
   assert.equal(custom.unsupported.length, 0);
-  const customRemotion = elementSupport({ elements: [{ id: "el-5", type: "custom", template: "custom" }] }, "remotion");
-  assert.equal(customRemotion.unsupported.length, 1);
-  assert.match(customRemotion.unsupported[0].reason, /cannot execute custom/);
 });
 
-test("elementSupport honors a per-element engine", () => {
+test("elementSupport accepts HyperFrames elements and rejects unknown engines", () => {
   const plan = {
     elements: [
       { id: "el-1", type: "custom", template: "custom", engine: "hyperframes" },
-      { id: "el-2", type: "grafico", template: "diagram", engine: "remotion" },
+      { id: "el-2", type: "grafico", template: "diagram" },
     ],
   };
 
   const filmcraft = elementSupport(plan, "filmcraft");
   assert.deepEqual(filmcraft.unsupported, []);
-  assert.equal(filmcraft.mixed.length, 2);
   assert.ok(filmcraft.supported.includes("custom"));
 
   const single = elementSupport(plan, "hyperframes");
-  assert.equal(single.unsupported.length, 1);
-  assert.equal(single.unsupported[0].id, "el-2");
-  assert.match(single.unsupported[0].reason, /--target filmcraft/);
+  assert.deepEqual(single.unsupported, []);
 
   const auto = elementSupport(
     { elements: [{ id: "el-3", type: "custom", template: "custom", engine: "auto" }] },
@@ -176,12 +161,12 @@ test("elementSupport honors a per-element engine", () => {
   assert.equal(unknown.unsupported.length, 1);
   assert.match(unknown.unsupported[0].reason, /unknown engine/);
 
-  const remotionCustom = elementSupport(
+  const removed = elementSupport(
     { elements: [{ id: "el-5", type: "custom", template: "custom", engine: "remotion" }] },
     "filmcraft"
   );
-  assert.equal(remotionCustom.unsupported.length, 1);
-  assert.match(remotionCustom.unsupported[0].reason, /set "engine": "hyperframes"/);
+  assert.equal(removed.unsupported.length, 1);
+  assert.match(removed.unsupported[0].reason, /use hyperframes or auto/);
 });
 
 test("elementText reads structured data when text is absent", () => {

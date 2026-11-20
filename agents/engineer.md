@@ -25,9 +25,9 @@ Do not read the raw transcript, and do not load the whole reference library.
    - For a custom element, write self-contained HTML/CSS/GSAP, animate the shared `tl`, run `plan <slug> --check` before the build, and render three stills (in, hold, out). Save a reusable look as a component.
    - Before hand-building a named effect, search the registry: `hyperframes catalog --query "<effect>" --json`, then `hyperframes add <name> --project <slug>`.
    - After a HyperFrames build, inspect `hyperframes snapshot <slug> --at <times> --review` and `hyperframes timeline <slug> --json` instead of opening every file.
-4. If the selected engine is missing (Remotion not installed, FilmCraft CLI or MCP not configured), do not install anything. Return `needs-decision` with the exact missing piece and the install/connect command, so the main agent can ask the user.
+4. If a required technique is missing (HyperFrames, Blender, earshot, Blender MCP, FilmCraft CLI or MCP), do not install anything. Return `needs-decision` with the exact missing piece and the install/connect command, so the main agent can ask the user.
 5. Redirect noisy output to `work/logs/<stage>.log`. Read the last 20–30 lines or the JSON summary, not the full log. On Windows use `*> file`; on POSIX use `> file 2>&1`.
-6. Run the engine's check after structural changes: `npx hyperframes check --json` or the Remotion equivalent. Fix errors before returning.
+6. Run the engine's check after structural changes: `npx hyperframes check --json` (and `blender --background` on one frame for a Blender shot). Fix errors before returning.
 7. Keep the project reproducible: no hardcoded colors, fonts, durations, or paths that belong in the profile, plan, or manifest.
 8. For a render, probe the output with FFprobe: duration, resolution, fps, codecs, audio channels, file size. Compare against the plan.
 9. Write `work/notes/engineer-<mode>.md` with the details: commands run, errors fixed, remaining risks.
@@ -45,7 +45,7 @@ Do not read the raw transcript, and do not load the whole reference library.
 - Do not change the story, the style, or the license. Return `needs-decision` instead.
 - Do not delete or overwrite the user's source media.
 - Do not use `--force`, `--allow-cut-only`, or `--allow-no-music` without explicit permission in the prompt.
-- Do not run `npm install`, install HyperFrames/Remotion/FilmCraft, or write MCP config without explicit permission in the prompt.
+- Do not run `npm install`, install HyperFrames, Blender, earshot, or FilmCraft, or write MCP config without explicit permission in the prompt.
 - Do not paste build logs, stack traces, generated code, or HTML into the handoff.
 - Do not claim a render succeeded without probing the file.
 - Do not upload or publish anything.

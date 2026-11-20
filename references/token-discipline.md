@@ -12,7 +12,7 @@ If the harness has no fresh-context agent tool, or a spawn fails, keep the same 
 
 ## Rule 1 — Never paste long logs
 
-HyperFrames, Remotion, FFmpeg, and Whisper can print thousands of lines. Redirect them to a log file and read only the tail or the JSON summary.
+HyperFrames, FFmpeg, Blender, and Whisper can print thousands of lines. Redirect them to a log file and read only the tail or the JSON summary.
 
 ```bash
 # HyperFrames render
@@ -33,13 +33,14 @@ node -e "const d=require('./check.json'); console.log({ok:d.ok, errors:d.lint?.e
 ```
 
 ```bash
-# Remotion
-npx remotion render src/index.ts RoosterVideo out.mp4 --log=error
+# FFmpeg
+ffmpeg -v error -i input.mp4 ...
 ```
 
 ```bash
-# FFmpeg
-ffmpeg -v error -i input.mp4 ...
+# Blender (one frame first)
+blender --background scene.blend --render-frame 1 > blender.log 2>&1
+tail -n 20 blender.log
 ```
 
 If a command fails, read the `Fix:` line, the JSON error, or the last 30 lines. Do not read the full log unless the summary is insufficient.

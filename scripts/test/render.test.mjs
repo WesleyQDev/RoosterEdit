@@ -14,7 +14,6 @@ import {
   normalizeRenderQuality,
   parseRenderProgress,
   readRenderMeta,
-  remotionRenderArgs,
   renderKey,
   runRender,
   validateRenderProbe,
@@ -118,83 +117,6 @@ test("hyperFramesRenderArgs passes explicit start/end and validates input", () =
   assert.throws(() => hyperFramesRenderArgs({ out: "out.mp4", start: 5, end: 5 }), RangeError);
   assert.throws(() => hyperFramesRenderArgs({ out: "out.mp4", start: -1 }), RangeError);
   assert.throws(() => hyperFramesRenderArgs({}), TypeError);
-});
-
-test("remotionRenderArgs uses positional entry/composition/out and quiet log", () => {
-  const result = remotionRenderArgs({
-    bin: "remotion",
-    entry: "src/index.ts",
-    composition: "RoosterVideo",
-    out: "renders/final.mp4",
-  });
-  assert.equal(result.command, "remotion");
-  assert.deepEqual(result.args, [
-    "render",
-    "src/index.ts",
-    "RoosterVideo",
-    "renders/final.mp4",
-    "--log=error",
-  ]);
-  assert.equal(result.quality, null);
-});
-
-test("remotionRenderArgs includes optional concurrency, gl, frames and log", () => {
-  const result = remotionRenderArgs({
-    composition: "RoosterVideo",
-    out: "renders/final.mp4",
-    quality: "final",
-    concurrency: 4,
-    gl: "angle",
-    frames: "10-40",
-    log: "verbose",
-  });
-  assert.deepEqual(result.args, [
-    "render",
-    "RoosterVideo",
-    "renders/final.mp4",
-    "--concurrency=4",
-    "--gl=angle",
-    "--log=verbose",
-    "--frames=10-40",
-  ]);
-  assert.equal(result.quality, "final");
-});
-
-test("remotionRenderArgs normalizes frame objects and omits gl when absent", () => {
-  const result = remotionRenderArgs({
-    composition: "C",
-    out: "out.mp4",
-    frames: { start: 10, end: 40 },
-  });
-  assert.ok(result.args.includes("--frames=10-40"));
-  assert.equal(result.args.some((arg) => arg.startsWith("--gl")), false);
-  assert.equal(result.args.some((arg) => arg.startsWith("--concurrency")), false);
-  assert.ok(result.args.includes("--frames=10-40"));
-});
-
-test("remotionRenderArgs validates optional flags", () => {
-  assert.throws(
-    () => remotionRenderArgs({ composition: "C", out: "o.mp4", concurrency: 0 }),
-    RangeError
-  );
-  assert.throws(
-    () => remotionRenderArgs({ composition: "C", out: "o.mp4", concurrency: "half" }),
-    RangeError
-  );
-  assert.throws(
-    () => remotionRenderArgs({ composition: "C", out: "o.mp4", gl: "angle;rm" }),
-    RangeError
-  );
-  assert.throws(
-    () => remotionRenderArgs({ composition: "C", out: "o.mp4", frames: "40-10" }),
-    RangeError
-  );
-  assert.throws(
-    () => remotionRenderArgs({ composition: "C", out: "o.mp4", frames: "start-end" }),
-    RangeError
-  );
-  assert.throws(() => remotionRenderArgs({ out: "o.mp4" }), TypeError);
-  assert.throws(() => remotionRenderArgs({ composition: "C" }), TypeError);
 });
 
 test("parseRenderProgress reads @hf-progress JSON", () => {
@@ -302,7 +224,7 @@ test("renderKey changes with quality, fps, resolution, engine and version", () =
     { fps: 60 },
     { width: 1280 },
     { height: 720 },
-    { engine: "remotion" },
+    { engine: "blender" },
     { engineVersion: "1.2.4" },
     { htmlKey: "def456" },
   ]) {
@@ -478,25 +400,4 @@ test("validateRenderProbe rejects missing probes and explains what is missing", 
   const zero = validateRenderProbe({ duration: 0, width: 10, height: 10, fps: 30, audio: true });
   assert.equal(zero.ok, false);
   assert.match(zero.issues.join("\n"), /duration: must be positive/);
-});
-
-test("remotionRenderArgs supports alpha codecs and props", () => {
-  const invocation = remotionRenderArgs({
-    bin: "remotion",
-    entry: "src/index.ts",
-    composition: "el-001",
-    out: "out.mov",
-    codec: "prores",
-    proresProfile: "4444",
-    imageFormat: "png",
-    pixelFormat: "yuva444p10le",
-    props: { id: "el-001" },
-  });
-  assert.equal(invocation.command, "remotion");
-  assert.deepEqual(invocation.args.slice(0, 4), ["render", "src/index.ts", "el-001", "out.mov"]);
-  assert.ok(invocation.args.includes("--codec=prores"));
-  assert.ok(invocation.args.includes("--prores-profile=4444"));
-  assert.ok(invocation.args.includes("--image-format=png"));
-  assert.ok(invocation.args.includes("--pixel-format=yuva444p10le"));
-  assert.ok(invocation.args.includes('--props={"id":"el-001"}'));
 });

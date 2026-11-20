@@ -126,8 +126,8 @@ ffmpeg -y -i base.mp4 -vf "crop=608:1080:656:0,scale=1080:1920:flags=lanczos,set
 ## Integration
 
 1. Build the cut base first (`buildBaseMediaCore` does this in the CLI). Reframe the resulting `base.mp4`, not the raw source, so cut boundaries and audio normalization are preserved.
-2. Set `plan.format`, `project.json.format`, and `timeline.json.format` to the target. HyperFrames and Remotion use `plan.format` for composition size.
-3. Point the engine base at the reframed file. In HyperFrames that means the `<video>`/`<img>` `src`; in Remotion it means `base.path` in `src/data/plan.ts`.
+2. Set `plan.format`, `project.json.format`, and `timeline.json.format` to the target. HyperFrames uses `plan.format` for composition size.
+3. Point the engine base at the reframed file: the `<video>`/`<img>` `src` in the HyperFrames composition.
 4. Re-check overlays. The current generators position text and cards with fixed pixel values authored for 1920 × 1080. `object-fit: cover` on b-roll/base media does not relayout titles, lower-thirds, or captions.
 5. For per-scene framing, reframe each clip with different `mode`/focus values, then assemble those clips in `edit/timeline.json`.
 

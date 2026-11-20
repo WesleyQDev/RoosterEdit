@@ -13,11 +13,12 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { findHyperFrames, hyperFramesVersion } from "./engines.mjs";
 import { findFilmCraft, filmCraftMcpRegistration, parseFilmCraftVersion } from "./filmcraft.mjs";
+import { detectHardware, describeHardware } from "./hardware.mjs";
 
 export const capabilityCacheTtlMs = 6 * 60 * 60 * 1000;
 
 const CAPABILITIES_CACHE_KEY = "capabilities";
-const CAPABILITIES_CACHE_SCHEMA = "rooster.capabilities/v2";
+const CAPABILITIES_CACHE_SCHEMA = "rooster.capabilities/v3";
 const DOCTOR_SCHEMA = "rooster.doctor/v1";
 const SHALLOW_PARAKEET_REASON = "not checked (run doctor --deep)";
 const WHISPER_CANDIDATES = [
@@ -89,6 +90,9 @@ function isCacheEntryWarm(entry, { now, deep }) {
   if (savedAt > now + 60_000) return false;
   if (now - savedAt > capabilityCacheTtlMs) return false;
   if (!value.data || typeof value.data !== "object") return false;
+  // A release changes the fields and the meaning of the cache; never serve a
+  // capability snapshot from another version.
+  if (value.data.version !== cliVersion()) return false;
   if (deep && value.data.parakeet?.reason === SHALLOW_PARAKEET_REASON) return false;
   return true;
 }
@@ -324,10 +328,53 @@ function localEngines(cwd) {
       has("hyperframes") || fs.existsSync(path.join(cwd, "node_modules", ".bin", "hyperframes"))
         ? "detected"
         : "not-detected",
-    remotion: has("remotion") ? "detected" : "not-detected",
     three: has("three") ? "detected" : "not-detected",
-    remotionThree: has("@remotion/three") ? "detected" : "not-detected",
   };
+}
+
+/**
+ * Candidate Blender executables. The PATH probe runs first; the disk scan
+ * covers the default install location, which is not on PATH on Windows and
+ * macOS.
+ */
+function blenderCandidate(env = process.env) {
+  const explicit = env.ROOSTER_BLENDER;
+  if (explicit) return { bin: String(explicit), source: "env" };
+
+  if (process.platform === "win32") {
+    const roots = [
+      env.ProgramFiles || "C:\\Program Files",
+      env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+    ];
+    const found = [];
+    for (const root of roots) {
+      const base = path.join(root, "Blender Foundation");
+      try {
+        for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue;
+          const bin = path.join(base, entry.name, "blender.exe");
+          if (fs.existsSync(bin)) found.push({ bin, name: entry.name });
+        }
+      } catch {
+        // Blender is not installed in this root.
+      }
+    }
+    found.sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true }));
+    if (found.length) return { bin: found[0].bin, source: "program-files" };
+  }
+
+  if (process.platform === "darwin") {
+    const bin = "/Applications/Blender.app/Contents/MacOS/Blender";
+    if (fs.existsSync(bin)) return { bin, source: "applications" };
+  }
+
+  if (process.platform === "linux") {
+    for (const bin of ["/usr/bin/blender", "/usr/local/bin/blender", "/snap/bin/blender"]) {
+      if (fs.existsSync(bin)) return { bin, source: "system" };
+    }
+  }
+
+  return { bin: "blender", source: "path" };
 }
 
 function engineInvocation(bin, args) {
@@ -443,9 +490,11 @@ export async function detectCapabilities(options = {}) {
   addTask("ffmpeg", "ffmpeg", ["-version"]);
   addTask("ffprobe", "ffprobe", ["-version"]);
   addTask("ytdlp", "yt-dlp", ["--version"]);
-  addTask("gpu", "nvidia-smi", ["--query-gpu=name", "--format=csv,noheader"]);
   addTask("edgeTts", "edge-tts", ["--version"]);
   addTask("piper", "piper", ["--version"]);
+  addTask("earshot", "earshot", ["--version"]);
+  const blender = blenderCandidate(env);
+  addTask("blender", blender.bin, ["--version"]);
   for (const candidate of WHISPER_CANDIDATES) {
     addTask(`whisper:${candidate}`, candidate, ["--help"]);
   }
@@ -513,6 +562,27 @@ export async function detectCapabilities(options = {}) {
   }
 
   const parakeet = await parakeetPromise;
+  const hardware =
+    options.hardware === false
+      ? {
+          detected: false,
+          platform: process.platform,
+          vendor: null,
+          name: null,
+          vramMB: null,
+          driver: null,
+          gpus: [],
+          source: null,
+          encoders: { h264: null, hevc: null, av1: null },
+          available: [],
+          recommended: { h264: null, hevc: null, av1: null },
+          delivery: "libx264",
+          note: "hardware detection disabled",
+        }
+      : options.hardware || detectHardware({ env });
+  const blenderProbe = results.get("blender");
+  const blenderVersion = versionFrom(blenderProbe);
+  const earshotVersion = versionFrom(results.get("earshot"));
 
   const data = {
     schema: DOCTOR_SCHEMA,
@@ -532,7 +602,18 @@ export async function detectCapabilities(options = {}) {
     ytdlp: versionFrom(results.get("ytdlp")),
     whisper,
     hyperframesCli: hyperframes.version || (hyperframes.bin ? "detected" : null),
-    gpu: versionFrom(results.get("gpu")),
+    gpu: hardware.detected ? hardware.name : null,
+    hardware,
+    blender: {
+      installed: Boolean(blenderVersion),
+      bin: blenderVersion ? blender.bin : null,
+      version: blenderVersion,
+      source: blenderVersion ? blender.source : null,
+    },
+    earshot: {
+      installed: Boolean(earshotVersion),
+      version: earshotVersion,
+    },
     engines,
     tts: {
       openai: Boolean(env.OPENAI_API_KEY),
@@ -622,7 +703,9 @@ export function formatDoctor(caps, options = {}) {
   lines.push(`  yt-dlp           ${data.ytdlp || "not found"}`);
   lines.push(`  Whisper          ${data.whisper || "not found"}`);
   lines.push(`  HyperFrames CLI  ${data.hyperframesCli || "not found"}`);
-  lines.push(`  GPU              ${data.gpu || "not detected"}`);
+  lines.push(`  GPU              ${describeHardware(data.hardware)}`);
+  lines.push(`  Blender          ${data.blender?.version || "not found (optional 3D)"}`);
+  lines.push(`  earshot          ${data.earshot?.version || "not found (optional audio QA)"}`);
   lines.push(
     `  Workspace        ${data.workspace ? `${data.workspace}${data.workspaceExists ? "" : " (not created)"}` : "unknown"}`
   );
@@ -632,11 +715,18 @@ export function formatDoctor(caps, options = {}) {
   lines.push("", "Engines", "");
   lines.push(`  package.json     ${checklist(engines.packageJson)}`);
   lines.push(`  HyperFrames      ${engines.hyperframes || "not-detected"}`);
-  lines.push(`  Remotion         ${engines.remotion || "not-detected"}`);
   lines.push(`  Three.js         ${engines.three || "not-detected"}`);
-  lines.push(`  @remotion/three  ${engines.remotionThree || "not-detected"}`);
   lines.push(`  HyperFrames bin  ${hyperframes.bin || "not found"}`);
   lines.push(`  HyperFrames src  ${hyperframes.source || "unknown"}`);
+
+  const hardware = data.hardware && typeof data.hardware === "object" ? data.hardware : {};
+  const encoders = hardware.recommended || hardware.encoders || {};
+  lines.push("", "Hardware", "");
+  lines.push(`  Draft encoder    ${encoders.h264 || "libx264"}`);
+  lines.push(`  Delivery         ${hardware.delivery || "libx264"}`);
+  if (hardware.detected && hardware.name) {
+    lines.push(`  Source           ${hardware.source || "os probe"}`);
+  }
 
   const filmcraft = data.filmcraft && typeof data.filmcraft === "object" ? data.filmcraft : {};
   lines.push("", "FilmCraft (optional timeline)", "");
@@ -655,7 +745,7 @@ export function formatDoctor(caps, options = {}) {
     }
   } else {
     lines.push("  Status           not installed");
-    lines.push("  Timeline         HyperFrames/Remotion only");
+    lines.push("  Timeline         HyperFrames only");
   }
 
   lines.push("", "ASR", "");
@@ -665,6 +755,15 @@ export function formatDoctor(caps, options = {}) {
     lines.push(`  Parakeet         ${parakeet.reason || "not installed"}`);
   }
   lines.push(`  Whisper          ${data.whisper || "not found"}`);
+
+  lines.push("", "Listening (optional)", "");
+  lines.push(
+    `  earshot          ${
+      data.earshot?.installed
+        ? data.earshot.version || "installed"
+        : "not installed (audio critique and SFX)"
+    }`
+  );
 
   lines.push("", "TTS", "");
   const ttsKeys = [

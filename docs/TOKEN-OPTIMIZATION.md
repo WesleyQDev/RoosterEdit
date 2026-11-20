@@ -4,7 +4,7 @@ Video consumes tokens naturally: transcript, frames, plan, render logs, and gene
 
 ## The biggest thieves
 
-1. **Render/check logs** — HyperFrames and Remotion print thousands of lines. Redirect them to a file and read only the end.
+1. **Render/check logs** — HyperFrames print thousands of lines. Redirect them to a file and read only the end.
 2. **Full transcript with words** — use `digest` and read only the segments.
 3. **Raw plan JSON** - use `plan`.
 4. **Whole references** — read only the section you need.
@@ -46,8 +46,8 @@ tail -n 20 ../../work/logs/render.log
 npx hyperframes check --json > ../../work/logs/check.json 2>&1
 node -e "const d=require('../../work/logs/check.json'); console.log({ok:d.ok, errors:d.lint?.errorCount, warnings:d.lint?.warningCount})"
 
-# Remotion
-npx remotion render src/index.ts RoosterVideo out.mp4 --log=error
+# Blender (one frame first)
+blender --background scene.blend --render-frame 1 > blender.log 2>&1
 
 # FFmpeg
 ffmpeg -v error -i input.mp4 ...

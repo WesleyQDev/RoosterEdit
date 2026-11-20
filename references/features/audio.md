@@ -144,7 +144,7 @@ The command renders a preview of `plan.music` + `plan.sfx` into `assets/generate
 - Ducking uses fixed threshold, ratio, attack, and release. There is no per-section volume automation or EQ-based de-esser.
 - SFX always start at source time 0; there is no `in` field for one-shots.
 - `mixAudioArgs` re-encodes the final audio and always applies `loudnorm` at a fixed -14 LUFS target; it is meant to be the final audio pass, not an intermediate stem. Change `LOUDNESS_FILTER` in the module for a different delivery target.
-- Still-image projects are not automated; add the audio mix in the HyperFrames or Remotion project.
+- Still-image projects are not automated; add the audio mix in the HyperFrames project or in `plan.music`/`plan.sfx`.
 - The module does not probe media. Bad paths, unsupported codecs, or a music `end` past the file end fail in FFmpeg.
 - Plan validation checks `sfx` ids, `src`, and timing; it does not yet validate every gain or all ducking parameters.
 - `build` now uses `mixAudioArgs` for `plan.music` and `plan.sfx`; the `audio` command is a preview pass.

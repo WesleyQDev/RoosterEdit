@@ -9,8 +9,7 @@ AI video is not free, but you can separate what is required from what is optiona
 | An agent with access to files and commands | Subscription or API | Claude Pro, ChatGPT/Codex, Gemini, or another. It is the only cost truly required for the flow. |
 | Node.js, FFmpeg, Python | Free | Local tools. |
 | Whisper or faster-whisper | Free | Local transcription; uses CPU/GPU and time. |
-| HyperFrames | Free and open source | Default engine for HTML/CSS/GSAP. |
-| Remotion | Free for individuals and small teams; license for larger companies | Check the current license before using it commercially. |
+| HyperFrames | Free and open source | The creative engine: HTML/CSS/GSAP, canvas, charts, Three.js. |
 
 ## What is optional
 
@@ -21,7 +20,9 @@ AI video is not free, but you can separate what is required from what is optiona
 | Stock, music, and fonts | Variable | Only with a recorded license; never use without knowing the source. |
 | OCR | Free | Native on Windows/macOS, Tesseract on Linux, or `tools install ocr-wasm` (~15 MB) into a user cache. |
 | Cloud render | Per minute/machine | Long or 4K videos; local render is usually enough. |
-| GPU | Hardware | Speeds up 3D and encodes; not required to start. |
+| GPU | Hardware | Speeds up 3D and hardware encoding; `doctor` reports it, `--encoder auto` uses it. Not required to start. |
+| Blender | Free and open source | Heavy 3D, simulation, photoreal render. Uses CPU or GPU for minutes per shot. |
+| earshot | Free and open source | Audio critique and SFX; ~1.1 GB of models and a slower first call. Optional Gemini critique is paid and needs your key. |
 
 ## Invisible costs
 

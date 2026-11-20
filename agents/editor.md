@@ -31,7 +31,7 @@ Do not read the raw transcript, engine code, or render logs. The analysis alread
 8. Check every path in the plan against `assets/manifest.json`. A missing asset is a blocker, not a placeholder.
 9. Write `edit/plan.json`, then run `plan <slug>` from the directory that contains `rooster/` to write `edit/plan.md`, `edit/plan.html`, and `qa/plan-review.md`. Validate with `plan <slug> --check` and read `qa/plan-review.md`. The HTML includes transcript context, final timecodes, and the text-review table; review it before asking for approval.
 10. Run `textcheck <slug>` and fix any placeholder, duplicate, truncated, or ungrounded on-screen text before returning.
-11. Fix the top `plan --check` warnings: density gaps, long jumps without cover, orphan reactions, b-roll without `covers`, and elements the target engine cannot render. If the plan needs zooms/transitions, target HyperFrames or Remotion; FilmCraft does not animate the base clip.
+11. Fix the top `plan --check` warnings: density gaps, long jumps without cover, orphan reactions, b-roll without `covers`, and elements the target engine cannot render. If the plan needs zooms/transitions, target HyperFrames; FilmCraft does not animate the base clip.
 12. Update `edit/edl.json` and `edit/timeline.json` when the project uses them. Keep the plan as the source of truth.
 
 ## Quality bar

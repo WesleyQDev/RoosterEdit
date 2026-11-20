@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Turn the footage and assets you already have into a finished cut.</strong><br />
-  Your coding agent plans the edit, asks for approval, and renders with HyperFrames, Remotion, or FFmpeg.
+  Your coding agent plans the edit, asks for approval, and renders with HyperFrames, or FFmpeg.
 </p>
 
 <p align="center">
@@ -89,7 +89,7 @@ Check the machine:
 npx rooster-edit@latest doctor
 ```
 
-Requirements: **Node.js 22+**, **FFmpeg/FFprobe**, and a browser. Whisper, `yt-dlp`, and a GPU are optional. Full guide: [`docs/INSTALL.md`](docs/INSTALL.md).
+Requirements: **Node.js 22+**, **FFmpeg/FFprobe**, and a browser. Whisper, `yt-dlp`, Blender, earshot, and a GPU are optional; a GPU is detected automatically and used for hardware encoding on drafts. Full guide: [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## What you can make
 
@@ -97,7 +97,7 @@ Requirements: **Node.js 22+**, **FFmpeg/FFprobe**, and a browser. Whisper, `yt-d
 - Interviews, tutorials, demos, and screen recordings cut into a tight story.
 - Product promos, reels, Shorts, and vertical cuts from existing footage.
 - Narrated explainers with TTS, captions, b-roll, and charts.
-- Motion graphics, and 3D scenes from HyperFrames registry blocks (installed on demand) or a hand-written Three.js/Remotion scene.
+- Motion graphics and 3D scenes from HyperFrames registry blocks (installed on demand), a local Three.js scene, or a Blender render placed as a clip.
 
 ## How it works
 
@@ -105,7 +105,7 @@ Requirements: **Node.js 22+**, **FFmpeg/FFprobe**, and a browser. Whisper, `yt-d
 2. **Intake** — give the agent a brief and put the footage in the project.
 3. **Plan** — the agent transcribes and proposes cuts, chapters, graphics, b-roll, and music in `edit/plan.json`.
 4. **Approval** — review the plan, three style frames, and the browser preview.
-5. **Build and render** — the chosen engine builds the project; `qa` checks the plan, audio, cuts, and faces, and extracts only the frames that need review before the final render.
+5. **Choose techniques and build** — `techniques --json` maps each layer to the best available tool; HyperFrames builds the project and FFmpeg handles the cut, audio, and color. `qa` checks the plan, audio, cuts, and faces, and extracts only the frames that need review before the final render.
 
 The plan is the control point. If it is wrong, the video is wrong.
 
@@ -130,7 +130,7 @@ Bugs and ideas: open an issue. Code changes: run `npm install` once, then `npm r
 
 - [How to edit videos with AI using Claude Code](https://www.youtube.com/watch?v=EIj7WPiKmOE), by Marcos Lemos — inspiration for the six-step workflow.
 - [3D animation factory with Claude](https://www.youtube.com/watch?v=u6du22ySnC4), by diegokk — inspiration for the Three.js pipeline.
-- [HyperFrames](https://github.com/heygen-com/hyperframes) and [Remotion](https://www.remotion.dev) — the render engines.
+- [HyperFrames](https://github.com/heygen-com/hyperframes) — the creative engine; [Three.js](https://github.com/mrdoob/three.js), [Blender](https://www.blender.org/), and [earshot](https://github.com/Leonxlnx/earshot) — optional techniques in the catalog.
 
 RoosterEdit does not copy those videos. It summarizes the workflows in its own skill.
 

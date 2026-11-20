@@ -42,10 +42,7 @@ I want to edit my videos with AI using RoosterEdit. Prepare this computer and th
    ```bash
    node "<skill>/scripts/rooster.mjs" build my-channel/my-video --engine hyperframes
    ```
-   If I choose React, data, or 3D, use Remotion:
-   ```bash
-   node "<skill>/scripts/rooster.mjs" build my-channel/my-video --engine remotion
-   ```
+   If the video needs a browser 3D scene, use a Three.js block or a local scene inside HyperFrames; if it needs heavy 3D, render it in Blender and add the clip as b-roll. HyperFrames is the only engine.
 10. Use `qa` for the review and `engineer` for the final render. At the end, give me a short summary (up to 8 lines) of what was done and the next step. Do not write a long guide.
 
 ---
@@ -53,7 +50,7 @@ I want to edit my videos with AI using RoosterEdit. Prepare this computer and th
 ## Notes
 
 - Subagent roles are in `agents/`. The main agent must pass paths, not content, and read only the handoff from `work/handoffs/`.
-- If the environment has no Node/FFmpeg, do not fake the render: generate the plan and explain that HyperFrames/Remotion need Node.
+- If the environment has no Node/FFmpeg, do not fake the render: generate the plan and explain that HyperFrames need Node.
 - Do not download third-party content without permission.
 - Use `style.md` as the source of truth for the visuals; a profile, if present, complements it.
 - The plan is the most important gate: no build before approval.

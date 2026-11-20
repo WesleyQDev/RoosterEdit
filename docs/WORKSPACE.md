@@ -25,12 +25,10 @@ rooster/
 │       │       ├── edit/{transcript.json,digest.md,analysis.json,plan.json,plan.md,plan.html,edl.json,timeline.json,captions/,audio/,export/}
 │       │       ├── engine/
 │       │       │   ├── hyperframes/
-│       │       │   ├── remotion/
 │       │       │   └── filmcraft/
 │       │       │       ├── <slug>.fcproj
 │       │       │       ├── assets/
 │       │       │       ├── hyperframes/
-│       │       │       ├── remotion/
 │       │       │       ├── elements/
 │       │       │       └── archive/
 │       │       ├── work/
@@ -132,7 +130,7 @@ node scripts/rooster.mjs new video-special --channel studio-a \
   --voice user
 ```
 
-`new --target filmcraft` already creates the project with `timeline: "filmcraft"`; `--target hyperframes|remotion` pins the creative engine. Without `--target`, the project inherits the channel engine.
+`new --target filmcraft` already creates the project with `timeline: "filmcraft"`; `--target hyperframes` pins the assembly target. Without `--target`, the project inherits the channel engine.
 
 `project.json` records:
 
@@ -140,8 +138,9 @@ node scripts/rooster.mjs new video-special --channel studio-a \
 - `profile`;
 - `format`;
 - `language`;
-- `engine` (creative renderer or the element renderer in FilmCraft);
+- `engine` (`hyperframes`; the only creative renderer);
 - `timeline` (`none` or `filmcraft`);
+- `techniques` (the layers chosen at the gate, with the tool and the reason);
 - `mode` (source, voice, style, autonomy);
 - `assets` (strategy, permissions, license);
 - `overrides` (what came from the project, not the channel).
@@ -189,7 +188,7 @@ The main agent reads the handoffs, looks at `plan.html` and 3–5 frames. The fu
 
 ## FilmCraft timeline (optional)
 
-FilmCraft is an opt-in timeline target. It does not replace HyperFrames or Remotion and is not required for the normal flow.
+FilmCraft is an opt-in timeline target. It does not replace HyperFrames and is not required for the normal flow.
 
 ```bash
 node scripts/rooster.mjs build video-x --target filmcraft
@@ -202,10 +201,10 @@ node scripts/rooster.mjs render video-x --draft
 The build is hybrid:
 
 - FFmpeg assembles the cut and the audio mix in `engine/filmcraft/assets/`;
-- HyperFrames or Remotion render each element in `engine/filmcraft/elements/` (ProRes 4444 MOV with alpha);
+- HyperFrames render each element in `engine/filmcraft/elements/` (ProRes 4444 MOV with alpha);
 - FilmCraft assembles `<slug>.fcproj` with the source in V1 (video only), the mixed audio in A1, and the elements in V2+, on non-overlapping tracks.
 
-`--engine hyperframes|remotion` chooses the element renderer; `auto` uses Remotion when there is a 3D element and HyperFrames otherwise. `work/filmcraft.json` stores the state (items, clips, hashes, and windows) for incremental builds.
+`--engine hyperframes` chooses the element renderer; it is the only one. A heavy 3D shot is rendered in Blender and placed as a clip. `work/filmcraft.json` stores the state (items, clips, hashes, and windows) for incremental builds.
 
 - `--if-needed` skips when the plan, base, renderer, and format have not changed.
 - Unchanged elements are reused from `cache/elements/`.
@@ -230,7 +229,7 @@ The EDL/FCPXML `export` remains available and is independent of FilmCraft.
 Onboarding flow (the agent asks, it does not decide on its own):
 
 - FilmCraft found, MCP not registered: "FilmCraft was found on this PC. Connect its MCP now? After connecting, you must restart the program/agent so it can see the tools." Options: Connect MCP / Not now.
-- FilmCraft not found: "FilmCraft was not found on this PC. Continue with HyperFrames/Remotion, or install FilmCraft and connect its MCP?" Options: Continue with HyperFrames/Remotion / Install FilmCraft + connect MCP.
+- FilmCraft not found: "FilmCraft was not found on this PC. Continue with HyperFrames, or install FilmCraft and connect its MCP?" Options: Continue with HyperFrames / Install FilmCraft + connect MCP.
 - App found without a CLI: ask to install the CLI or set `ROOSTER_FILMCRAFT_CLI`.
 - MCP already registered: warn that the agent may still need a restart.
 - Never install or write MCP config without explicit permission.
@@ -296,5 +295,5 @@ Read `references/link-ingest.md` before downloading. The command only works with
 5. `transcribe` — generates `edit/transcript.json` (via `transcript-analyst`).
 6. `digest` — reads the transcript in parts; the main agent receives only the handoff.
 7. `plan` - approves the plan (via `editor`).
-8. `build --target` — generates HyperFrames/Remotion (`--target hyperframes|remotion`) or, optionally, a FilmCraft timeline (`--target filmcraft`), via `engineer`.
+8. `build --target` — generates HyperFrames (`--target hyperframes`) or, optionally, a FilmCraft timeline (`--target filmcraft`), via `engineer`.
 9. `preview`/`render` — review and delivery (via `qa` + `engineer`).

@@ -36,7 +36,7 @@ node "<skill>/scripts/rooster.mjs" feedback <slug> \
 
 The command collects:
 
-- RoosterEdit, OS, Node, FFmpeg, HyperFrames, Remotion, FilmCraft and `gh` versions;
+- RoosterEdit, OS, Node, FFmpeg, HyperFrames, Blender, earshot, FilmCraft, the GPU/encoder, and `gh` versions;
 - project engine, timeline, format, duration and status;
 - plan and timeline validation errors/warnings;
 - the last render probe and validation issues;

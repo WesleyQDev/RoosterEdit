@@ -149,7 +149,7 @@ By default the plan uses `editMode: "cleanup"`: it keeps the whole video and cut
 
 The eight steps are: environment, intake, assets/transcript, plan, timeline, build, preview/QA, render/delivery. The agent shows the current step and asks before moving on; timeline and final render are not approved in the same question. Start in `guided` for the first videos and switch to `auto` once the style is stable.
 
-At step 6, before creating the engine project, the agent asks how to assemble it: **HyperFrames** (default, ready to use), **Remotion** (React/3D; requires `npm install` with your permission), or **FilmCraft** (editable timeline; requires connecting the MCP and restarting the agent). If you already chose an engine, it only confirms; if you said "auto", it decides and explains. Nothing is installed or configured without your authorization.
+At step 6, before creating the engine project, the agent runs `techniques --json`, says which layers the plan needs, and asks with a concrete proposal: a cleanup cut (FFmpeg), motion graphics (HyperFrames), heavy 3D (Blender, if installed), a sound pass (earshot, if installed), or a **FilmCraft** editable timeline (requires connecting the MCP and restarting the agent). If you already chose an engine, it only confirms; if you said "auto", it picks the available technique with the lowest cost and explains. Nothing is installed or configured without your authorization.
 
 The plan must include the creative layer: visual elements, b-roll, and music, or an explicit justification for omitting them. **Cuts alone do not count as a final video.** `build` refuses a plan that only cuts or has no music decision; record the exception in `notes` or use `--allow-cut-only` / `--allow-no-music` when it is intentional.
 

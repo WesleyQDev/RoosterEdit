@@ -377,7 +377,7 @@ export function elementSupport(plan, engine) {
       unsupported.push({
         id: element.id || null,
         type,
-        reason: `unknown engine "${raw}"; use hyperframes, remotion, or auto`,
+        reason: `unknown engine "${raw}"; use hyperframes or auto`,
       });
       continue;
     }
@@ -390,56 +390,23 @@ export function elementSupport(plan, engine) {
       });
       continue;
     }
-    const target = ELEMENT_ENGINES.includes(declared) ? declared : assembly;
-    if (ELEMENT_ENGINES.includes(declared)) {
-      mixed.push({ id: element.id || null, type, engine: declared });
-    }
     if (assembly === "filmcraft" && (type === "zoom" || type === "transition")) {
       unsupported.push({
         id: element.id || null,
         type,
         reason:
           type === "zoom"
-            ? "FilmCraft does not animate the base clip; use HyperFrames/Remotion or a punch-in"
+            ? "FilmCraft does not animate the base clip; use HyperFrames or a punch-in"
             : "FilmCraft does not support overlay transitions",
-      });
-    } else if (target === "remotion" && (type === "custom" || template === "custom")) {
-      unsupported.push({
-        id: element.id || null,
-        type,
-        reason: `Remotion cannot execute custom HTML/JS; set "engine": "hyperframes" on this element`,
-      });
-    } else if (target === "remotion" && (type === "scene" || template === "block")) {
-      unsupported.push({
-        id: element.id || null,
-        type,
-        reason: `registry blocks run in HyperFrames; set "engine": "hyperframes" on this element`,
-      });
-    } else if (target === "remotion" && (type === "canvas" || template === "canvas")) {
-      unsupported.push({
-        id: element.id || null,
-        type,
-        reason: `canvas scenes animate a camera path with GSAP; set "engine": "hyperframes" on this element`,
       });
     } else if (declared && assembly !== "filmcraft" && declared !== assembly) {
       unsupported.push({
         id: element.id || null,
         type,
-        reason: `this element declares ${declared}, but the ${assembly || "single"} target draws every element with one engine; use --target filmcraft for a mixed build`,
+        reason: `this element declares ${declared}, but the ${assembly || "single"} target draws every element with one engine`,
       });
     } else {
       supported.push(type);
-      if (target === "remotion" && template && template !== "chart" && template !== "broll") {
-        fallback.push({
-          id: element.id || null,
-          type,
-          template,
-          reason:
-            template === "parallax"
-              ? "Remotion renders a static parallax scene; use HyperFrames for the camera move"
-              : `Remotion renders "${template}" as the card/text fallback; use HyperFrames for the animated layout`,
-        });
-      }
     }
   }
   return { supported: Array.from(new Set(supported)), unsupported, fallback, mixed };

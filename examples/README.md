@@ -8,7 +8,7 @@ Projetos de exemplo planejados. Cada exemplo deve ser pequeno o suficiente para 
 |---|---|
 | `entrevista-90s` | Footage real, transcript, EDL, b-roll, legendas |
 | `explainer-llm` | TTS, HyperFrames, kinetic type, charts |
-| `robo-3d` | Three.js, Remotion, personagem, música |
+| `robo-3d` | Three.js, personagem, música |
 | `lancamento-produto` | Screenshots, logo, callouts, música |
 | `link-ingest` | yt-dlp, metadata, transcript, corte |
 

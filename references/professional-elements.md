@@ -17,7 +17,9 @@ These are the layers that separate a cut-only edit from a finished video. Load o
 | Multicam | `features/multicam.md` | Camera selection, J/L cuts, speed ramps |
 | QA | `../qa.md` | Machine pass, thresholds, and the human checklist |
 | OCR | `features/ocr.md` | Text and boxes from a frame, without Python |
-| 3D blocks | `engines.md` | Registry blocks, install, and offline caveat |
+| 3D blocks and WebGL | `engines.md` + `techniques/three-js.md` | Registry blocks, local scenes, install, and offline caveat |
+| Heavy 3D | `techniques/blender.md` | Blender headless, the optional MCP, and clip delivery |
+| Listening | `techniques/ears.md` | Audio critique, take selection, SFX, and semantic QA |
 
 ## Progress and questions
 
@@ -25,8 +27,8 @@ Every layer starts with the current `Step X/8` marker. If a choice would change 
 
 ## Status
 
-- Wired into `build`: music/SFX ducking, TTS voiceover from `edit/voiceover.json`, zoom/transitions (HyperFrames/Remotion), charts, structured templates (`chapter`, `diagram`, `counter`, `list`, `emphasis`, `callout`, `terminal`, `end-card`), custom HTML/CSS/GSAP elements, PIP/split b-roll, and cut smoothing (audio micro-fade + punch-in).
-- Structured templates are fully rendered in HyperFrames (including the FilmCraft element path). Remotion uses the card/text fallback with the template's data, not the animated layout; use HyperFrames when the motion design is the point.
+- Wired into `build`: music/SFX ducking, TTS voiceover from `edit/voiceover.json`, zoom/transitions, charts, structured templates (`chapter`, `diagram`, `counter`, `list`, `emphasis`, `callout`, `terminal`, `end-card`), custom HTML/CSS/GSAP elements, canvas scenes, PIP/split b-roll, and cut smoothing (audio micro-fade + punch-in).
+- Structured templates and canvas scenes are fully rendered in HyperFrames, including the FilmCraft element path.
 - CLI layer: captions (including burn-in), delivery, reframe, b-roll, color (including two-pass stabilization), multicam (including speed/J-L and camera concat), plan quality review.
 - Applied by the build: color grading joins the cut pass, so it covers only the keeps; run `color` only for a standalone master or stabilization.
 - Still manual: multicam into the build (`multicam --render --update-plan` first), and provider approval for TTS generation.

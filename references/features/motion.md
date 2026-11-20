@@ -1,6 +1,6 @@
 # Motion: real zooms and transitions
 
-`scripts/features/motion.mjs` turns the `zoom` and `transition` element types into real motion. It is pure and dependency-free: helpers return CSS, HTML, GSAP, or interpolation values, and never write files or import `rooster.mjs`. Wire them into `renderHyperFramesHtml`, `renderHyperFramesElement`, or `renderRemotionTsx` after the module is reviewed.
+`scripts/features/motion.mjs` turns the `zoom` and `transition` element types into real motion. It is pure and dependency-free: helpers return CSS, HTML, and GSAP strings, and never write files or import `rooster.mjs`. They are wired into `renderHyperFramesHtml` and `renderHyperFramesElement`.
 
 ## See what is planned
 
@@ -82,8 +82,6 @@ It shows:
 | `hyperframesTransition(element, theme, options)` | `{ id, selector, html, css, tween, values }`. |
 | `hyperframesZoomCss`, `hyperframesZoomTween` | The individual CSS or GSAP string. |
 | `hyperframesTransitionHtml`, `hyperframesTransitionCss`, `hyperframesTransitionTween` | The individual HTML, CSS, or GSAP string. |
-| `remotionZoomValues`, `remotionTransitionValues` | Frame ranges, output ranges, and `styleAt(frame)`. |
-| `remotionZoomSnippet`, `remotionTransitionSnippet` | Copy-paste Remotion statements. |
 
 ## HyperFrames
 
@@ -109,31 +107,6 @@ The GSAP snippets expect a paused timeline named `tl`. Pass `{ timeline: "master
 
 Wrap the base media in a zoom layer when the existing base tween already animates `scale`. Two GSAP tweens writing `scale` to the same element will fight, and the last one wins. If a wrapper is not possible, pass `#base` and disable the base scale tween while a zoom is active.
 
-## Remotion
-
-```js
-import {
-  remotionZoomValues,
-  remotionTransitionValues,
-} from "./features/motion.mjs";
-
-const z = remotionZoomValues(zoomElement, fps);
-const scale = interpolate(frame, z.inputRange, z.outputRange, {
-  extrapolateLeft: "clamp",
-  extrapolateRight: "clamp",
-});
-// <div style={{ transform: `scale(${scale})`, transformOrigin: z.transformOrigin }}>
-
-const t = remotionTransitionValues(transitionElement, fps, { theme });
-const opacity = interpolate(frame, t.inputRange, t.outputRange, {
-  extrapolateLeft: "clamp",
-  extrapolateRight: "clamp",
-});
-// <div style={{ position: "absolute", inset: 0, background: t.color, opacity, pointerEvents: "none" }} />
-```
-
-`remotionZoomSnippet(element, { fps })` and `remotionTransitionSnippet(element, { fps, theme })` return copy-paste statements when editing the generated TSX by hand. `styleAt(frame)` on either values object returns the same style inline, which is easier to use inside a mapped element component.
-
 ## Custom elements: freedom with a contract
 
 `template: "custom"` is the escape hatch. The agent may write any HTML/CSS/GSAP
@@ -153,8 +126,7 @@ Rules:
 - Local assets only. Remote CSS, fonts, and images are not copied.
 - Keep inline HTML/CSS/animation small. A reusable look belongs in
   `style/components/<name>/`.
-- Remotion cannot execute custom HTML/JS. Use HyperFrames for a custom element,
-  or a Remotion component when Remotion is the engine.
+- Custom elements are HyperFrames-only; the plan adapter rejects them on a target that cannot execute HTML/JS.
 
 `plan <slug> --check` reports a private timeline, imports/fetch, oversized
 inline code, and missing `tl` usage. Fix those before `build`.
@@ -189,16 +161,15 @@ The cut pass is separate from the plan's `zoom`/`transition` elements. It makes 
 - **Punch-in**: an uncovered silence cut toggles a 3.5% scale (center crop) on the following clip, so consecutive shots read as wide/tight instead of a hard jump. A b-roll or transition that overlaps the join suppresses the punch. `--cut-punch 1` disables it; `--cut-punch 1.06` makes it stronger.
 - **Coverage report**: `plan --check` lists long jumps with no visual cover. Add a `broll` with `layout: "pip"` or `"split"`, or a `transition`, at the join.
 
-FilmCraft limitation: FilmCraft does not animate the base clip's scale, so `zoom` and overlay `transition` elements are not rendered by the FilmCraft target. `build` now fails with a clear message unless you pass `--allow-skipped-elements`. Use HyperFrames or Remotion when the plan needs real zooms/transitions, or replace them with `punch-in` coverage.
+FilmCraft limitation: FilmCraft does not animate the base clip's scale, so `zoom` and overlay `transition` elements are not rendered by the FilmCraft target. `build` now fails with a clear message unless you pass `--allow-skipped-elements`. Use `--target hyperframes` when the plan needs real zooms/transitions, or replace them with `punch-in` coverage.
 
 ## Build integration
 
 `build` now reads `zoom` and `transition` elements from `edit/plan.json`:
 
 - HyperFrames gets the transition overlay HTML/CSS and the GSAP zoom/transition tweens; a base scale tween is disabled while a zoom is active.
-- Remotion gets `motion.inputRange` / `motion.outputRange` data in `src/data/plan.ts`; the generated component applies the zoom to the base wrapper and renders the transition overlay.
 
-Preview both engines at delivery resolution. The generated code is deterministic, but the plan still owns timing and placement.
+Preview at delivery resolution. The generated code is deterministic, but the plan still owns timing and placement.
 
 ## Timing rules
 
@@ -206,7 +177,7 @@ Preview both engines at delivery resolution. The generated code is deterministic
 - Keep transitions between about 0.25 s and 0.8 s. Longer is a scene device, not a cut.
 - A zoom should reach its target quickly (0.4–0.6 s), hold through the insight, and release before the next visual beat.
 - Do not overlap two zooms on the same selector. Do not stack a transition over another full-screen transition.
-- Remotion frame ranges come from seconds and are clamped to whole frames. Very short effects below one frame collapse to one frame per step.
+- Very short effects below one frame collapse to one frame; avoid transitions shorter than 0.2 s.
 
 ## QA
 

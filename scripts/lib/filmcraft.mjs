@@ -1273,11 +1273,11 @@ export function filmCraftOnboardingPrompt(status = {}) {
     return {
       kind: "install",
       question:
-        "FilmCraft was not found on this PC. Continue with HyperFrames/Remotion, or install FilmCraft and connect its MCP?",
+        "FilmCraft was not found on this PC. Continue with HyperFrames, or install FilmCraft and connect its MCP?",
       questionPt:
-        "Não encontrei o FilmCraft no seu PC. Quer continuar via HyperFrames/Remotion ou instalar o FilmCraft + conectar o MCP?",
-      options: ["Continue with HyperFrames/Remotion", "Install FilmCraft + connect MCP"],
-      optionsPt: ["Continuar via HyperFrames/Remotion", "Instalar FilmCraft + conectar MCP"],
+        "Não encontrei o FilmCraft no seu PC. Quer continuar via HyperFrames ou instalar o FilmCraft + conectar o MCP?",
+      options: ["Continue with HyperFrames", "Install FilmCraft + connect MCP"],
+      optionsPt: ["Continuar via HyperFrames", "Instalar FilmCraft + conectar MCP"],
     };
   }
   if (!value.cli) {
@@ -1287,8 +1287,8 @@ export function filmCraftOnboardingPrompt(status = {}) {
         "FilmCraft is installed, but filmcraft-cli was not found. Install the CLI (or set ROOSTER_FILMCRAFT_CLI), then connect the MCP.",
       questionPt:
         "O FilmCraft está instalado, mas o filmcraft-cli não foi encontrado. Instale o CLI (ou defina ROOSTER_FILMCRAFT_CLI) e conecte o MCP.",
-      options: ["Continue with HyperFrames/Remotion", "Install the FilmCraft CLI"],
-      optionsPt: ["Continuar via HyperFrames/Remotion", "Instalar o CLI do FilmCraft"],
+      options: ["Continue with HyperFrames", "Install the FilmCraft CLI"],
+      optionsPt: ["Continuar via HyperFrames", "Instalar o CLI do FilmCraft"],
     };
   }
   if (value.mcp && value.mcp.registered === true) {

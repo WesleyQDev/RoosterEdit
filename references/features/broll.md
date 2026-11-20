@@ -184,7 +184,7 @@ Use `plan --show` as the approval gate. Do not build from suggestions you have n
 - Pass manifest objects with `tags` and `src` when available; filename-only matching is weaker.
 - Renumber `id` values if the plan already uses them, and check overlaps with existing elements, music cues, and captions.
 - Place approved files in `assets/source/` or `assets/licensed/`, record the license and attribution, and keep the plan `src` pointing at the final location.
-- HyperFrames and Remotion already render `type: "broll"` elements as images or muted videos with object-fit cover, so approved elements can be built without a new element type.
+- HyperFrames already renders `type: "broll"` elements as images or muted videos with object-fit cover, so approved elements can be built without a new element type.
 
 ## Limitations
 

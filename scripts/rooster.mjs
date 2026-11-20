@@ -3,7 +3,7 @@
  * RoosterEdit CLI
  *
  * Zero-dependency Node.js CLI for workspace, project, asset, and validation
- * operations. Engine-specific work is delegated to HyperFrames, Remotion, or
+ * operations. Engine-specific work is delegated to HyperFrames, Blender, or
  * FFmpeg; this CLI keeps the editorial structure consistent.
  */
 
@@ -20,20 +20,26 @@ import { reframeArgs, targetDimensions } from "./features/reframe.mjs";
 import { rankBroll, suggestBrollElements } from "./features/broll.mjs";
 import { mixAudioArgs } from "./features/audio.mjs";
 import { buildColorFilters, buildStabilizePasses, colorArgs } from "./features/color.mjs";
-import { hyperframesTransition, hyperframesZoom, remotionZoomValues, remotionTransitionValues } from "./features/motion.mjs";
+import { hyperframesTransition, hyperframesZoom } from "./features/motion.mjs";
 import { renderChartSvg, validateChart, chartSummary } from "./features/charts.mjs";
 import { splitScript, detectTtsProviders, buildTtsArgs, buildVoiceoverPlan } from "./features/tts.mjs";
+import { videoEncoderArgs } from "./features/encoders.mjs";
 import { buildMulticamPlan, speedFilter, jlCutOffsets } from "./features/multicam.mjs";
 import { cacheClear, cacheGc, cacheInfo, cacheRoot, readCache, withCache } from "./lib/cache.mjs";
 import { runAsync, runPool } from "./lib/exec.mjs";
 import { detectCapabilities } from "./lib/capabilities.mjs";
+import {
+  describeHardware,
+  detectHardware,
+  isHardwareEncoder,
+  resolveEncoder,
+} from "./lib/hardware.mjs";
 import { engineVersion, findHyperFrames } from "./lib/engines.mjs";
 import { buildProbeArgs, parseProbeJson, probeKey, sourceFingerprint } from "./lib/media.mjs";
 import {
   hyperFramesRenderArgs,
   parseRenderProgress,
   readRenderMeta,
-  remotionRenderArgs,
   renderKey,
   runRender,
   validateRenderProbe,
@@ -124,6 +130,12 @@ import {
   renderCanvasHtml,
 } from "./features/canvas.mjs";
 import { buildFeedbackIssue, FEEDBACK_ISSUES_URL, FEEDBACK_REPO } from "./features/feedback.mjs";
+import {
+  formatTechniques,
+  needsFromPlan,
+  TECHNIQUE_IDS,
+  techniquesReport,
+} from "./features/techniques.mjs";
 import { getBrollIndex } from "./lib/broll-index.mjs";
 import { contactSheetArgs, extractFramesArgs } from "./lib/qa-frames.mjs";
 import { generateVoiceover } from "./lib/tts-runner.mjs";
@@ -142,8 +154,7 @@ import { normalizeTranscript } from "./features/transcript.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const SKILL_ROOT = path.resolve(__dirname, "..");
-const VERSION = "0.2.0";
-const REMOTION_VERSION = "4.0.540";
+const VERSION = "0.3.0";
 
 const CWD = process.cwd();
 const WORKSPACE = process.env.ROOSTER_WORKSPACE
@@ -153,14 +164,68 @@ const ROOSTER_HOME = process.env.ROOSTER_HOME
   ? path.resolve(process.env.ROOSTER_HOME)
   : path.join(os.homedir(), ".rooster");
 
-const ENGINE_IDS = ["auto", "hyperframes", "remotion", "ffmpeg"];
-const TARGET_IDS = ["auto", "hyperframes", "remotion", "filmcraft"];
+const ENGINE_IDS = ["auto", "hyperframes"];
+const TARGET_IDS = ["auto", "hyperframes", "filmcraft"];
 const TIMELINE_IDS = ["none", "filmcraft"];
 const SOURCE_IDS = ["live", "generated", "hybrid"];
 const VOICE_IDS = ["user", "tts", "none"];
 const STYLE_IDS = ["user", "profile", "ai", "reference"];
 const AUTONOMY_IDS = ["auto", "guided", "manual"];
 const STATUS_IDS = ["intake", "planning", "assets", "building", "preview", "qa", "rendering", "done", "blocked"];
+
+let HARDWARE_CACHE = null;
+
+/**
+ * Detect the GPU once per process. Builds and renders call this before
+ * resolving `--encoder auto`; `doctor` has its own cached copy.
+ */
+function hardwareInfo() {
+  if (!HARDWARE_CACHE) HARDWARE_CACHE = detectHardware({ env: process.env });
+  return HARDWARE_CACHE;
+}
+
+/**
+ * Resolve the encoder for this command. `auto` picks the best hardware H.264
+ * for drafts and stays on libx264 for delivery.
+ */
+function cliEncoder(args = {}, quality = "draft") {
+  return resolveEncoder(args.encoder, {
+    quality,
+    hardware: hardwareInfo(),
+    env: process.env,
+  });
+}
+
+function encoderLabel(encoder) {
+  const hardware = hardwareInfo();
+  if (!isHardwareEncoder(encoder)) return "CPU";
+  return hardware.name ? `${hardware.name}, GPU` : "GPU";
+}
+
+/**
+ * Reject a removed or unknown engine before it is written into a channel or
+ * project. Silent fallbacks hid the removal for users with old commands.
+ */
+function assertEngineArg(value, where) {
+  if (value === undefined || value === null || value === "" || value === true) return;
+  const engine = String(value).trim().toLowerCase();
+  if (engine === "remotion") {
+    fail(
+      `Remotion was removed from RoosterEdit (${where}). Use hyperframes; render heavy 3D in Blender and add the clip.`
+    );
+  }
+  if (!ENGINE_IDS.includes(engine)) {
+    fail(`Unknown engine "${value}" (${where}). Use auto or hyperframes.`);
+  }
+}
+
+function assertTargetArg(value) {
+  if (value === undefined || value === null || value === "" || value === true) return;
+  const target = String(value).trim().toLowerCase();
+  if (!TARGET_IDS.includes(target)) {
+    fail(`Unknown target "${value}". Use auto, hyperframes, or filmcraft.`);
+  }
+}
 
 const MOTION_TEMPLATES = [
   { id: "title", label: "Title", description: "Large title; opens the video or a block." },
@@ -453,6 +518,45 @@ async function doctor(args = {}) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// techniques
+// ---------------------------------------------------------------------------
+
+function needList(value) {
+  if (value === undefined || value === null || value === "") return [];
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .flatMap((entry) => String(entry).split(","))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+async function techniquesCommand(args = {}) {
+  const caps = await doctor({ refresh: Boolean(args.refresh) });
+  let needs = needList(args.need);
+  let derived = null;
+  const slug = args.plan || args.project;
+  if (typeof slug === "string" && slug.trim()) {
+    const project = resolveProject(slug);
+    const plan = readJson(path.join(project.dir, "edit", "plan.json"), {});
+    derived = needsFromPlan(plan, project.config);
+    needs = [...new Set([...needs, ...derived])];
+  }
+  const report = techniquesReport(caps, { needs });
+  if (args.json) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+  if (derived) {
+    console.log(`Derived from edit/plan.json: ${derived.join(", ")}`);
+    console.log("Adjust the list with --need if the plan is incomplete.\n");
+  }
+  console.log(formatTechniques(report));
+  if (report.techniques.some((row) => !row.available)) {
+    console.log("\nRead references/techniques.md before choosing; ask before installing anything.");
+  }
+}
+
 function printDoctor(data) {
   heading("RoosterEdit doctor");
   console.log(`  OS              ${data.os} ${data.arch}`);
@@ -501,7 +605,9 @@ function printDoctor(data) {
   if (data.cache) {
     console.log(`  Cache           ${data.cache.enabled ? data.cache.dir : "off"}${data.cache.hit ? " (hit)" : ""}`);
   }
-  console.log(`  GPU             ${data.gpu || "not detected"}`);
+  console.log(`  GPU             ${describeHardware(data.hardware)}`);
+  console.log(`  Blender         ${data.blender?.version || "not found (optional 3D)"}`);
+  console.log(`  earshot         ${data.earshot?.version || "not found (optional audio QA)"}`);
   console.log(`  Workspace       ${data.workspaceExists ? data.workspace : "not created"}`);
   console.log(`  Browser         ${data.browser}`);
   console.log(`  Subagents       ${data.subagents}`);
@@ -509,9 +615,11 @@ function printDoctor(data) {
   heading("Engines");
   console.log(`  package.json    ${checklist(data.engines.packageJson)}`);
   console.log(`  HyperFrames     ${data.engines.hyperframes}`);
-  console.log(`  Remotion        ${data.engines.remotion}`);
   console.log(`  Three.js        ${data.engines.three}`);
-  console.log(`  @remotion/three ${data.engines.remotionThree}`);
+
+  const encoders = data.hardware?.recommended || data.hardware?.encoders || {};
+  console.log(`  Draft encoder   ${encoders.h264 || "libx264"}`);
+  console.log(`  Delivery        ${data.hardware?.delivery || "libx264"}`);
 
   heading("TTS");
   for (const [name, available] of Object.entries(data.tts)) {
@@ -565,6 +673,7 @@ function boolArg(value, fallback) {
 }
 
 function buildChannel(id, args, workspaceDefaults = {}, config = {}) {
+  assertEngineArg(args.engine, "channel");
   return {
     schema: "rooster.channel/v1",
     id,
@@ -1053,6 +1162,8 @@ function resolveFormat(aspect, width, height) {
 }
 
 async function newProject(args) {
+  assertEngineArg(args.engine, "new project");
+  assertTargetArg(args.target);
   if (args.category !== undefined) {
     fail('Category was removed. Use --channel and the project overrides; describe the content in brief.md and script.md.');
   }
@@ -1170,6 +1281,7 @@ async function newProject(args) {
     profile,
     engine,
     timeline,
+    techniques: [],
     mode: { source, voice, style, autonomy },
     format,
     language,
@@ -1760,9 +1872,27 @@ function checkProject(args) {
     } else if (config.format.duration == null) {
       warnings.push("project.json: format.duration unset; the edit will define the final length");
     }
-    if (config.engine && !ENGINE_IDS.includes(config.engine)) errors.push(`project.json: unknown engine "${config.engine}"`);
+    if (config.engine === "remotion") {
+      errors.push('project.json: Remotion was removed; set "engine": "hyperframes"');
+    } else if (config.engine && !ENGINE_IDS.includes(config.engine)) {
+      errors.push(`project.json: unknown engine "${config.engine}"`);
+    }
     if (config.timeline && !TIMELINE_IDS.includes(config.timeline)) {
       errors.push(`project.json: unknown timeline "${config.timeline}"`);
+    }
+    if (config.techniques !== undefined) {
+      if (!Array.isArray(config.techniques)) {
+        errors.push("project.json: techniques must be an array");
+      } else {
+        for (const [index, entry] of config.techniques.entries()) {
+          const id = typeof entry === "string" ? entry : entry?.id;
+          if (!TECHNIQUE_IDS.includes(id)) {
+            errors.push(
+              `project.json: techniques[${index}] has unknown id "${id ?? "missing"}"; run \`techniques --json\``
+            );
+          }
+        }
+      }
     }
     if (config.status && !STATUS_IDS.includes(config.status)) warnings.push(`project.json: unknown status "${config.status}"`);
   }
@@ -4035,6 +4165,7 @@ function reframeCommand(args) {
     mode,
     focusX,
     focusY,
+    encoder: cliEncoder(args, "draft"),
   });
   const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
   if (!result.ok) fail(`FFmpeg reframe failed:\n${result.stderr || result.stdout || "unknown error"}`);
@@ -5066,8 +5197,7 @@ async function colorCommand(args) {
 
   const quality = String(args.quality || "fast").toLowerCase();
   if (!["fast", "final"].includes(quality)) fail(`Unknown --quality "${quality}". Use fast or final.`);
-  const encoder =
-    typeof args.encoder === "string" && args.encoder.trim() ? args.encoder.trim() : "libx264";
+  const encoder = cliEncoder(args, quality === "final" ? "final" : "draft");
   const preset =
     typeof args.preset === "string" && args.preset.trim() ? args.preset.trim() : undefined;
   const rawCrf = args.crf;
@@ -5368,9 +5498,7 @@ async function multicamCommand(args) {
       ffArgs.push("-vf", "fps=30");
     }
     ffArgs.push(
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-crf", "20",
+      ...videoEncoderArgs({ encoder: cliEncoder(args, "draft"), crf: 20, preset: "veryfast" }),
       "-pix_fmt", "yuv420p",
       "-c:a", "aac",
       "-b:a", "192k",
@@ -6074,13 +6202,13 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
     punchScale: Number(args["cut-punch"]) || 1.035,
     fade: args["cut-fade"] === undefined ? 0.035 : Number(args["cut-fade"]),
   });
-  const ffArgs = buildBaseMediaArgs({
+  const encoder = cliEncoder(args, "draft");
+  const baseOptions = {
     source,
     keeps: cutKeeps,
     out: target,
     hasVideo,
     hasAudio,
-    encoder: args.encoder || "libx264",
     crf: Number(args.crf) || 20,
     preset: args.preset || "veryfast",
     loudnorm: true,
@@ -6091,9 +6219,20 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
     frameHeight: Number(probe.height) || 0,
     cutFade: cutKeeps.length ? smoothing.fade : 0,
     videoFilters: colorFilters,
+  };
+  let result = run("ffmpeg", buildBaseMediaArgs({ ...baseOptions, encoder }), {
+    timeout: 60 * 60 * 1000,
   });
-
-  const result = run("ffmpeg", ffArgs, { timeout: 60 * 60 * 1000 });
+  if (!result.ok && isHardwareEncoder(encoder)) {
+    // A driver can list an encoder that fails at runtime (old GPU, missing
+    // hardware, AMF/QSV quirks). Never lose the build over the optimization.
+    console.warn(
+      `  ! ${encoder} failed (${encoderLabel(encoder)}); retrying with libx264 on CPU.`
+    );
+    result = run("ffmpeg", buildBaseMediaArgs({ ...baseOptions, encoder: "libx264" }), {
+      timeout: 60 * 60 * 1000,
+    });
+  }
   if (!result.ok) {
     fail(`FFmpeg failed to prepare the base media:\n${result.stderr || result.stdout || "unknown error"}`);
   }
@@ -6106,6 +6245,7 @@ function buildBaseMediaCore(project, plan, keeps, engineDir, args, assetsSubdir 
     hasVideo,
     hasAudio,
     kind,
+    encoder,
   };
 }
 
@@ -6119,7 +6259,7 @@ function planMediaKey(project, plan, keeps, args) {
   const source = path.resolve(project.dir, plan.source);
   const format = plan.format || project.config.format || {};
   const fps = Number(format.fps) || 30;
-  const encoder = args.encoder || "libx264";
+  const encoder = cliEncoder(args, "draft");
   const crf = Number(args.crf) || 20;
   const preset = args.preset || "veryfast";
   const sourceKey = sourceFingerprint(source, { full: false });
@@ -6203,7 +6343,7 @@ function buildMediaCached(project, plan, keeps, engineDir, args, assetsSubdir = 
   ensureDir(assetsDir);
   const useCache = !args["no-cache"];
 
-  if (useCache) {
+  if (useCache && !args["rebuild-media"]) {
     for (const ext of [".mp4", ".m4a", ".wav", ".mov"]) {
       const hit = readCache("build", mediaKey, ext, undefined, WORKSPACE);
       if (!hit) continue;
@@ -6250,6 +6390,7 @@ function buildMediaCached(project, plan, keeps, engineDir, args, assetsSubdir = 
           hasVideo: built.hasVideo,
           hasAudio: built.hasAudio,
           duration: built.duration,
+          encoder: built.encoder || encoder,
         },
       },
     });
@@ -7838,380 +7979,8 @@ function buildHyperFrames(project, plan, args) {
     `# ${project.config.name || project.slug} - HyperFrames\n\nGenerated by RoosterEdit from \`edit/plan.json\`.\n\n\`\`\`bash\nnpx hyperframes check\nnpx hyperframes preview\nnpx hyperframes render --quality draft -o ../../renders/draft.mp4\nnpx hyperframes render --quality delivery -o ../../renders/final.mp4\n\`\`\`\n`
   );
 
-  return { engineDir, base, duration: base.duration };
+  return { engineDir, base, duration: base.duration, encoder: base.encoder || null };
 }
-
-function renderRemotionTsx(project, plan, theme, base) {
-  return `import {
-  AbsoluteFill,
-  Audio,
-  Img,
-  OffthreadVideo,
-  Sequence,
-  interpolate,
-  staticFile,
-  spring,
-  useCurrentFrame,
-} from "remotion";
-import { plan, theme, base } from "./data/plan";
-
-const fps = plan.format?.fps ?? 30;
-
-const fade = (frame: number, start: number, end: number) => {
-  const a = Math.max(0, start) * fps;
-  const b = Math.max(a + 1, (start + 0.35) * fps);
-  const c = Math.max(b + 1, (end - 0.25) * fps);
-  const d = Math.max(c + 1, end * fps);
-  return interpolate(frame, [a, b, c, d], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-};
-
-const textOf = (element: any) => {
-  if (element.text) return element.text;
-  const data = element.data ?? {};
-  const parts = [
-    data.title,
-    data.name,
-    data.role,
-    data.command,
-    data.label,
-    data.sub,
-    ...(data.nodes ?? []),
-    ...(data.items ?? []),
-    ...(data.rows ?? []).map((row: any) => [row?.value, row?.label].filter(Boolean).join(" ")),
-  ].filter(Boolean);
-  return parts.length ? parts.join(" · ") : element.description ?? "";
-};
-
-const Element = ({ element }: { element: any }) => {
-  const frame = useCurrentFrame();
-  const duration = Math.max(0.1, (element.end ?? 0) - (element.start ?? 0));
-  const opacity = fade(frame, 0, duration);
-  if (opacity <= 0.001) return null;
-  const text = textOf(element);
-  const common = { position: "absolute" as const, opacity };
-  const pos =
-    element.position === "top-left" ? { left: "5%", top: "5%" } :
-    element.position === "top-right" ? { right: "5%", top: "5%" } :
-    element.position === "bottom-left" ? { left: "5%", bottom: "8%" } :
-    element.position === "bottom-right" ? { right: "5%", bottom: "8%" } :
-    element.position === "center" ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)" } :
-    element.position === "bottom-center" ? { left: "50%", bottom: "8%", transform: "translateX(-50%)" } :
-    { left: "5%", top: "50%", transform: "translateY(-50%)" };
-  const enter = spring({
-    frame: Math.max(0, frame),
-    fps,
-    config: { damping: 200, mass: 0.6, stiffness: 120 },
-  });
-  const rise = interpolate(enter, [0, 1], [24, 0]);
-  const textStyle = { ...common, ...pos, marginTop: rise };
-
-  switch (element.type) {
-    case "letreiro": {
-      const chapter = element.role === "chapter" || element.template === "chapter";
-      return (
-        <div style={{ ...textStyle, width: "84%", fontSize: chapter ? 104 : 96, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em", paddingLeft: chapter ? 32 : 0, borderLeft: chapter ? \`8px solid \${theme.accent}\` : undefined }}>
-          {chapter && element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 28, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
-          {text}
-          {chapter && element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
-        </div>
-      );
-    }
-    case "caption-emphasis":
-      return <div style={{ ...textStyle, width: "84%", fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
-    case "grafico":
-    case "lista":
-      if (element.chartSvg) {
-        return <div style={{ ...common, left: 80, right: 80, top: 80, bottom: 80 }} dangerouslySetInnerHTML={{ __html: element.chartSvg }} />;
-      }
-      return (
-        <div style={{ ...textStyle, width: "80%", padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
-          <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 18 }}>{element.type}</div>
-          <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.05 }}>{text}</div>
-          <div style={{ marginTop: 18, color: theme.muted, fontSize: 28, lineHeight: 1.35 }}>{element.description ?? ""}</div>
-        </div>
-      );
-    case "zoom":
-      return null;
-    case "transition": {
-      if (!element.motion) return null;
-      const value = interpolate(frame, element.motion.inputRange, element.motion.outputRange, {
-        extrapolateLeft: "clamp",
-        extrapolateRight: "clamp",
-      });
-      if (element.motion.slide) {
-        const transform = element.motion.property === "xPercent" ? \`translateX(\${value}%)\` : \`translateY(\${value}%)\`;
-        return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, transform }} />;
-      }
-      return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, opacity: value }} />;
-    }
-    case "lower-third":
-      return (
-        <div style={{ ...textStyle, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
-          <div style={{ fontSize: 34, fontWeight: 700 }}>{text}</div>
-          <div style={{ marginTop: 6, color: theme.muted, fontSize: 24 }}>{element.description ?? ""}</div>
-        </div>
-      );
-    case "end-card":
-      return (
-        <div style={{ ...common, inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
-          <div style={{ fontSize: 88, fontWeight: 700 }}>{text}</div>
-          <div style={{ marginTop: 24, color: theme.muted, fontSize: 28 }}>{element.description ?? ""}</div>
-        </div>
-      );
-    case "parallax": {
-      const layers = Array.isArray(element.data?.layers) ? element.data.layers : [];
-      const src =
-        layers.find((layer: any) => layer && layer.src)?.src ||
-        element.src ||
-        element.data?.bg ||
-        element.data?.subject;
-      return (
-        <AbsoluteFill style={{ ...common, overflow: "hidden" }}>
-          {src ? <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.8), transparent 70%)" }} />
-          <div style={{ position: "absolute", left: 96, top: "50%", transform: "translateY(-50%)", maxWidth: 1000 }}>
-            {element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
-            <div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1 }}>{text}</div>
-            {element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
-          </div>
-        </AbsoluteFill>
-      );
-    }
-    case "broll": {
-      const src = element.src || element.asset;
-      if (!src) return null;
-      if (/\\.(png|jpe?g|webp|gif|svg)$/i.test(src)) {
-        return <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity }} />;
-      }
-      if (/\\.(mp4|webm|mov|m4v)$/i.test(src)) {
-        return <OffthreadVideo src={staticFile(src)} muted style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity }} />;
-      }
-      return null;
-    }
-    default:
-      return null;
-  }
-};
-
-const Transition = ({ element }: { element: any }) => {
-  const frame = useCurrentFrame();
-  if (!element.motion) return null;
-  const value = interpolate(frame, element.motion.inputRange, element.motion.outputRange, {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  if (element.motion.slide) {
-    const transform = element.motion.property === "xPercent" ? \`translateX(\${value}%)\` : \`translateY(\${value}%)\`;
-    return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, transform }} />;
-  }
-  return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, opacity: value }} />;
-};
-
-export const RoosterVideo = () => {
-  const frame = useCurrentFrame();
-  const activeZoom = (plan.elements ?? []).find(
-    (element: any) =>
-      element.motion?.type === "zoom" &&
-      frame >= element.motion.inputRange[0] &&
-      frame <= element.motion.inputRange[element.motion.inputRange.length - 1]
-  );
-  const zoomScale = activeZoom
-    ? interpolate(frame, activeZoom.motion.inputRange, activeZoom.motion.outputRange, {
-        extrapolateLeft: "clamp",
-        extrapolateRight: "clamp",
-      })
-    : 1;
-  const zoomOrigin = activeZoom?.motion?.transformOrigin ?? "50% 50%";
-  return (
-    <AbsoluteFill style={{ backgroundColor: theme.bg, color: theme.fg, fontFamily: theme.body + ', "Segoe UI", sans-serif', overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, background: \`radial-gradient(circle at 70% 30%, \${theme.accent}22, transparent 45%), radial-gradient(circle at 20% 80%, \${theme.accent2}18, transparent 40%), \${theme.bg}\` }} />
-      <div style={{ position: "absolute", inset: 0, transform: \`scale(\${zoomScale})\`, transformOrigin: zoomOrigin }}>
-        {base.kind === "image" ? <Img src={staticFile(base.path)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-        {base.kind === "video" ? <OffthreadVideo src={staticFile(base.path)} muted={!base.hasAudio} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-        {base.kind === "audio" ? <Audio src={staticFile(base.path)} /> : null}
-      </div>
-      {(plan.elements ?? []).map((element: any, index: number) => {
-        if (element.type === "transition") return null;
-        const from = Math.max(0, Math.round((element.start ?? 0) * fps));
-        const duration = Math.max(1, Math.round(((element.end ?? 0) - (element.start ?? 0)) * fps));
-        if (duration <= 0) return null;
-        return (
-          <Sequence key={index} from={from} durationInFrames={duration}>
-            <Element element={element} />
-          </Sequence>
-        );
-      })}
-      {(plan.elements ?? []).filter((element: any) => element.type === "transition").map((element: any, index: number) => (
-        <Transition key={\`transition-\${index}\`} element={element} />
-      ))}
-    </AbsoluteFill>
-  );
-};
-`;
-}
-
-function buildRemotion(project, plan, args) {
-  const engineDir = path.join(project.dir, "engine", "remotion");
-  if (exists(engineDir) && !args.force) {
-    fail(`Remotion project already exists at ${engineDir}. Use --force to rebuild it.`);
-  }
-  const engineCacheDir = path.join(cacheRoot(WORKSPACE), "engine-cache", `${project.slug}-remotion`);
-  if (exists(engineDir)) {
-    try {
-      preserveEngineCaches(engineDir, engineCacheDir);
-    } catch (error) {
-      console.warn(`  ! Could not preserve engine caches: ${error.message}`);
-    }
-    removeDirRobust(engineDir);
-  }
-  ensureDir(engineDir);
-  try {
-    restoreEngineCaches(engineDir, engineCacheDir);
-  } catch (error) {
-    console.warn(`  ! Could not restore engine caches: ${error.message}`);
-  }
-
-  const assetsDir = path.join(engineDir, "public", "assets");
-  const remapped = planForBuild(plan, args);
-  const base = buildMediaCached(project, plan, remapped.keeps, engineDir, args, "public/assets");
-  const finalPlan = {
-    ...remapped.plan,
-    duration: base.duration,
-    format: { ...resolvePlanFormat(project, plan), duration: base.duration },
-  };
-  copyElementAssets(project.dir, finalPlan, assetsDir, "assets/");
-  const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
-  const fps = Number(finalPlan.format?.fps || project.config.format?.fps) || 30;
-  const enrichedPlan = {
-    ...finalPlan,
-    elements: (finalPlan.elements || [])
-      .map((element) => {
-        const data = element.data && typeof element.data === "object" ? element.data : {};
-        const template = elementTemplate(element, elementText(element) || "", data);
-        return element.position ? element : { ...element, position: elementPosition(element, template, data) };
-      })
-      .map((element) => {
-      if (element.type === "grafico" && element.chart) {
-        return { ...element, chartSvg: renderChartSvg(element, theme) };
-      }
-      if (element.type === "zoom") {
-        const zoom = remotionZoomValues(element, fps);
-        return {
-          ...element,
-          motion: {
-            type: "zoom",
-            inputRange: zoom.inputRange,
-            outputRange: zoom.outputRange,
-            transformOrigin: zoom.transformOrigin,
-          },
-        };
-      }
-      if (element.type === "transition") {
-        const transition = remotionTransitionValues(element, fps, { theme });
-        return {
-          ...element,
-          motion: {
-            type: "transition",
-            inputRange: transition.inputRange,
-            outputRange: transition.outputRange,
-            property: transition.property,
-            color: transition.color,
-            slide: transition.slide,
-          },
-        };
-      }
-      return element;
-    }),
-  };
-
-  writeText(
-    path.join(engineDir, "src", "data", "plan.ts"),
-    `export const plan = ${JSON.stringify(enrichedPlan, null, 2)};\nexport const theme = ${JSON.stringify(theme, null, 2)};\nexport const base = ${JSON.stringify(base, null, 2)};\n`
-  );
-  writeText(path.join(engineDir, "src", "Video.tsx"), renderRemotionTsx(project, enrichedPlan, theme, base));
-  writeText(
-    path.join(engineDir, "src", "Root.tsx"),
-    `import { Composition } from "remotion";
-import { RoosterVideo } from "./Video";
-import { plan } from "./data/plan";
-
-const fps = plan.format?.fps ?? 30;
-const duration = plan.duration ?? 10;
-
-export const RemotionRoot = () => (
-  <Composition
-    id="RoosterVideo"
-    component={RoosterVideo}
-    durationInFrames={Math.max(1, Math.ceil(duration * fps))}
-    fps={fps}
-    width={plan.format?.width ?? 1920}
-    height={plan.format?.height ?? 1080}
-  />
-);
-`
-  );
-  writeText(
-    path.join(engineDir, "src", "index.ts"),
-    `import { registerRoot } from "remotion";\nimport { RemotionRoot } from "./Root";\n\nregisterRoot(RemotionRoot);\n`
-  );
-  const has3d = (finalPlan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
-  writeText(
-    path.join(engineDir, "remotion.config.ts"),
-    `import { Config } from "@remotion/cli/config";\n\nConfig.setVideoImageFormat("jpeg");\nConfig.setOverwriteOutput(true);\n${has3d ? 'Config.setChromiumOpenGlRenderer("angle");\n' : ""}`
-  );
-  writeText(
-    path.join(engineDir, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          target: "ES2020",
-          module: "ESNext",
-          moduleResolution: "Bundler",
-          jsx: "react-jsx",
-          strict: false,
-          skipLibCheck: true,
-          esModuleInterop: true,
-          allowSyntheticDefaultImports: true,
-        },
-        include: ["src"],
-      },
-      null,
-      2
-    )
-  );
-  writeJson(path.join(engineDir, "package.json"), {
-    name: `${project.slug}-remotion`,
-    version: "1.0.0",
-    private: true,
-    scripts: {
-      dev: "remotion studio",
-      render: "remotion render src/index.ts RoosterVideo out/final.mp4",
-    },
-    dependencies: {
-      "@remotion/cli": REMOTION_VERSION,
-      react: "19.0.0",
-      "react-dom": "19.0.0",
-      remotion: REMOTION_VERSION,
-    },
-    devDependencies: {
-      "@types/react": "19.0.0",
-      typescript: "5.9.3",
-    },
-  });
-  writeText(
-    path.join(engineDir, "README.md"),
-    `# ${project.config.name || project.slug} - Remotion\n\nGenerated by RoosterEdit from \`edit/plan.json\`.\n\n\`\`\`bash\nnpm install\nnpx remotion studio\nnpx remotion render src/index.ts RoosterVideo out/final.mp4\n\`\`\`\n`
-  );
-
-  return { engineDir, base, duration: base.duration };
-}
-
-// ---------------------------------------------------------------------------
-// FilmCraft (optional timeline target)
-// ---------------------------------------------------------------------------
 
 function filmCraftPaths(project) {
   const dir = path.join(project.dir, "engine", "filmcraft");
@@ -8221,7 +7990,6 @@ function filmCraftPaths(project) {
     assetsDir: path.join(dir, "assets"),
     elementsDir: path.join(dir, "elements"),
     hyperframesDir: path.join(dir, "hyperframes"),
-    remotionDir: path.join(dir, "remotion"),
     archiveDir: path.join(dir, "archive"),
     statePath: path.join(project.dir, "work", "filmcraft.json"),
   };
@@ -8238,23 +8006,22 @@ function filmCraftCliOrFail() {
     fail(
       "FilmCraft CLI not found.\n" +
         "Install FilmCraft from https://getartcraft.com/apps/filmcraft (MIT/Apache-2.0), or set ROOSTER_FILMCRAFT_CLI to filmcraft-cli.\n" +
-        "To keep the current workflow, use --target hyperframes or --target remotion."
+        "To keep the current workflow, use --target hyperframes."
     );
   }
   return found;
 }
 
 function filmCraftElementEngine(args, plan, project) {
-  let engine = args.engine && args.engine !== "filmcraft" ? args.engine : project.config.engine || "auto";
-  if (engine === "auto") {
-    // Registry blocks and the generated plan only run in HyperFrames. A
-    // hand-written Three.js scene in Remotion is opt-in with --engine remotion.
-    engine = "hyperframes";
+  const requested = args.engine && args.engine !== "filmcraft" ? args.engine : project.config.engine || "auto";
+  // A mixed or hand-written React plan used to go to Remotion. Remotion is no
+  // longer a supported engine; HyperFrames renders every element.
+  if (requested === "remotion") {
+    fail(
+      'Remotion was removed from RoosterEdit. Use "engine": "hyperframes" and a Three.js block or a Blender render for 3D.'
+    );
   }
-  if (!["hyperframes", "remotion"].includes(engine)) {
-    fail(`FilmCraft elements need HyperFrames or Remotion; got "${engine}".`);
-  }
-  return engine;
+  return "hyperframes";
 }
 
 function filmCraftCaptionsFile(project) {
@@ -8309,278 +8076,6 @@ function ensureFilmCraftHyperFramesProject(project, plan, theme, specs, paths) {
   return documents;
 }
 
-function renderRemotionElementTsx() {
-  return `import {
-  AbsoluteFill,
-  Img,
-  OffthreadVideo,
-  Sequence,
-  interpolate,
-  staticFile,
-  spring,
-  useCurrentFrame,
-} from "remotion";
-
-const textOf = (element: any) => {
-  if (element.text) return element.text;
-  const data = element.data ?? {};
-  const parts = [
-    data.title,
-    data.name,
-    data.role,
-    data.command,
-    data.label,
-    data.sub,
-    ...(data.nodes ?? []),
-    ...(data.items ?? []),
-    ...(data.rows ?? []).map((row: any) => [row?.value, row?.label].filter(Boolean).join(" ")),
-  ].filter(Boolean);
-  return parts.length ? parts.join(" · ") : element.description ?? "";
-};
-
-const fade = (frame: number, duration: number, fps: number) => {
-  const end = Math.max(1, duration * fps);
-  const out = Math.max(1, end - 0.25 * fps);
-  return interpolate(frame, [0, Math.min(0.35 * fps, out - 1), out, end], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-};
-
-export const RoosterElement = ({ entry }: { entry: any }) => {
-  const frame = useCurrentFrame();
-  const element = entry.element ?? {};
-  const fps = entry.fps ?? 30;
-  const duration = entry.duration ?? 1;
-  const opacity = fade(frame, duration, fps);
-  if (opacity <= 0.001) return null;
-  const text = textOf(element);
-  const common = { position: "absolute" as const, opacity };
-  const pos =
-    element.position === "top-left" ? { left: "5%", top: "5%" } :
-    element.position === "top-right" ? { right: "5%", top: "5%" } :
-    element.position === "bottom-left" ? { left: "5%", bottom: "8%" } :
-    element.position === "bottom-right" ? { right: "5%", bottom: "8%" } :
-    element.position === "center" ? { left: "50%", top: "50%", transform: "translate(-50%, -50%)" } :
-    element.position === "bottom-center" ? { left: "50%", bottom: "8%", transform: "translateX(-50%)" } :
-    { left: "5%", top: "50%", transform: "translateY(-50%)" };
-  const enter = spring({
-    frame: Math.max(0, frame),
-    fps,
-    config: { damping: 200, mass: 0.6, stiffness: 120 },
-  });
-  const rise = interpolate(enter, [0, 1], [24, 0]);
-  const textStyle = { ...common, ...pos, marginTop: rise };
-  const theme = entry.theme ?? {};
-
-  switch (element.type) {
-    case "letreiro": {
-      const chapter = element.role === "chapter" || element.template === "chapter";
-      return (
-        <div style={{ ...textStyle, width: "84%", fontSize: chapter ? 104 : 96, fontWeight: 700, lineHeight: 1.02, letterSpacing: "-0.04em", paddingLeft: chapter ? 32 : 0, borderLeft: chapter ? \`8px solid \${theme.accent}\` : undefined }}>
-          {chapter && element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 28, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
-          {text}
-          {chapter && element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
-        </div>
-      );
-    }
-    case "caption-emphasis":
-      return <div style={{ ...textStyle, width: "84%", fontSize: 68, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.03em" }}>{text}</div>;
-    case "grafico":
-    case "lista":
-      if (element.chartSvg) {
-        return <div style={{ ...common, left: 80, right: 80, top: 80, bottom: 80 }} dangerouslySetInnerHTML={{ __html: element.chartSvg }} />;
-      }
-      return (
-        <div style={{ ...textStyle, width: "80%", padding: 48, border: \`1px solid \${theme.accent}\`, borderRadius: 18, background: "rgba(0,0,0,0.28)" }}>
-          <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 18 }}>{element.type}</div>
-          <div style={{ fontSize: 56, fontWeight: 700, lineHeight: 1.05 }}>{text}</div>
-          <div style={{ marginTop: 18, color: theme.muted, fontSize: 28, lineHeight: 1.35 }}>{element.description ?? ""}</div>
-        </div>
-      );
-    case "zoom":
-      return null;
-    case "transition": {
-      if (!element.motion) return null;
-      const value = interpolate(frame, element.motion.inputRange, element.motion.outputRange, {
-        extrapolateLeft: "clamp",
-        extrapolateRight: "clamp",
-      });
-      if (element.motion.slide) {
-        const transform = element.motion.property === "xPercent" ? \`translateX(\${value}%)\` : \`translateY(\${value}%)\`;
-        return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, transform }} />;
-      }
-      return <div style={{ position: "absolute", inset: 0, zIndex: 50, backgroundColor: element.motion.color, opacity: value }} />;
-    }
-    case "lower-third":
-      return (
-        <div style={{ ...textStyle, paddingLeft: 24, borderLeft: \`6px solid \${theme.accent}\` }}>
-          <div style={{ fontSize: 34, fontWeight: 700 }}>{text}</div>
-          <div style={{ marginTop: 6, color: theme.muted, fontSize: 24 }}>{element.description ?? ""}</div>
-        </div>
-      );
-    case "end-card":
-      return (
-        <div style={{ ...common, inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
-          <div style={{ fontSize: 88, fontWeight: 700 }}>{text}</div>
-          <div style={{ marginTop: 24, color: theme.muted, fontSize: 28 }}>{element.description ?? ""}</div>
-        </div>
-      );
-    case "parallax": {
-      const layers = Array.isArray(element.data?.layers) ? element.data.layers : [];
-      const src =
-        layers.find((layer: any) => layer && layer.src)?.src ||
-        element.src ||
-        element.data?.bg ||
-        element.data?.subject;
-      return (
-        <AbsoluteFill style={{ ...common, overflow: "hidden" }}>
-          {src ? <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.8), transparent 70%)" }} />
-          <div style={{ position: "absolute", left: 96, top: "50%", transform: "translateY(-50%)", maxWidth: 1000 }}>
-            {element.data?.kicker ? <div style={{ color: theme.accent, fontSize: 22, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>{element.data.kicker}</div> : null}
-            <div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1 }}>{text}</div>
-            {element.data?.sub ? <div style={{ marginTop: 18, color: theme.muted, fontSize: 30 }}>{element.data.sub}</div> : null}
-          </div>
-        </AbsoluteFill>
-      );
-    }
-    case "broll": {
-      const src = element.src || element.asset;
-      if (!src) return null;
-      if (/\\.(png|jpe?g|webp|gif|svg)$/i.test(src)) {
-        return <Img src={staticFile(src)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity }} />;
-      }
-      if (/\\.(mp4|webm|mov|m4v)$/i.test(src)) {
-        return <OffthreadVideo src={staticFile(src)} muted style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", opacity }} />;
-      }
-      return null;
-    }
-    default:
-      return null;
-  }
-};
-`;
-}
-
-function ensureFilmCraftRemotionProject(project, plan, theme, specs, format, paths) {
-  const fps = Number(format.fps) || 30;
-  const width = Number(format.width) || 1920;
-  const height = Number(format.height) || 1080;
-  ensureDir(paths.remotionDir);
-  const assetsDir = path.join(paths.remotionDir, "public", "assets");
-  ensureDir(assetsDir);
-
-  const renderPlan = {
-    ...plan,
-    elements: specs.map((spec) => JSON.parse(JSON.stringify(spec.element))),
-  };
-  copyElementAssets(project.dir, renderPlan, assetsDir, "assets/");
-
-  const entries = specs.map((spec, index) => {
-    let element = renderPlan.elements[index];
-    if (element.type === "grafico" && element.chart) {
-      element = { ...element, chartSvg: renderChartSvg(element, theme) };
-    }
-    if (element.type === "transition") {
-      const transition = remotionTransitionValues(element, fps, { theme });
-      element = {
-        ...element,
-        motion: {
-          type: "transition",
-          inputRange: transition.inputRange,
-          outputRange: transition.outputRange,
-          property: transition.property,
-          color: transition.color,
-          slide: transition.slide,
-        },
-      };
-    }
-    return {
-      id: spec.id,
-      duration: spec.duration,
-      fps,
-      width,
-      height,
-      element,
-      theme,
-    };
-  });
-
-  writeJson(path.join(paths.remotionDir, "src", "data", "elements.json"), entries);
-  writeText(path.join(paths.remotionDir, "src", "Element.tsx"), renderRemotionElementTsx());
-  writeText(
-    path.join(paths.remotionDir, "src", "Root.tsx"),
-    `import { Composition } from "remotion";
-import { RoosterElement } from "./Element";
-import elements from "./data/elements.json";
-
-export const RemotionRoot = () => (
-  <>
-    {elements.map((entry: any) => (
-      <Composition
-        key={entry.id}
-        id={entry.id}
-        component={RoosterElement}
-        durationInFrames={Math.max(1, Math.ceil(entry.duration * entry.fps))}
-        fps={entry.fps}
-        width={entry.width}
-        height={entry.height}
-        defaultProps={{ entry }}
-      />
-    ))}
-  </>
-);
-`
-  );
-  writeText(
-    path.join(paths.remotionDir, "src", "index.ts"),
-    `import { registerRoot } from "remotion";\nimport { RemotionRoot } from "./Root";\n\nregisterRoot(RemotionRoot);\n`
-  );
-  writeText(
-    path.join(paths.remotionDir, "remotion.config.ts"),
-    `import { Config } from "@remotion/cli/config";\n\nConfig.setVideoImageFormat("png");\nConfig.setOverwriteOutput(true);\n`
-  );
-  writeText(
-    path.join(paths.remotionDir, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          target: "ES2020",
-          module: "ESNext",
-          moduleResolution: "Bundler",
-          jsx: "react-jsx",
-          strict: false,
-          skipLibCheck: true,
-          esModuleInterop: true,
-          allowSyntheticDefaultImports: true,
-          resolveJsonModule: true,
-        },
-        include: ["src"],
-      },
-      null,
-      2
-    )
-  );
-  writeJson(path.join(paths.remotionDir, "package.json"), {
-    name: `${project.slug}-filmcraft-elements`,
-    version: "1.0.0",
-    private: true,
-    scripts: { studio: "remotion studio" },
-    dependencies: {
-      "@remotion/cli": REMOTION_VERSION,
-      react: "19.0.0",
-      "react-dom": "19.0.0",
-      remotion: REMOTION_VERSION,
-    },
-    devDependencies: {
-      "@types/react": "19.0.0",
-      typescript: "5.9.3",
-    },
-  });
-  return entries;
-}
-
 function runEngineBinary(bin, args, options = {}) {
   if (/\.(mjs|cjs|js)$/i.test(String(bin))) {
     return run(process.execPath, [bin, ...args], options);
@@ -8596,10 +8091,7 @@ function renderFilmCraftElements(project, plan, specs, theme, engine, args, path
   const width = Number(format.width) || 1920;
   const height = Number(format.height) || 1080;
   const fps = Number(format.fps) || 30;
-  const engineDir = engine === "hyperframes" ? paths.hyperframesDir : paths.remotionDir;
-  if (engine === "remotion") {
-    ensureFilmCraftRemotionProject(project, plan, theme, renderable, format, paths);
-  }
+  const engineDir = paths.hyperframesDir;
   const info = engineVersion(engine, {
     workspace: WORKSPACE,
     cwd: engineDir,
@@ -8607,16 +8099,12 @@ function renderFilmCraftElements(project, plan, specs, theme, engine, args, path
     projectDir: engineDir,
   });
   if (!info || !info.bin) {
-    if (engine === "hyperframes") {
-      fail("HyperFrames not found. Install it with `npm install --prefix <workspace>/cache/tools hyperframes` or use --engine remotion.");
-    }
-    fail(`Remotion not found in ${engineDir}. Run npm install there, or use --engine hyperframes.`);
+    fail(
+      "HyperFrames not found. Install it with `npm install --prefix <workspace>/cache/tools hyperframes`."
+    );
   }
 
-  const documents =
-    engine === "hyperframes"
-      ? ensureFilmCraftHyperFramesProject(project, plan, theme, renderable, paths)
-      : null;
+  const documents = ensureFilmCraftHyperFramesProject(project, plan, theme, renderable, paths);
 
   ensureDir(paths.elementsDir);
   ensureDir(paths.assetsDir);
@@ -8657,49 +8145,32 @@ function renderFilmCraftElements(project, plan, specs, theme, engine, args, path
 
     if (!cached) {
       const renderTo = (tmp) => {
-        const timeout = Math.max(5 * 60 * 1000, (Number(spec.duration) || 1) * 60 * 1000);
-        let result;
-        if (engine === "hyperframes") {
-          const document = documents?.get(spec.id);
-          if (!document) {
-            throw new Error(`${spec.id}: no HyperFrames document was generated`);
-          }
-          result = runEngineBinary(
-            info.bin,
-            [
-              "render",
-              paths.hyperframesDir,
-              "--composition",
-              path.basename(document),
-              "--format",
-              "mov",
-              "--prores-profile",
-              "4444",
-              "--quality",
-              "delivery",
-              "-o",
-              tmp,
-            ],
-            { timeout }
-          );
-        } else {
-          const invocation = remotionRenderArgs({
-            bin: info.bin,
-            entry: "src/index.ts",
-            composition: spec.id,
-            out: tmp,
-            quality: "final",
-            concurrency: args.concurrency,
-            codec: "prores",
-            proresProfile: "4444",
-            imageFormat: "png",
-            pixelFormat: "yuva444p10le",
-          });
-          result = runEngineBinary(invocation.command, invocation.args, {
-            cwd: paths.remotionDir,
-            timeout,
-          });
+        const timeout = Math.max(
+          5 * 60 * 1000,
+          Math.round((Number(spec.duration) || 1) * 60 * 1000)
+        );
+        const document = documents?.get(spec.id);
+        if (!document) {
+          throw new Error(`${spec.id}: no HyperFrames document was generated`);
         }
+        const result = runEngineBinary(
+          info.bin,
+          [
+            "render",
+            paths.hyperframesDir,
+            "--composition",
+            path.basename(document),
+            "--format",
+            "mov",
+            "--prores-profile",
+            "4444",
+            "--quality",
+            "delivery",
+            "-o",
+            tmp,
+          ],
+          { timeout }
+        );
         if (!result.ok) {
           throw new Error(
             `Element ${spec.id} (${spec.type}) failed to render:\n${(result.stderr || result.stdout || result.error || "unknown error").slice(-2000)}`
@@ -9227,12 +8698,11 @@ function buildFilmCraft(project, plan, args) {
   const elementEngineVersion = Array.from(elementEngines)
     .sort()
     .map((name) => {
-      const dir = name === "hyperframes" ? paths.hyperframesDir : paths.remotionDir;
       const info = engineVersion(name, {
         workspace: WORKSPACE,
-        cwd: dir,
+        cwd: paths.hyperframesDir,
         home: ROOSTER_HOME,
-        projectDir: dir,
+        projectDir: paths.hyperframesDir,
       });
       return `${name}-${info?.version || "missing"}`;
     })
@@ -9308,7 +8778,7 @@ function buildFilmCraft(project, plan, args) {
       .join(", ");
     fail(
       `Custom HTML/JS elements need HyperFrames: ${list}. ` +
-        `Remove "engine": "remotion" from them, set "engine": "hyperframes", or delete them.`
+        `Remove the element-level "engine" override or set it to "hyperframes".`
     );
   }
   if (customElements.length) resolveCustomElements(project, finalPlan);
@@ -9408,7 +8878,12 @@ function buildCommand(args) {
 
   const requestedTarget = typeof args.target === "string" ? args.target : null;
   if (requestedTarget && !TARGET_IDS.includes(requestedTarget)) {
-    fail(`Unknown target "${requestedTarget}". Use auto, hyperframes, remotion, or filmcraft.`);
+    fail(`Unknown target "${requestedTarget}". Use auto, hyperframes, or filmcraft.`);
+  }
+  if (args.engine === "remotion" || project.config.engine === "remotion") {
+    fail(
+      'Remotion was removed from RoosterEdit. Use --engine hyperframes; for 3D, render in Blender and add the clip as b-roll. Set "engine": "hyperframes" in project.json.'
+    );
   }
   if (args.engine === "filmcraft" && !requestedTarget) args.target = "filmcraft";
   const projectTimeline = project.config.timeline || "none";
@@ -9419,14 +8894,7 @@ function buildCommand(args) {
         ? "filmcraft"
         : null;
 
-  const validationEngine =
-    target === "filmcraft"
-      ? "filmcraft"
-      : typeof args.engine === "string" && args.engine !== "auto"
-        ? args.engine
-        : project.config.engine && project.config.engine !== "auto"
-          ? project.config.engine
-          : "hyperframes";
+  const validationEngine = target === "filmcraft" ? "filmcraft" : "hyperframes";
   const { errors, warnings } = validatePlan(plan, project.dir, { engine: validationEngine });
   const customIssues = customElementIssues(plan, project);
   errors.push(...customIssues.errors);
@@ -9450,7 +8918,7 @@ function buildCommand(args) {
     } else {
       fail(
         `${unsupported.length} element(s) cannot render in ${validationEngine}:\n${message}\n` +
-          "Use --target filmcraft for a mixed plan, --engine hyperframes/remotion for a single one, or remove those elements."
+          "Use --target filmcraft for a clip-per-element plan, or remove those elements."
       );
     }
   }
@@ -9492,14 +8960,17 @@ function buildCommand(args) {
     return;
   }
 
-  let engine = target || (typeof args.engine === "string" ? args.engine : project.config.engine || "auto");
-  if (engine === "auto") {
-    const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
-    engine = has3d ? "remotion" : "hyperframes";
+  const requestedEngine =
+    target || (typeof args.engine === "string" ? args.engine : project.config.engine || "auto");
+  if (requestedEngine === "ffmpeg" || project.config.engine === "ffmpeg") {
+    fail(
+      'FFmpeg is a media utility, not a creative build target. Set "engine": "hyperframes" and use FFmpeg for cuts and audio.'
+    );
   }
-  if (!["hyperframes", "remotion"].includes(engine)) {
-    fail(`Engine "${engine}" is not a creative build target. Use hyperframes or remotion (FFmpeg is a media utility).`);
+  if (requestedEngine !== "auto" && requestedEngine !== "hyperframes") {
+    fail(`Unknown engine "${requestedEngine}". Use auto or hyperframes.`);
   }
+  const engine = "hyperframes";
 
   const engineDir = path.join(project.dir, "engine", engine);
   const theme = themeFromProfile(resolveProfile(project.config.profile, project.channel));
@@ -9528,13 +8999,14 @@ function buildCommand(args) {
     args.force = true;
   }
 
-  const result = engine === "hyperframes" ? buildHyperFrames(project, buildPlan, args) : buildRemotion(project, buildPlan, args);
+  const result = buildHyperFrames(project, buildPlan, args);
   writeBuildState(project.dir, {
     key: stateKey,
     engine,
     engineVersion: resolvedEngine?.version || null,
     sample: isSample,
     media: { kind: result.base.kind, duration: result.duration },
+    encoder: result.encoder || null,
     createdAt: now(),
   });
 
@@ -9555,22 +9027,18 @@ function buildCommand(args) {
   heading(`Built ${engine} project${isSample ? " (sample)" : ""}`);
   console.log(`  ${result.engineDir}`);
   console.log(`  Media: ${result.base.kind} · ${result.duration.toFixed(2)}s`);
+  if (result.encoder) {
+    console.log(`  Encoder: ${result.encoder} (${encoderLabel(result.encoder)})`);
+  }
   if (isSample) {
     console.log(`  Sample: ${buildPlan.elements.length} of ${(plan.elements || []).length} element(s)`);
     console.log("  Approve these elements, then rebuild with --force for the full set.");
   }
   console.log("\nNext:");
-  if (engine === "hyperframes") {
-    console.log(`  cd "${result.engineDir}"`);
-    console.log("  npx hyperframes check");
-    console.log("  npx hyperframes preview");
-    console.log("  npx hyperframes render --quality draft -o ../../renders/draft.mp4");
-  } else {
-    console.log(`  cd "${result.engineDir}"`);
-    console.log("  npm install");
-    console.log("  npx remotion studio");
-    console.log("  npx remotion render src/index.ts RoosterVideo ../../renders/final.mp4");
-  }
+  console.log(`  cd "${result.engineDir}"`);
+  console.log("  npx hyperframes check");
+  console.log("  npx hyperframes preview");
+  console.log("  npx hyperframes render --quality draft -o ../../renders/draft.mp4");
 }
 
 // ---------------------------------------------------------------------------
@@ -9816,15 +9284,12 @@ function preview(args) {
 
   const engineDir = path.join(project.dir, "engine");
   const hyperframes = path.join(engineDir, "hyperframes");
-  const remotion = path.join(engineDir, "remotion");
   const filmcraft = filmCraftPaths(project);
   if (exists(filmcraft.projectFile)) {
     console.log(`\n  Timeline: ${filmcraft.projectFile}`);
     console.log(`  Open:     node "<skill>/scripts/rooster.mjs" timeline ${project.slug} --open`);
   } else if (exists(hyperframes)) {
     console.log(`\n  Native preview: cd "${hyperframes}" && npx hyperframes preview`);
-  } else if (exists(remotion)) {
-    console.log(`\n  Native preview: cd "${remotion}" && npx remotion studio`);
   } else if (exists(path.join(engineDir, "ffmpeg"))) {
     console.log(`\n  Render a draft first: node "<skill>/scripts/rooster.mjs" render ${project.slug} --draft`);
   }
@@ -10344,22 +9809,15 @@ async function render(args) {
     return;
   }
 
-  const hfDir = path.join(project.dir, "engine", "hyperframes");
-  const remotionDir = path.join(project.dir, "engine", "remotion");
-  let engine = typeof args.engine === "string" ? args.engine : config.engine || "auto";
-  if (engine === "auto") {
-    engine = exists(hfDir) ? "hyperframes" : exists(remotionDir) ? "remotion" : null;
+  if (args.engine === "remotion" || config.engine === "remotion") {
+    fail(
+      'Remotion was removed from RoosterEdit. Use --engine hyperframes; render 3D in Blender and add it as a clip. Set "engine": "hyperframes" in project.json.'
+    );
   }
-  if (!engine) {
-    fail("No engine project found. Run build <slug> first (or pass --engine hyperframes|remotion).");
-  }
-  if (!["hyperframes", "remotion"].includes(engine)) {
-    fail(`Engine "${engine}" cannot render here. Use hyperframes or remotion.`);
-  }
-
+  const engine = "hyperframes";
   const engineDir = path.join(project.dir, "engine", engine);
   if (!exists(engineDir)) {
-    fail(`Engine project not found at ${engineDir}. Run build ${project.slug} --engine ${engine}.`);
+    fail(`Engine project not found at ${engineDir}. Run build ${project.slug} --engine hyperframes.`);
   }
 
   const quality = String(args.quality || (args.final ? "final" : "draft")).toLowerCase();
@@ -10383,10 +9841,9 @@ async function render(args) {
     projectDir: engineDir,
   });
   if (!info || !info.bin) {
-    if (engine === "hyperframes") {
-      fail("HyperFrames not found. Install it with `npm install --prefix <workspace>/cache/tools hyperframes` or use npx once.");
-    }
-    fail(`Remotion not found in ${engineDir}. Run npm install in that directory.`);
+    fail(
+      "HyperFrames not found. Install it with `npm install --prefix <workspace>/cache/tools hyperframes` or use npx once."
+    );
   }
 
   const sourceKey = htmlKey({
@@ -10431,39 +9888,25 @@ async function render(args) {
       ? path.resolve(CWD, args["frames-cache-dir"])
       : path.join(cacheRoot(WORKSPACE), "hyperframes-frames");
 
-  let command;
-  let commandArgs;
-  if (engine === "hyperframes") {
-    const invocation = hyperFramesRenderArgs({
+  const gpuAuto =
+    args.gpu === undefined && !args["no-gpu"] && hardwareInfo().detected;
+  const invocationFor = (gpuEnabled) =>
+    hyperFramesRenderArgs({
       bin: info.bin,
       out,
       quality: normalizedQuality,
       workers: args.workers !== undefined ? args.workers : "auto",
       resume: Boolean(args.resume),
-      gpu: Boolean(args.gpu),
+      gpu: gpuEnabled,
       framesCacheDir,
       videoFrameFormat: args["video-frame-format"],
       start: args.start !== undefined ? Number(args.start) : undefined,
       end: args.end !== undefined ? Number(args.end) : undefined,
     });
-    command = invocation.command;
-    commandArgs = invocation.args;
-  } else {
-    const has3d = (plan.elements || []).some((element) => /3d/i.test(String(element.type || "")));
-    const invocation = remotionRenderArgs({
-      bin: info.bin,
-      entry: args.entry || "src/index.ts",
-      composition: args.composition || "RoosterVideo",
-      out,
-      quality: normalizedQuality,
-      concurrency: args.concurrency,
-      gl: args.gl || (has3d ? "angle" : undefined),
-      frames: args.frames,
-      log: args.log,
-    });
-    command = invocation.command;
-    commandArgs = invocation.args;
-  }
+
+  let invocation = invocationFor(args.gpu !== undefined ? Boolean(args.gpu) : gpuAuto);
+  const command = invocation.command;
+  let commandArgs = invocation.args;
 
   if (args.print) {
     console.log([command, ...commandArgs].map((part) => (/\s/.test(String(part)) ? `"${part}"` : part)).join(" "));
@@ -10484,21 +9927,31 @@ async function render(args) {
       ? Number(args.timeout)
       : Math.max(10 * 60 * 1000, (expectedDuration || 60) * 4 * 1000);
 
-  const result = await runRender({
-    command,
-    args: commandArgs,
-    cwd: engineDir,
-    logPath,
-    timeout,
-    onProgress: (line) => {
-      const progress = parseRenderProgress(line);
-      if (!progress) return;
-      if (progress.percent !== null && progress.percent >= lastPercent + 5) {
-        lastPercent = progress.percent;
-        console.log(`  ${progress.stage ? `${progress.stage} ` : ""}${progress.percent.toFixed(0)}%`);
-      }
-    },
-  });
+  const attempt = () =>
+    runRender({
+      command,
+      args: commandArgs,
+      cwd: engineDir,
+      logPath,
+      timeout,
+      onProgress: (line) => {
+        const progress = parseRenderProgress(line);
+        if (!progress) return;
+        if (progress.percent !== null && progress.percent >= lastPercent + 5) {
+          lastPercent = progress.percent;
+          console.log(`  ${progress.stage ? `${progress.stage} ` : ""}${progress.percent.toFixed(0)}%`);
+        }
+      },
+    });
+
+  let result = await attempt();
+  if (!result.ok && gpuAuto) {
+    console.warn(`  ! GPU render failed; retrying on CPU (${describeHardware(hardwareInfo())}).`);
+    invocation = invocationFor(false);
+    commandArgs = invocation.args;
+    lastPercent = -10;
+    result = await attempt();
+  }
 
   if (!result.ok) {
     const tail = (result.stderr || result.stdout || "").split(/\r?\n/).slice(-12).join("\n");
@@ -10593,7 +10046,8 @@ Commands:
   color <slug> [options]          Apply plan.color filters to the source
   tts <slug> [options]            Build (and optionally generate) a voiceover
   multicam <slug> [options]       Normalize cameras, J/L cuts, and speed ramps
-  build <slug> [options]          Build a HyperFrames, Remotion, or FilmCraft timeline from the plan
+  techniques [--plan <slug>] [--need <tags>] [--json] Show the catalog and what this machine can run
+  build <slug> [options]          Build a HyperFrames project or FilmCraft timeline from the plan
   timeline <slug> [--open]        Show or open the FilmCraft project
   filmcraft status|setup|mcp-config|open  Detect FilmCraft, connect the MCP, open a timeline
   feedback [slug] [options]       Draft or create a redacted GitHub issue
@@ -10689,6 +10143,7 @@ Reframe options:
   --focus-y <0..1>                Vertical focus for mode=focus
   --focus auto                    Use the median face box as the focus (HyperFrames measure face)
   --focus-samples <n>             Frames sampled for --focus auto (default: 16)
+  --encoder <id>                  auto (GPU) | libx264 | h264_amf | h264_nvenc | ...
   --update-plan                   Point plan.source at the reframed file
 
 B-roll options:
@@ -10733,6 +10188,11 @@ OCR options:
   --refresh                       Ignore the cached result
   --json                          Machine-readable output
 
+Techniques options:
+  --need <a,b>                    Filter by need: cut, captions, audio, 3d, voice, timeline, delivery, ...
+  --plan <slug>                   Derive the needs from a project's edit/plan.json
+  --json                          Machine-readable output
+
 Tools options:
   --json                          Machine-readable output
   --approve                       Allow the download (tools install only)
@@ -10753,7 +10213,7 @@ Color options:
   --quality fast|final            fast = veryfast/CRF 20 intermediate (default); final = medium/CRF 18
   --preset <id>                   Override the encoder preset
   --crf <n>                       Override the quality value (0-63)
-  --encoder <id>                  libx264 (default) | h264_nvenc | h264_amf | h264_qsv | ...
+  --encoder <id>                  auto (GPU for fast) | libx264 | h264_nvenc | h264_amf | h264_qsv | ...
   --scale <W:H>                   Scale in the same pass, e.g. 1920:1080 or 1280:-2
   --filter-threads <n>            Parallelize the filter chain (heavy grades)
   --no-progress                   Hide the progress/ETA line
@@ -10774,16 +10234,17 @@ TTS options:
 Multicam options:
   --file <path>                   JSON with cameras/cuts (default: plan.multicam)
   --render                        Cut and concat the camera segments
+  --encoder <id>                  auto (GPU) | libx264 | h264_amf | h264_nvenc | ...
   --update-plan                   Point plan.source at the multicam render
 
 Build options:
-  --target <id>                   auto | hyperframes | remotion | filmcraft (default: project)
-  --engine <id>                   Renderer: hyperframes | remotion (default: auto)
+  --target <id>                   auto | hyperframes | filmcraft (default: project)
+  --engine <id>                   Renderer: hyperframes (default: auto)
   --force                         Rebuild an existing engine project (archives FilmCraft)
   --if-needed                     Skip if the build state is unchanged
   --rebuild-media                 Re-run FFmpeg and element renders, ignoring the cache
   --no-cache                      Do not read or write the cache
-  --encoder <id>                  libx264 | h264_amf | h264_nvenc | h264_qsv | ...
+  --encoder <id>                  auto (GPU for the base) | libx264 | h264_amf | h264_nvenc | ...
   --crf <n>                       Quality (default: 20)
   --preset <id>                   Encoder preset (default: veryfast)
   --no-cuts                       Ignore plan cuts and use the original source
@@ -10816,11 +10277,9 @@ Render options:
   --out <path>                    Output (default: renders/<quality>.mp4)
   --force                         Re-render even if the cache key matches
   --workers <n|auto>              HyperFrames workers (default: auto)
-  --concurrency <n|auto>          Remotion concurrency
-  --gpu                           HyperFrames hardware encoding
+  --gpu                           HyperFrames hardware rendering (auto when a GPU is detected)
+  --no-gpu                        Force the CPU render path
   --resume                        HyperFrames segmented resume
-  --frames <start-end>            Remotion frame range
-  --gl <id>                       Remotion renderer (angle, swangle, ...)
   --frames-cache-dir <path>       Persistent HyperFrames frame cache
   --print                         Print the command without running it
   --json                          Machine-readable result
@@ -10858,8 +10317,8 @@ New project options:
   --channel <id>                  Channel (default: workspace default)
   --name <name>                   Display name
   --profile <id>                  Profile (default: channel profile)
-  --target <id>                   auto | hyperframes | remotion | filmcraft
-  --engine <id>                   auto | hyperframes | remotion | ffmpeg
+  --target <id>                   auto | hyperframes | filmcraft
+  --engine <id>                   auto | hyperframes
   --format <aspect>               16:9 | 9:16 | 1:1 | 4:5 (default: channel)
   --duration <seconds>            Optional declared target. Omit it to let the edit define the length.
   --language <code>               Language (default: channel language)
@@ -10883,7 +10342,7 @@ Channel options:
   --profile <id>                  Default profile
   --source <id>                   live | generated | hybrid
   --voice <id>                    user | tts | none
-  --engine <id>                   auto | hyperframes | remotion
+  --engine <id>                   auto | hyperframes
   --autonomy <id>                 auto | guided | manual
   --assets <id>                   user | link | library | generated | none | mixed
   --allow-download <bool>         Allow authorized downloads
@@ -11032,7 +10491,7 @@ function filmcraftCommand(args) {
     if (mcp.registered === true) console.log("             restart the agent after connecting MCP");
     if (!status.installed) {
       console.log("\n  Install: https://getartcraft.com/apps/filmcraft");
-      console.log("  Or continue with HyperFrames/Remotion: build <slug> --target hyperframes|remotion");
+      console.log("  Or continue with HyperFrames: build <slug> --target hyperframes");
     }
     console.log(`\n  ${prompt.question || prompt.questionPt}`);
     for (const option of prompt.options?.length ? prompt.options : prompt.optionsPt) {
@@ -11183,7 +10642,10 @@ async function feedbackCommand(args) {
     node: capabilities.node || process.version.replace(/^v/, ""),
     ffmpeg: capabilities.ffmpeg || "not found",
     hyperframes: capabilities.hyperframesCli || "not found",
-    remotion: capabilities.engines?.remotion || "not detected",
+    blender: capabilities.blender?.version || "not found",
+    earshot: capabilities.earshot?.version || "not found",
+    gpu: capabilities.gpu || "not detected",
+    encoder: capabilities.hardware?.recommended?.h264 || "libx264",
     filmcraft: capabilities.filmcraft?.version
       ? capabilities.filmcraft.version
       : capabilities.filmcraft?.installed
@@ -11387,6 +10849,9 @@ async function main() {
       else printDoctor(data);
       return;
     }
+    case "techniques":
+      await techniquesCommand(args);
+      return;
     case "init":
       initWorkspace(args);
       return;

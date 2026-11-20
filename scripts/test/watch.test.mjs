@@ -100,9 +100,9 @@ test("the server serves the page, the snapshot, and refuses path traversal", asy
   fs.writeFileSync(path.join(root, "renders", "draft.mp4"), Buffer.alloc(1024));
   fs.writeFileSync(path.join(root, "secret.txt"), "no");
   fs.mkdirSync(path.join(root, "preview"), { recursive: true });
-  fs.mkdirSync(path.join(root, "engine", "remotion", "src"), { recursive: true });
+  fs.mkdirSync(path.join(root, "engine", "hyperframes", "src"), { recursive: true });
   fs.writeFileSync(path.join(root, "preview", "index.html"), "<h1>Preview</h1>");
-  fs.writeFileSync(path.join(root, "engine", "remotion", "src", "Scene.tsx"), "export const Scene = () => null;\n");
+  fs.writeFileSync(path.join(root, "engine", "hyperframes", "src", "scene.js"), "export const scene = () => null;\n");
 
   const server = await startWatchServer({ projectDir: root, port: 0, intervalMs: 500 });
   t.after(() => server.close());
@@ -117,16 +117,16 @@ test("the server serves the page, the snapshot, and refuses path traversal", asy
   assert.ok(snapshot.files.videos.some((file) => file.relative === "renders/draft.mp4"));
   assert.ok(snapshot.files.images.some((file) => file.relative === "style/proof/a.png"));
   assert.ok(snapshot.files.html.some((file) => file.relative === "preview/index.html"));
-  assert.ok(snapshot.files.code.some((file) => file.relative === "engine/remotion/src/Scene.tsx"));
+  assert.ok(snapshot.files.code.some((file) => file.relative === "engine/hyperframes/src/scene.js"));
 
   const image = await fetch(`${server.url}file/style/proof/a.png`);
   assert.equal(image.status, 200);
   assert.equal(image.headers.get("content-type"), "image/png");
 
-  const code = await fetch(`${server.url}file/engine/remotion/src/Scene.tsx`);
+  const code = await fetch(`${server.url}file/engine/hyperframes/src/scene.js`);
   assert.equal(code.status, 200);
-  assert.match(code.headers.get("content-type"), /text\/plain/);
-  assert.match(await code.text(), /export const Scene/);
+  assert.match(code.headers.get("content-type"), /javascript|text\/plain/);
+  assert.match(await code.text(), /export const scene/);
 
   const html = await fetch(`${server.url}file/preview/index.html`);
   assert.equal(html.status, 200);
@@ -149,9 +149,9 @@ test("watchHtml stays dependency-free", () => {
 
 test("component preview degrades with a clear message when no bundler exists", async (t) => {
   const root = tempProject(t);
-  fs.mkdirSync(path.join(root, "engine", "remotion", "src"), { recursive: true });
+  fs.mkdirSync(path.join(root, "style", "components"), { recursive: true });
   fs.writeFileSync(
-    path.join(root, "engine", "remotion", "src", "Scene.tsx"),
+    path.join(root, "style", "components", "Scene.tsx"),
     "export const Scene = () => null;\n"
   );
 
@@ -162,7 +162,7 @@ test("component preview degrades with a clear message when no bundler exists", a
   assert.equal(snapshot.preview.bundler, false);
   assert.equal(snapshot.files.code[0].renderable, false);
 
-  const shell = await fetch(`${server.url}component/engine/remotion/src/Scene.tsx`);
+  const shell = await fetch(`${server.url}component/style/components/Scene.tsx`);
   assert.equal(shell.status, 200);
   const html = await shell.text();
   assert.match(html, /No esbuild found/);

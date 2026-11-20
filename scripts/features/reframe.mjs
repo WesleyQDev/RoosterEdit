@@ -11,6 +11,8 @@
  * tracking.
  */
 
+import { videoEncoderArgs } from "./encoders.mjs";
+
 /** Preset delivery sizes. */
 const TARGETS = Object.freeze({
   "16:9": Object.freeze({ width: 1920, height: 1080 }),
@@ -124,6 +126,7 @@ export function buildReframeFilter({
  * @param {number} [options.focusY=0.5]
  * @param {number} [options.crf=18] H.264 quality (lower is better).
  * @param {string} [options.preset="medium"] x264 speed/size preset.
+ * @param {string} [options.encoder="libx264"] FFmpeg video encoder.
  * @returns {string[]} FFmpeg arguments, not executed.
  * @throws {TypeError|RangeError} When arguments are missing or invalid.
  */
@@ -138,6 +141,7 @@ export function reframeArgs({
   focusY = 0.5,
   crf = 18,
   preset = "medium",
+  encoder = "libx264",
 } = {}) {
   if (typeof input !== "string" || !input.trim()) {
     throw new TypeError("input must be a non-empty file path.");
@@ -157,6 +161,9 @@ export function reframeArgs({
     focusY,
   });
 
+  if (String(encoder).trim() === "copy") {
+    throw new Error("reframeArgs: encoder cannot be \"copy\" when a filter is applied");
+  }
   const quality =
     crf === null || crf === undefined || crf === ""
       ? 18
@@ -171,9 +178,7 @@ export function reframeArgs({
     "-map", "0:v:0",
     "-map", "0:a:0?",
     "-vf", filter,
-    "-c:v", "libx264",
-    "-preset", speed,
-    "-crf", String(quality),
+    ...videoEncoderArgs({ encoder, crf: quality, preset: speed }),
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-b:a", "192k",

@@ -1,5 +1,5 @@
 /**
- * Engine discovery for HyperFrames and Remotion.
+ * Engine discovery for HyperFrames.
  *
  * This module only inspects the filesystem. It never installs packages and
  * never shells out to `npx`: callers get a resolved binary path (or null) and
@@ -266,78 +266,6 @@ export function hyperFramesVersion(pkgPath) {
     : null;
 }
 
-function binaryFromPackageBin(pkgPath, preferredName = "remotion") {
-  const pkg = readJsonSafe(pkgPath);
-  if (!pkg || !pkg.bin) return null;
-  const packageDir = path.dirname(pkgPath);
-  let relative = null;
-  if (typeof pkg.bin === "string") {
-    relative = pkg.bin;
-  } else if (typeof pkg.bin === "object") {
-    relative =
-      pkg.bin[preferredName] ||
-      Object.values(pkg.bin).find((value) => typeof value === "string") ||
-      null;
-  }
-  if (!relative) return null;
-  const candidate = path.resolve(packageDir, relative);
-  return fileExists(candidate) ? candidate : null;
-}
-
-/**
- * Locate a project-local Remotion CLI.
- *
- * @param {{ projectDir?: string, platform?: NodeJS.Platform }} [options]
- * @returns {{ bin: string|null, pkgPath: string|null, version: string|null, source: string } | null}
- */
-export function resolveRemotion(options = {}) {
-  options = options || {};
-  const projectDir = resolvePath(options.projectDir || process.cwd());
-  if (!projectDir) return null;
-
-  const platform = options.platform || process.platform;
-  const binDir = path.join(projectDir, "node_modules", ".bin");
-  const binNames =
-    platform === "win32" ? ["remotion.cmd", "remotion.exe", "remotion"] : ["remotion"];
-
-  let bin = null;
-  let binSource = null;
-  for (const name of binNames) {
-    const candidate = path.join(binDir, name);
-    if (fileExists(candidate)) {
-      bin = candidate;
-      binSource = "local-bin";
-      break;
-    }
-  }
-
-  let pkgPath = null;
-  let version = null;
-  for (const name of ["remotion", "@remotion/cli"]) {
-    const candidate = path.join(projectDir, "node_modules", ...name.split("/"), "package.json");
-    if (!fileExists(candidate)) continue;
-    if (!pkgPath) pkgPath = candidate;
-    const candidateVersion = hyperFramesVersion(candidate);
-    if (!version) version = candidateVersion;
-    if (!bin) {
-      const packageBin = binaryFromPackageBin(candidate);
-      if (packageBin) {
-        bin = packageBin;
-        binSource = "package-bin";
-      }
-    }
-  }
-
-  if (!bin && !pkgPath) return null;
-
-  return {
-    bin,
-    pkgPath,
-    version,
-    source: bin ? binSource : "package",
-  };
-}
-
 /**
  * Version/bin/source for an engine, without spawning anything.
  *
@@ -354,16 +282,6 @@ export function engineVersion(engine, options = {}) {
     if (!found) return null;
     return {
       version: hyperFramesVersion(found.pkgPath),
-      bin: found.bin,
-      source: found.source,
-    };
-  }
-
-  if (name === "remotion") {
-    const found = resolveRemotion(options);
-    if (!found || !found.bin) return null;
-    return {
-      version: found.version,
       bin: found.bin,
       source: found.source,
     };

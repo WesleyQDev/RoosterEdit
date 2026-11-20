@@ -48,6 +48,6 @@
   },
   "engines": {
     "preferred": "hyperframes",
-    "supported": ["hyperframes", "remotion"]
+    "supported": ["hyperframes"]
   }
 }

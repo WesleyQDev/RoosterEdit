@@ -3,7 +3,7 @@
  *
  * The argument builders and key/probe helpers are pure. `runRender` starts one
  * child process on demand and never at import time. Engine resolution (finding
- * the HyperFrames/Remotion binary) belongs to `lib/engines.mjs`; callers pass a
+ * the HyperFrames binary) belongs to `lib/engines.mjs`; callers pass a
  * resolved command here.
  */
 
@@ -15,7 +15,6 @@ import { StringDecoder } from "node:string_decoder";
 
 const DEFAULT_HF_WORKERS = "auto";
 const DEFAULT_HF_VIDEO_FRAME_FORMAT = "jpg";
-const DEFAULT_REMOTION_LOG = "error";
 const CAPTURE_LIMIT = 4 * 1024 * 1024;
 const KILL_GRACE_MS = 3000;
 const DURATION_TOLERANCE_MIN = 0.5;
@@ -182,132 +181,6 @@ export function hyperFramesRenderArgs({
   args.push(...normalizeExtra(extra), "-o", output);
 
   return { command: requireString(bin, "bin", "hyperframes"), args, out: output };
-}
-
-function normalizeRemotionConcurrency(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const text = String(value).trim().toLowerCase();
-  if (text === "auto") return "auto";
-  if (/^\d+%$/.test(text)) return text;
-  const count = Number(text);
-  if (!Number.isInteger(count) || count < 1) {
-    throw new RangeError(
-      `concurrency must be a positive integer, a percentage, or "auto", got "${value}".`
-    );
-  }
-  return String(count);
-}
-
-function normalizeRemotionGl(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const renderer = String(value).trim();
-  if (!/^[A-Za-z0-9_-]+$/.test(renderer)) {
-    throw new RangeError(`gl must be a renderer name such as "angle", got "${value}".`);
-  }
-  return renderer;
-}
-
-function normalizeRemotionFrames(value) {
-  if (value === null || value === undefined || value === "") return null;
-  if (isObject(value)) {
-    const from = Number(value.start);
-    const to = Number(value.end);
-    if (!Number.isInteger(from) || from < 0 || !Number.isInteger(to) || to < from) {
-      throw new RangeError("frames start/end must be non-negative integers with end >= start.");
-    }
-    return from === to ? String(from) : `${from}-${to}`;
-  }
-  const text = String(value).trim();
-  if (/^\d+$/.test(text)) return text;
-  const match = text.match(/^(\d+)-(\d+)$/);
-  if (!match) {
-    throw new RangeError(`frames must look like "start-end", got "${value}".`);
-  }
-  const from = Number(match[1]);
-  const to = Number(match[2]);
-  if (to < from) throw new RangeError(`frames end (${to}) must be >= start (${from}).`);
-  return `${from}-${to}`;
-}
-
-/**
- * Build Remotion `render` arguments.
- *
- * `--gl` is emitted only when a renderer is provided (for example `angle` for
- * WebGL/3D compositions). `--log=error` keeps the render log small by default.
- *
- * @param {object} options
- * @param {string} [options.bin] Remotion CLI binary or entry script.
- * @param {string} [options.entry] Entry file; omitted when the Remotion config has one.
- * @param {string} options.composition Composition id.
- * @param {string} options.out Output video path.
- * @param {string} [options.quality] `draft` or `final`; validated for the caller.
- * @param {string|number} [options.concurrency] Worker count, percentage, or `auto`.
- * @param {string} [options.gl] OpenGL renderer, for example `angle`.
- * @param {string|number|{start: number, end: number}} [options.frames] Frame range.
- * @param {string} [options.log] Remotion log level; defaults to `error`.
- * @param {string} [options.codec] Remotion codec (`h264`, `prores`, `vp8`, ...).
- * @param {string} [options.imageFormat] `jpeg`, `png`, or `none`.
- * @param {string} [options.pixelFormat] For example `yuva444p10le` for ProRes alpha.
- * @param {string} [options.proresProfile] `4444`, `4444-xq`, `hq`, ...
- * @param {object} [options.props] Composition input props.
- * @returns {{command: string, args: string[], out: string, quality: string|null}} Invocation.
- */
-export function remotionRenderArgs({
-  bin = "remotion",
-  entry,
-  composition,
-  out,
-  quality,
-  concurrency,
-  gl,
-  frames,
-  log,
-  codec,
-  imageFormat,
-  pixelFormat,
-  proresProfile,
-  props,
-} = {}) {
-  const output = requireString(out, "out");
-  const compositionId = requireString(composition, "composition");
-  const normalizedQuality = normalizeRenderQuality(quality, null);
-
-  const args = ["render"];
-  if (typeof entry === "string" && entry.trim()) args.push(entry);
-  args.push(compositionId, output);
-
-  const workerCount = normalizeRemotionConcurrency(concurrency);
-  if (workerCount !== null) args.push(`--concurrency=${workerCount}`);
-
-  const renderer = normalizeRemotionGl(gl);
-  if (renderer !== null) args.push(`--gl=${renderer}`);
-
-  const logLevel =
-    typeof log === "string" && log.trim() ? log.trim().toLowerCase() : DEFAULT_REMOTION_LOG;
-  args.push(`--log=${logLevel}`);
-
-  const frameRange = normalizeRemotionFrames(frames);
-  if (frameRange !== null) args.push(`--frames=${frameRange}`);
-
-  for (const [key, value] of [
-    ["codec", codec],
-    ["image-format", imageFormat],
-    ["pixel-format", pixelFormat],
-    ["prores-profile", proresProfile],
-  ]) {
-    if (typeof value === "string" && value.trim()) args.push(`--${key}=${value.trim()}`);
-  }
-
-  if (props && typeof props === "object" && !Array.isArray(props)) {
-    args.push(`--props=${JSON.stringify(props)}`);
-  }
-
-  return {
-    command: requireString(bin, "bin", "remotion"),
-    args,
-    out: output,
-    quality: normalizedQuality,
-  };
 }
 
 function progressPercent(value) {

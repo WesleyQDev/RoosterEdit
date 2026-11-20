@@ -48,7 +48,7 @@ edit/export/
 
 `timeline.fcpxml` is a minimal FCPXML 1.10 document with the source asset and one `asset-clip` per keep segment. It is useful for a quick import and for tools that prefer XML over EDL. It does not include the full overlay/music/caption graph; those are still in `edit/plan.json` and `edit/timeline.json`.
 
-The plan's elements are intentionally not baked into the FCPXML. Overlays depend on the engine and the profile; exporting them as generic clips would produce a worse result than rebuilding them in the NLE or in HyperFrames/Remotion.
+The plan's elements are intentionally not baked into the FCPXML. Overlays depend on the engine and the profile; exporting them as generic clips would produce a worse result than rebuilding them in the NLE or in HyperFrames.
 
 ## DaVinci Resolve
 
@@ -68,24 +68,23 @@ The free version of DaVinci imports EDL/XML manually. The paid Studio version is
 
 ## FilmCraft timeline
 
-FilmCraft is optional and opt-in: `--target filmcraft` on `build` or `new`. It is not the default and not required for HyperFrames, Remotion, or `export`. The CLI (`filmcraft-cli`) does the deterministic build; the MCP server is for interactive editing and is not needed for `build`.
+FilmCraft is optional and opt-in: `--target filmcraft` on `build` or `new`. It is not the default and not required for HyperFrames or `export`. The CLI (`filmcraft-cli`) does the deterministic build; the MCP server is for interactive editing and is not needed for `build`.
 
 ### Build
 
 ```bash
 node "<skill>/scripts/rooster.mjs" new meu-video --channel en-tech --target filmcraft
 node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --engine hyperframes
-node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --engine remotion
 node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --if-needed
 node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --force
 node "<skill>/scripts/rooster.mjs" build meu-video --target filmcraft --rebuild-media
 node "<skill>/scripts/rooster.mjs" timeline meu-video --open
 ```
 
-- `--engine hyperframes|remotion` selects the element renderer; `auto` uses HyperFrames, because registry blocks and the generated plan only run there. Pass `--engine remotion` when the project has a hand-written React/Three element. FFmpeg is rejected here because it builds the base, not the element clips.
+- `--engine hyperframes` selects the element renderer. It is the only one: registry blocks, canvas scenes, and the generated plan all run there. FFmpeg is rejected here because it builds the base, not the element clips.
 - `new --target filmcraft` records `timeline: "filmcraft"` in `project.json`; later `build` calls with no target keep using FilmCraft.
 - `build --target filmcraft` runs FFmpeg for the base cut and audio mix, renders each element as a transparent clip, and assembles the `.fcproj`.
-- HyperFrames elements are MOV ProRes 4444 with alpha, one composition per element. Remotion elements are ProRes 4444 with PNG frames and `yuva444p10le`, one composition per element. Remotion needs a one-time `npm install` in `engine/filmcraft/remotion`; the build reports that path when the CLI is missing.
+- Elements are MOV ProRes 4444 with alpha, one HyperFrames composition per element.
 - `--if-needed` skips when the plan, base, renderer, and format state key is unchanged.
 - `--force` archives the previous `.fcproj` under `engine/filmcraft/archive/` and rebuilds.
 - `--rebuild-media` forces the base and element re-renders.
@@ -99,7 +98,7 @@ node "<skill>/scripts/rooster.mjs" timeline meu-video --open
 - Program markers for chapters, elements, and cut boundaries.
 - Captions imported from `edit/captions/*.srt` or `.vtt` when present.
 
-`zoom` and overlay `transition` elements are not standalone clips: they apply to the base, so the build fails by default. Use `--target hyperframes`/`remotion`, replace them with PIP/split b-roll and punch-ins, or pass `--allow-skipped-elements` when the omission is deliberate.
+`zoom` and overlay `transition` elements are not standalone clips: they apply to the base, so the build fails by default. Use `--target hyperframes`, replace them with PIP/split b-roll and punch-ins, or pass `--allow-skipped-elements` when the omission is deliberate.
 
 ### Files and state
 
@@ -108,8 +107,7 @@ engine/filmcraft/
 ├── <slug>.fcproj
 ├── assets/          # base media
 ├── elements/        # one MOV per element
-├── hyperframes/     # element compositions, when used
-├── remotion/        # element compositions, when used
+├── hyperframes/     # element compositions
 └── archive/         # previous .fcproj after --force
 work/filmcraft.json  # schema rooster.filmcraft/v1
 cache/elements/<hash>.mov

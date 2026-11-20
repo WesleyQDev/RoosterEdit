@@ -48,7 +48,7 @@
     "negative": "realistic skin, photoreal, dark horror, complex textures, clutter"
   },
   "engines": {
-    "preferred": "remotion",
-    "supported": ["remotion", "hyperframes"]
+    "preferred": "hyperframes",
+    "supported": ["hyperframes"]
   }
 }

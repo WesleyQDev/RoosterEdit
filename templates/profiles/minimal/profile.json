@@ -48,6 +48,6 @@
   },
   "engines": {
     "preferred": "hyperframes",
-    "supported": ["hyperframes", "remotion", "ffmpeg"]
+    "supported": ["hyperframes"]
   }
 }

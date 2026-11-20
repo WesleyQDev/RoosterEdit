@@ -195,13 +195,6 @@ Markers are useful for review and QA:
 - Use the registry for captions, transitions, charts, and cards.
 - Run `npx hyperframes check --json` and `npx hyperframes timeline --json`.
 
-### Remotion
-
-- Translate clips into `<Sequence from={...} durationInFrames={...}>`.
-- Put shared timing in `src/data/timeline.ts`.
-- Use `<Audio>` for voice/music and `<Video>`/`<Img>` for media.
-- Use `useCurrentFrame()` for animation; never real time.
-
 ### FFmpeg
 
 - Translate `video` clips into `trim`/`setpts`/`concat`.
@@ -219,7 +212,7 @@ FilmCraft is an optional timeline target (`build --target filmcraft`), not a thi
 - **Markers**: chapters, elements, and cut boundaries.
 - **Captions**: imported from `edit/captions/*.srt` or `.vtt` on the first build.
 
-`zoom` and overlay `transition` elements are not standalone clips; FilmCraft cannot apply them to the base, so `build` fails by default with a clear message. Use `--target hyperframes`/`remotion`, replace them with punch-in coverage, or pass `--allow-skipped-elements` to build without them. Track state lives in `work/filmcraft.json`, and element clips are cached in `cache/elements/<hash>.mov`.
+`zoom` and overlay `transition` elements are not standalone clips; FilmCraft cannot apply them to the base, so `build` fails by default with a clear message. Use `--target hyperframes`, replace them with punch-in coverage, or pass `--allow-skipped-elements` to build without them. Track state lives in `work/filmcraft.json`, and element clips are cached in `cache/elements/<hash>.mov`.
 
 Incremental builds update only what changed: unchanged element clips are reused, a changed element is replaced in place when its time window is the same, and a changed base re-places only V1/A1. User clips on other tracks stay untouched. `--force` archives the previous `.fcproj` under `engine/filmcraft/archive/` before rebuilding.
 
@@ -249,11 +242,11 @@ The page should work without a build step. Keep it readable and fast; this is a 
 
 `watch <slug>` starts a local server (`127.0.0.1`, random port) and serves a live page with the current stage, each stage's duration, the plan summary, the generated files, and the last log lines. `new` starts it automatically and opens the browser unless `--no-watch` is passed.
 
-- Files are grouped by kind: **videos** (renders, generated/source/licensed media, FilmCraft element clips) with a poster frame and an inline player, **images** (proof frames, QA frames, storyboard, generated), **HTML artifacts** (plan, preview, proof page, HyperFrames compositions, HTML components) in an inline frame, and **components/code** (`style/components`, Remotion and Remotion-in-FilmCraft sources) as lazy text.
+- Files are grouped by kind: **videos** (renders, generated/source/licensed media, FilmCraft element clips) with a poster frame and an inline player, **images** (proof frames, QA frames, storyboard, generated), **HTML artifacts** (plan, preview, proof page, HyperFrames compositions, HTML components) in an inline frame, and **components/code** (`style/components` and generated engine sources) as lazy text.
 - Videos get a poster from FFmpeg on first view (`/poster/<relative>`, cached in `work/watch/posters`), and `/file/<relative>` answers HTTP range requests so a 2 GB source seeks and shows its duration instead of spinning.
 - HTML artifacts are prepared for the iframe: HyperFrames compositions keep everything inside `<template>`, so the server clones the template and installs a no-op GSAP stub; a bare fragment is wrapped in a dark document; a complete document is served untouched.
 - The page updates lists in place: a new file is appended at the top and existing players, frames, and open panels keep their state. Only the metadata line (size, labels) is rewritten as files change.
-- React components render for real: the server bundles the file with the project's own esbuild (Remotion ships one) and serves it at `/component/<relative>`, which the page loads in an iframe. It needs React installed in that project; without a bundler the iframe shows why instead of rendering. The page never asks an agent for this.
+- React components render when the project has its own esbuild and React installed: the server bundles the file and serves it at `/component/<relative>`, which the page loads in an iframe. React preview is optional; without a bundler the iframe says so instead of rendering. The page never asks an agent for this.
 - React previews take props from a fixture when one exists. Order: `<Name>.preview.tsx|jsx|ts|json`, `<Name>.props.json`, then `preview.tsx|jsx|ts|json` in the component folder. A `.json` is the props object; a module's `props` export is the props object; a module's default export is a wrapper component (useful for framing or several variants). Editing the fixture rebuilds the bundle; the page marks the file with "with props".
 - Without a fixture, a `component.json` or `meta.json` in the folder supplies `props`; with no props there, values are inferred from the destructured parameter names (`title`/`text`/`label`… get the manifest `description`, numbers 3, lists `[]`, booleans false, colors the accent) and the page marks it "auto props". Unknown props are left out so the component's own defaults apply.
 - `/file/<relative>` serves the project media with the right content type, so a component's own CSS/JS and a composition's relative assets resolve. It never serves files outside the project directory.

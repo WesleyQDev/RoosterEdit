@@ -27,7 +27,9 @@ assignees: ""
 - Node:
 - FFmpeg:
 - HyperFrames:
-- Remotion:
+- Blender:
+- earshot:
+- GPU / hardware encoder:
 - FilmCraft:
 - gh:
 

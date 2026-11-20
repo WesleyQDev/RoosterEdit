@@ -35,7 +35,7 @@
 - [x] `cache info|path|clear|gc`, `frames` with contact sheet, and b-roll index.
 - [ ] Cuts without re-encode in the engine (`data-media-start`/`trimBefore`).
 - [ ] Hybrid FFmpeg + short overlay render.
-- [ ] Fused audio pass and automatic hardware encode.
+- [x] Fused audio pass and automatic hardware encode (`--encoder auto`, GPU detection, CPU fallback).
 - [x] Automatic `cut-plan`: silences, filler words, rough cut.
 - [x] TTS adapter (provider-agnostic).
 - [x] Mix, loudness, and ducking.
@@ -47,8 +47,8 @@
 ## Phase 3 — Engines and timeline
 
 - [x] HyperFrames adapter (smoke test: init, check, render).
-- [x] Remotion adapter (smoke test: scaffold, still, render).
-- [x] Automatic build of `edit/plan.json` for HyperFrames/Remotion (v1: cuts, elements, and base media).
+- [x] Remotion adapter (removed in 0.3; one creative engine keeps the plan adapter honest).
+- [x] Automatic build of `edit/plan.json` for HyperFrames (v1: cuts, elements, and base media).
 - [x] Rich build: b-roll in PIP/split, structured graphics, lists, emphasis, callout, terminal, and end card.
 - [x] Cut smoothing: audio micro-fade and alternating punch-in on uncovered jumps.
 - [x] 3D graphics in the build via HyperFrames registry blocks (`scene` + `template: "block"`).
@@ -62,7 +62,11 @@
 
 ## Phase 4 — 3D and quality
 
+- [x] Technique catalog (`techniques --json`) and the three-question routing gate.
+- [x] One creative engine (HyperFrames); Remotion removed to stop duplicating the adapter.
 - [ ] Three.js starter for a hand-written custom scene (blocks cover the registry path).
+- [ ] Blender headless adapter: a `scene.py` convention, one-frame smoke test, and a clip manifest entry.
+- [ ] earshot integration in `qa` (`--ears`) with a local-first privacy gate.
 - [ ] More ready-made profiles: warm-documentary, brutalist, corporate-clean.
 - [ ] Project examples.
 - [ ] Evals with baseline and iteration.

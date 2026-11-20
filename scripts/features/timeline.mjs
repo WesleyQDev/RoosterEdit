@@ -14,14 +14,14 @@ const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 
 /** Engines that can render one element on their own. */
-export const ELEMENT_ENGINES = ["hyperframes", "remotion"];
+export const ELEMENT_ENGINES = ["hyperframes"];
 
 /**
  * Resolve the engine that renders one element.
  *
- * An element may carry `engine: "hyperframes" | "remotion"`; otherwise it
- * inherits the project's element engine. `auto`, unknown values, and a missing
- * fallback resolve to null, and validation reports the unknown ones.
+ * An element may carry `engine: "hyperframes"`; otherwise it inherits the
+ * project's element engine. `auto`, unknown values, and a missing fallback
+ * resolve to null, and validation reports the unknown ones.
  *
  * @param {{engine?: string}|null|undefined} element
  * @param {string|null|undefined} fallback

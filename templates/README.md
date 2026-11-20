@@ -40,7 +40,6 @@ choreography, tempo. See `references/edit-plan.md`.
 ```text
 templates/engines/
 ├── hyperframes/
-├── remotion/
 └── ffmpeg/
 ```
 

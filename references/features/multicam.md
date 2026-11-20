@@ -154,7 +154,7 @@ Offsets are clamped to the clip duration when `start`/`end`, `in`/`out`, or `dur
 - Add `multicam` to `edit/plan.json` and keep the camera/cut ids stable.
 - Put `speed`, `speedRamp`, `audioOffset`, and `videoOffset` on timeline clips or plan elements.
 - FFmpeg: split the source at every camera segment, apply each segment's in/out and speed filter, then `concat`. For J/L cuts, keep audio on its own `atrim`/`adelay`/`amix` path so picture and sound can move independently.
-- HyperFrames/Remotion: render one video sequence per camera segment and a separate audio sequence for offset audio. There is no native multicam switch node.
+- HyperFrames: render one video sequence per camera segment and a separate audio sequence for offset audio. There is no native multicam switch node.
 - `multicam <slug> --render` cuts between camera sources and applies `speed`/`audioOffset`/`videoOffset` from the source cuts. `build` still handles one base source; use `--update-plan` to point it at the multicam render.
 - Show the multicam plan and speed choices for approval before building. Camera selection is editorial.
 

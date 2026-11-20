@@ -1338,17 +1338,14 @@ export function buildComponentEntry(options = {}) {
 }
 
 /**
- * Locate an esbuild installation the project already has (Remotion ships one).
+ * Locate an esbuild installation the project already has. React preview is
+ * optional: RoosterEdit does not install a bundler.
  *
  * @param {string} projectDir
  * @returns {{cwd:string, esbuild:string, nodePath:string}|null}
  */
 export function findBundler(projectDir) {
-  const candidates = [
-    projectDir,
-    path.join(projectDir, "engine", "remotion"),
-    path.join(projectDir, "engine", "filmcraft", "remotion"),
-  ];
+  const candidates = [projectDir];
   for (const cwd of candidates) {
     const nodeModules = path.join(cwd, "node_modules");
     const esbuild = path.join(nodeModules, "esbuild");
@@ -1375,7 +1372,7 @@ export function ensureComponentBundle(projectDir, relative, file) {
     return {
       ok: false,
       error:
-        "No esbuild found. Install Remotion in this project (or esbuild at the project root) to preview React components.",
+        "No esbuild found. React component preview is optional; install esbuild at the project root to enable it.",
     };
   }
   const info = stat(file);

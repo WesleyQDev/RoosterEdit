@@ -21,13 +21,13 @@ For a single video with real footage, the shortest route is:
 3. `art-director` writes `style.md` and resolves the profile. Run `styleproof <slug>` and approve the three frames.
 4. `transcript-analyst` transcribes to `edit/transcript.json` and writes `edit/analysis.json`; `editor` writes `edit/plan.json`; show the plan and wait for approval.
 5. `engineer` builds the visual elements from the plan. Run `build --sample 3` and approve the sample first.
-6. `engineer` assembles in HyperFrames or Remotion; `qa` reviews `preview/index.html` and the frames, then `engineer` renders to `renders/`. Use `export` for an NLE handoff.
+6. `engineer` chooses the techniques and assembles in HyperFrames; `qa` reviews `preview/index.html` and the frames, then `engineer` renders to `renders/`. Use `export` for an NLE handoff.
 
 Read `references/video-pipeline.md` for the full mapping. This is the default for single-video jobs; the rest of this document is the broader studio pipeline.
 
 ## Progress and gates
 
-Keep a compact 8-step tracker and show the current step in every update: environment, intake, assets/transcript, plan, timeline, build, preview/QA, render/delivery. At each gate, name the next action and ask before continuing, for example `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?` Do not print the whole checklist every time, and do not combine timeline and final render in one approval; preview and QA sit between them. The build gate includes the engine and timeline choice: HyperFrames (default), Remotion (install only with permission), or FilmCraft (connect the MCP only with permission). If a creative, audio, or cost decision is unclear, ask at the current step instead of guessing.
+Keep a compact 8-step tracker and show the current step in every update: environment, intake, assets/transcript, plan, timeline, build, preview/QA, render/delivery. At each gate, name the next action and ask before continuing, for example `Etapa 4/8 — Plano pronto. Posso seguir com a timeline?` Do not print the whole checklist every time, and do not combine timeline and final render in one approval; preview and QA sit between them. The build gate includes the technique and timeline choice: run `techniques --json`, propose the layers, and connect FilmCraft only with permission. HyperFrames is the only engine; Blender and earshot are optional techniques that are never installed silently. If a creative, audio, or cost decision is unclear, ask at the current step instead of guessing.
 
 ## Delegation
 
@@ -181,7 +181,7 @@ Exit criteria: the timeline adds up to the target duration, has no overlaps or g
 5. Keep the code readable and editable.
 6. Run the engine's lint/check command after structural changes.
 
-For HyperFrames, follow its render contract: `class="clip"`, `data-start`, `data-duration`, deterministic timelines, no real-time clocks. For Remotion, use `useCurrentFrame()` and `Sequence`; avoid real-time side effects. For FFmpeg, generate a readable filter graph and keep the EDL as the source of truth.
+For HyperFrames, follow its render contract: `class="clip"`, `data-start`, `data-duration`, deterministic timelines, no real-time clocks. For FFmpeg, generate a readable filter graph and keep the EDL as the source of truth. For a Blender shot, render a deterministic image sequence and add the result as a clip.
 
 Exit criteria: the project builds and renders at least one still or short draft.
 
@@ -189,7 +189,7 @@ Exit criteria: the project builds and renders at least one still or short draft.
 
 Offer a preview before the final render:
 
-- native studio (`npx hyperframes preview`, `npx remotion studio`);
+- native studio (`npx hyperframes preview`);
 - unified review page (`node "<skill>/scripts/rooster.mjs" preview <slug>`);
 - draft render for FFmpeg projects.
 

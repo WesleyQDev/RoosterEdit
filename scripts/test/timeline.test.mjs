@@ -48,7 +48,7 @@ test("elementId falls back to el-00N and suffixes duplicates", () => {
 // elementSpecs
 // ---------------------------------------------------------------------------
 
-test("elementSpecs resolves a per-element engine and groups by engine", () => {
+test("elementSpecs resolves the element engine and groups by engine", () => {
   const specs = elementSpecs(
     {
       elements: [
@@ -58,26 +58,22 @@ test("elementSpecs resolves a per-element engine and groups by engine", () => {
         { id: "d", type: "zoom", start: 6, end: 7 },
       ],
     },
-    { engine: "remotion" }
+    { engine: "hyperframes" }
   );
 
-  assert.equal(specs.find((spec) => spec.id === "a").engine, "remotion");
-  assert.equal(specs.find((spec) => spec.id === "b").engine, "hyperframes");
-  assert.equal(specs.find((spec) => spec.id === "c").engine, "remotion");
-  assert.equal(specs.find((spec) => spec.id === "d").engine, "remotion");
+  for (const id of ["a", "b", "c", "d"]) {
+    assert.equal(specs.find((spec) => spec.id === id).engine, "hyperframes");
+  }
 
-  assert.equal(elementEngine({ engine: "hyperframes" }, "remotion"), "hyperframes");
-  assert.equal(elementEngine({ engine: "auto" }, "remotion"), "remotion");
-  assert.equal(elementEngine({ engine: "aftereffects" }, "remotion"), "remotion");
+  assert.equal(elementEngine({ engine: "hyperframes" }, "hyperframes"), "hyperframes");
+  assert.equal(elementEngine({ engine: "auto" }, "hyperframes"), "hyperframes");
+  assert.equal(elementEngine({ engine: "aftereffects" }, "hyperframes"), "hyperframes");
   assert.equal(elementEngine({}, null), null);
 
-  const groups = groupSpecsByEngine(specs, "remotion");
+  const groups = groupSpecsByEngine(specs, "hyperframes");
   assert.deepEqual(
     groups.map((group) => [group.engine, group.specs.map((spec) => spec.id)]),
-    [
-      ["hyperframes", ["b"]],
-      ["remotion", ["a", "c"]],
-    ]
+    [["hyperframes", ["a", "b", "c"]]]
   );
 });
 

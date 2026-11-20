@@ -207,9 +207,9 @@ test("htmlKey is stable and tracks theme, engine and plan changes", () => {
   assert.match(first, HEX);
 
   assert.notEqual(first, htmlKey({ ...base, theme: { accent: "#000" } }));
-  assert.notEqual(first, htmlKey({ ...base, engine: "remotion" }));
+  assert.notEqual(first, htmlKey({ ...base, engine: "blender" }));
   assert.notEqual(first, htmlKey({ ...base, engineVersion: "1.2.4" }));
-  assert.notEqual(first, htmlKey({ ...base, version: "0.2.0" }));
+  assert.notEqual(first, htmlKey({ ...base, version: "0.3.0" }));
   assert.notEqual(first, htmlKey({ ...base, plan: { ...plan, duration: 11 } }));
   assert.throws(() => htmlKey({ plan: null }), /plan is required/);
 });
@@ -263,7 +263,7 @@ test('elementKey tracks element content and render context', () => {
   assert.match(key, HEX);
   assert.equal(key, elementKey({ ...base, theme: { accent: '#f00' } }));
   assert.notEqual(key, elementKey({ ...base, element: { type: 'letreiro', text: 'B' } }));
-  assert.notEqual(key, elementKey({ ...base, engine: 'remotion' }));
+  assert.notEqual(key, elementKey({ ...base, engine: 'blender' }));
   assert.notEqual(key, elementKey({ ...base, render: { format: 'mov', alpha: false } }));
   assert.throws(() => elementKey({}), /element is required/);
 });

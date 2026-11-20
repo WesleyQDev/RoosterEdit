@@ -6,7 +6,7 @@ RoosterEdit is a skill: the whole repository is the payload, with no build step.
 
 - Node.js 22+ (22 or 24 recommended)
 - FFmpeg and FFprobe
-- A browser (for the HyperFrames and Remotion preview/render)
+- A browser (for the HyperFrames preview/render)
 - Optional: Whisper, `yt-dlp`, a GPU, OCR (native on Windows/macOS, Tesseract on Linux, or `rooster tools install ocr-wasm --approve`)
 
 `doctor` checks all of it:
@@ -138,6 +138,6 @@ Update with `git pull` inside that folder. This path is for development; normal 
 | `node` not found | Install Node.js 22+ and reopen the terminal. |
 | `ffmpeg` not found | Install FFmpeg and add it to `PATH`. |
 | HyperFrames is slow on first run | `npx hyperframes` downloads the package and Chrome once; later runs use the cache. |
-| Remotion does not render | Run `npm install` inside `engine/remotion`. |
+| HyperFrames does not render | Check `npx hyperframes doctor`; install the CLI in the workspace cache if it is missing. Remotion was removed and is not a fallback. |
 | Transcription fails in some languages | Install whisper.cpp or `openai-whisper`; Parakeet covers English. |
 | YouTube blocks a download | Use `--cookies-from-browser` or download the file manually, respecting the rights. |

@@ -2,7 +2,7 @@
 
 Date: 2026-11-03
 
-Environment: Windows, Node.js 24.14, FFmpeg 8.1, HyperFrames 0.9.8, Remotion 4.0.540, Python 3.13.
+Environment: Windows, Node.js 24.14, FFmpeg 8.1, HyperFrames 0.9.8, Python 3.13. Remotion was removed in 0.3 and is no longer part of the workflow.
 
 ## 1. Transcription with HyperFrames
 
@@ -49,33 +49,16 @@ Result:
 - render: MP4 H.264/AAC, 10.66s, 1920×1080, ~599 KB;
 - frames at 1s and 6s inspected visually.
 
-## 4. Remotion
-
-```bash
-npx create-video@latest --yes --blank remotion-test
-npx remotion still src/index.ts JFKTest out-still.png --frame=30
-npx remotion render src/index.ts JFKTest out.mp4
-```
-
-Result:
-
-- `JFKTest` composition, 320 frames, 30 fps, 1920×1080, with audio;
-- still in PNG inspected visually;
-- render: MP4 H.264/AAC, 10.667s, 1920×1080, ~707 KB;
-- frame at 6s inspected visually.
-
-## 5. Automatic build
+## 4. Automatic build
 
 ```bash
 node "<skill>/scripts/rooster.mjs" build demo --engine hyperframes --force
-node "<skill>/scripts/rooster.mjs" build demo --engine remotion --force
 ```
 
 Result:
 
 - HyperFrames: 9.44s (the 4.24–5.2s cut was applied), 1920×1080, 30 fps, H.264/AAC, ~464 KB.
-- Remotion: 9.472s, 1920×1080, 30 fps, H.264/AAC, ~546 KB.
-- Both builds applied the cuts with FFmpeg, remapped the element times, generated the engine project, and rendered frames that were inspected visually.
+- The build applied the cuts with FFmpeg, remapped the element times, generated the engine project, and rendered frames that were inspected visually.
 - The theme came from the `minimal` profile (light background, dark typography, terracotta accent).
 
 ## 6. Test with real footage (product pitch)
@@ -211,16 +194,15 @@ What to check:
 - The draft shows the animated ring/circle at the right time.
 - The FilmCraft build renders the component as a ProRes clip with alpha.
 - A missing component becomes an error with the list of folders it searched.
-- `--target filmcraft --engine remotion` with a custom element fails with a clear message; Remotion does not run HTML/JS.
+- `--target filmcraft --engine hyperframes` renders a custom element as a clip with alpha.
 
 ## What worked
 
 - `doctor` detects Node, FFmpeg, yt-dlp, the HyperFrames CLI, and Whisper (when installed).
 - `transcribe` uses HyperFrames/Parakeet and normalizes the result to `edit/transcript.json`.
 - `plan` validates `edit/plan.json` and shows cuts, elements, and chapters.
-- `build` generates HyperFrames and Remotion projects from the plan, applies cuts, and copies the assets.
+- `build` generates HyperFrames projects from the plan, applies cuts, and copies the assets.
 - HyperFrames renders a real MP4 from an HTML/GSAP composition.
-- Remotion renders a real MP4 from a React composition.
 
 ## 2026-11-11 — machine QA, blocks, OCR, face focus
 
@@ -254,11 +236,25 @@ Environment: Windows, Node.js 24.14, FFmpeg 8.1, Chrome headless for the visual 
 
 Not tested here: a full HyperFrames render of a canvas scene and the FilmCraft clip for a canvas.
 
+## 2026-11-19 - GPU detection and technique catalog (manual smoke test)
+
+Environment: Windows, Node.js 24.14, FFmpeg 8.1, AMD Radeon RX 6600, HyperFrames 0.9.34.
+
+- `doctor --json` now reports `hardware.vendor: "amd"`, `hardware.recommended.h264: "h264_amf"`, and `h264_amf`/`hevc_amf`/`av1_amf` as available. Before this change it reported `gpu: null` because it only probed `nvidia-smi`.
+- `build --encoder auto` on a 6 s synthetic source prints `Encoder: h264_amf (AMD Radeon RX 6600, GPU)` and writes `work/build-state.json` with `encoder: "h264_amf"`.
+- A second build with a cut exercises the concat filter graph and still uses `h264_amf`; the result probes as 5.4 s, 1280×720, H.264/AAC.
+- `color --quality fast` prints `h264_amf · veryfast · crf 20` and writes a valid 6 s MP4.
+- `techniques --need 3d,audio --json` returns `three` (available), `blender` (missing), `audio-mix` (available), `tts` (missing) and `ears` (missing), with the install hint for each missing tool.
+- `new --engine remotion` and `channel new --engine remotion` fail with a clear removal message instead of silently falling back.
+- `doctor --json` invalidates a cache created by another CLI version, so the version and the new fields are never stale.
+
+Not tested here: an NVIDIA/Intel/Apple machine, a real Blender install, earshot installed, and a HyperFrames render with `--gpu` on the AMD card (the CLI falls back to CPU if it fails).
+
 ## What has not been tested yet
 
 - Portuguese transcription with whisper.cpp: this environment used Parakeet (English). For Portuguese, you need to install whisper.cpp or the Whisper CLI.
 - Downloading a YouTube link with `yt-dlp`: YouTube blocks this environment with a bot check. The code and the rights gate are implemented, but the real download needs to be tested on an authorized machine or network.
-- Build v1 covers title cards, caption-emphasis, cards, and cuts. Structured templates (chapter, diagram, counter, list, emphasis, callout, terminal, end-card), b-roll in PIP/split, and cut smoothing are implemented; 3D scenes still need their own starter.
+- Build v1 covers title cards, caption-emphasis, cards, and cuts. Structured templates (chapter, diagram, counter, list, emphasis, callout, terminal, end-card), canvas scenes, b-roll in PIP/split, and cut smoothing are implemented; the Three.js and Blender techniques are documented but not yet smoke-tested end to end.
 - Unified preview in the browser and the CLI render wrapper.
 
 ## Reproduce
@@ -271,4 +267,4 @@ Not tested here: a full HyperFrames render of a canvas scene and the FilmCraft c
    ```
 2. Put an audio/video file in `rooster/channels/demo/projects/meu-video/assets/source/`.
 3. Run `transcribe`, write `edit/plan.json`, and run `plan`.
-4. Use `npx hyperframes` or `npx remotion` to assemble and render.
+4. Use `build`, `preview`, and `render`; HyperFrames assembles the composition.

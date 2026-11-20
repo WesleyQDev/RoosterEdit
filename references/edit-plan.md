@@ -142,7 +142,7 @@ A cut is a removal from the source. Cleanup uses `cuts`. A condensed edit uses `
 
 Each element needs `start`, `end`, and `description`. `text` is optional but encouraged for anything with words.
 
-`engine` is optional and per element: `hyperframes`, `remotion`, or `auto` (inherit the project element engine). Use it when one element needs a different renderer — a React/3D data scene in Remotion next to kinetic type in HyperFrames. A mixed plan is built with `--target filmcraft`, which renders one clip per element; a single-composition target (`--engine hyperframes|remotion`) still draws everything with one engine and the build reports the mismatch instead of silently switching.
+`engine` is optional and per element: `hyperframes` or `auto` (inherit the project engine). Any other value is rejected; `remotion` was removed. A plan can still build with `--target filmcraft`, which renders one clip per element, but HyperFrames draws every clip.
 
 ## Time base
 
@@ -232,7 +232,7 @@ The animation runs inside the composition timeline with these variables:
 
 Use `tl.fromTo(root.querySelector(...), ...)` and `start + 0.1`. Do not create a separate timeline; HyperFrames will not seek it. Put scripts in `element.js`/`animation`, not inline in `element.html`.
 
-Custom elements are trusted local HTML/CSS/JS. HyperFrames renders them, including through the FilmCraft element path; Remotion cannot execute them. In a project whose default element engine is Remotion, set `"engine": "hyperframes"` on the element instead of switching the whole project. Custom components should use inline SVG/CSS; for media, use a `broll` element so the asset pipeline and license tracking still apply.
+Custom elements are trusted local HTML/CSS/JS. HyperFrames renders them, including through the FilmCraft element path. Custom components should use inline SVG/CSS; for media, use a `broll` element so the asset pipeline and license tracking still apply.
 
 The first time the agent invents a look that works, save it as a component. The next video can reuse it, and the channel's visual language accumulates instead of starting from zero.
 
@@ -257,7 +257,7 @@ The build resolves the block in `<project>/style/blocks/<name>/compositions/`. I
 
 Rules:
 
-- Use `--engine hyperframes`; Remotion cannot run registry blocks.
+- Use `--engine hyperframes`; registry blocks only run there.
 - Keep the planned duration close to the block's native duration. A large mismatch means the scene holds or cuts abruptly.
 - Keep the plan format equal to the block's native `data-width`/`data-height`. The build warns on a mismatch; a 1920 block in a 1280 project can crop the scene.
 - Blocks import Three.js from a CDN. The first build and render need network, or the browser cache from that first run. Do not claim an offline render without testing it.
@@ -306,8 +306,8 @@ describes a concept, a product, or a place; not for every beat.
 - The scene is full-frame and sits under other elements: lower-thirds,
   captions, and callouts can overlay it. Do not run two full-frame scenes at
   the same time.
-- HyperFrames animates the camera; Remotion renders a static version with the
-  same copy. Use HyperFrames when the movement matters.
+- HyperFrames animates the camera. If the movement is not the point, a still is
+  cheaper.
 - A `parallax` element needs at least one layer, or `src`/`data.bg` for the
   background. Put the explanation in `description`; on-screen words go in
   `text`.
@@ -395,8 +395,8 @@ Rules:
   drift while a stop holds, so the frame is never frozen.
 - **Annotations attach to a card**, never to the backdrop: `target` is a card id,
   and `kind` is `ellipse`, `box`, `label`, or `underline`.
-- **HyperFrames only.** The camera path is GSAP; Remotion has no equivalent. The
-  build reports it instead of drawing a still.
+- **HyperFrames only.** The camera path is GSAP. The build reports the element
+  instead of drawing a still.
 
 Presets are resolved in this order, first hit wins:
 
@@ -697,7 +697,7 @@ The human-readable summary comes from `plan <slug>`; `--check` validates without
 ## Mapping to the build
 
 - Cuts -> applied by `build` with FFmpeg; element timings are remapped to the cut timeline.
-- Elements -> generated as HyperFrames elements or Remotion components.
+- Elements -> generated as HyperFrames elements.
 - Chapters -> markers and optional YouTube chapters.
 - Style -> profile tokens or `style.md`.
 - Approval -> the gate before `build`.
@@ -706,7 +706,6 @@ Run `build` only after the plan is approved:
 
 ```bash
 node "<skill>/scripts/rooster.mjs" build meu-video --engine hyperframes
-node "<skill>/scripts/rooster.mjs" build meu-video --engine remotion
 ```
 
 `build` refuses a cut-only plan or a plan with no music decision unless `notes` records the exception or you pass `--allow-cut-only` / `--allow-no-music` after the user explicitly asks for it.

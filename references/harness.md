@@ -26,10 +26,16 @@ The doctor returns a stable JSON object:
   "ytdlp": "2026.10.26",
   "whisper": "whisper",
   "hyperframesCli": "0.9.8",
-  "gpu": "nvidia",
+  "gpu": "NVIDIA GeForce RTX 4070",
+  "hardware": {
+    "vendor": "nvidia",
+    "recommended": { "h264": "h264_nvenc", "hevc": "hevc_nvenc", "av1": "av1_nvenc" },
+    "delivery": "libx264"
+  },
+  "blender": { "installed": false, "version": null },
+  "earshot": { "installed": false, "version": null },
   "engines": {
     "hyperframes": "npx 0.9.8",
-    "remotion": "not-detected",
     "three": "not-detected"
   },
   "tts": {
@@ -51,14 +57,16 @@ The CLI can detect binaries and environment variables. It cannot reliably detect
 
 | Missing capability | Consequence | Path |
 |---|---|---|
-| Node | No Remotion/HyperFrames | FFmpeg for cuts/audio; no motion render |
+| Node | No HyperFrames | FFmpeg for cuts/audio; no motion render |
 | FFmpeg | No probe, cut, mix, or local render | Plan only; install FFmpeg or use another environment |
 | `yt-dlp` | Cannot download links | Ask for the file, or install with permission |
 | Whisper | No local transcription | Use `npx hyperframes transcribe`, an approved API, or ask for a transcript |
 | Browser | No visual preview/automation | Render stills and read images |
 | Subagents | No context isolation for heavy stages | Do it inline, keep raw output in files, and read only summaries |
 | TTS provider | No generated narration | User voice, captions only, or local TTS |
-| GPU | Slow 3D/render | Reduce quality, resolution, or effects |
+| GPU | Slow 3D/render; CPU encoding | Check `hardware.recommended.h264`; reduce 3D quality, resolution, or effects |
+| Blender | No heavy 3D | HyperFrames + Three.js, or a simpler shot |
+| earshot | No semantic audio QA | FFmpeg loudness/peak/silence, and say listening was skipped |
 | Disk space | Render fails | Clean cache, lower resolution, delete drafts |
 
 ## Subagents
@@ -108,12 +116,12 @@ Do not describe a video as "beautiful" or "correct" without seeing at least repr
 - `ffmpeg` and `yt-dlp` may be installed via winget, scoop, or pip.
 - Paths with spaces need quoting.
 - Long paths can break Node tools; keep the workspace path short.
-- GPU encoding may be available via `h264_nvenc`, `hevc_nvenc`, or `av1_nvenc`.
+- Hardware encoding may be available via NVENC (NVIDIA), AMF (AMD), or QSV (Intel). `doctor --json` reports which one the local FFmpeg was built with; `--encoder auto` uses it for drafts.
 
 ### macOS
 
 - Homebrew is the common install path: `brew install ffmpeg yt-dlp`.
-- Apple Silicon renders faster with native builds.
+- Apple Silicon renders faster with native builds; the hardware encoder is `h264_videotoolbox`.
 - Use `open` to show files to the user.
 
 ### Linux
